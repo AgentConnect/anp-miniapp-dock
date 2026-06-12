@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-07
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 20:45:17 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 20:53:52 +0800 |
+| Commit | `50cc245` |
 | Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认 Atomic API 与 Component VM 使用 `wx-compat` shared defaults，字段最小化，不返回真实设备指纹或 Host credential 信息，sync API 不返回 Promise。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs info` 2 passed；`cargo test -p wx-compat device` 1 passed；`cargo test -p component-runtime` 26 passed；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/component-runtime docs/architecture docs/plan docs/runbook` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过；敏感字段抽样仅命中文档红线、测试假值、禁用字段断言和既有 redaction 代码。 |
-| Next action | 创建 Step 01-07 focused commit，然后回填 commit hash 与 done 状态 |
+| Next action | 进入 Step 01-08 高风险 API Host Boundary 与 fail-closed |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：01-07
 - [x] 不返回 local IP、MAC、device id、广告标识、Host 账号、credential path 或私钥路径。
 - [x] API 矩阵与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -104,10 +104,10 @@ Step index：01-07
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 device/app info Atomic API、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 26]`，包含本 Step device/app info Atomic API、shared helper、直接 tests 和相关文档。
+- 纳入文件：`crates/wx-compat/src/model_context.rs`、`crates/wx-compat/src/lib.rs`、`crates/wx-compat/src/unsupported.rs`、`crates/wx-compat/tests/component_permissions.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`crates/component-runtime/src/component_vm.rs`、`crates/component-runtime/tests/component_lifecycle.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/steps/01-07-device-app-info-atomic-api.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：实现提交 `50cc245 phase1: add device app info atomic api`；提交后 `git status --short --branch` = `## main...origin/main [ahead 27]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase1: add device app info atomic api`
 
 ## 11. Blocked 处理
