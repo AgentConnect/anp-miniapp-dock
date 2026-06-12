@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-05
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 20:02:26 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 20:21:27 +0800 |
+| Commit | `8e475dd` |
 | Review evidence | 2026-06-12 20:20:16 +0800 Review：修复 focused `unsupported` filter 未覆盖 unknown root fallback 的测试命名；确认 registry 覆盖 P1 deferred/unsupported-by-design 代表 API，已支持 `wx.login` / `wx.checkSession` / `wx.request` 未被覆盖，Proxy intrinsic 仅供内部 fallback 且 `globalThis.Proxy` 被隐藏；真实 storage/device/payment provider 状态未误标为 supported。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs unsupported` 5 passed；`cargo test -p wx-compat unsupported` 4 passed；`cargo test -p js-runtime-quickjs wx_` 13 passed；`cargo test -p js-runtime-quickjs` 33 passed；`cargo test -p wx-compat` 11 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs docs/architecture docs/runbook docs/plan` 无输出；敏感词抽样仅命中安全文档说明、测试夹具假值和 redaction 断言，unsupported result 不回显 options、token-like 字段或 Host 私有数据。 |
-| Next action | 准备创建 Step 01-05 focused commit，然后回填 commit hash 并进入 01-06 |
+| Next action | 进入 Step 01-06 Storage JS Bridge |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -71,7 +71,7 @@ Step index：01-05
 - [x] 已支持 API 的行为和 tests 不回归。
 - [x] `wx-api-compatibility-matrix.md` 和 release gate 记录与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -108,6 +108,14 @@ Step index：01-05
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase1: add unsupported api registry`
+
+执行记录：
+
+- Commit 前状态：`git status --short --branch` 显示仅本 Step 代码、测试、矩阵、release gates、Phase 1 文档、Step 文档和 roadmap 变更。
+- 纳入文件：`crates/wx-compat/src/unsupported.rs`、`crates/wx-compat/src/lib.rs`、`crates/wx-compat/src/request.rs`、`crates/wx-compat/tests/component_permissions.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md`、`docs/plan/production-readiness/phase-1-wx-capability-broker.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md`。
+- Commit：`8e475dd phase1: add unsupported api registry`。
+- Commit 后证据：`git status --short --branch` = `## main...origin/main [ahead 23]`。
+- 遗留未提交变更：仅本 Step commit 后回填台账/状态文档，随后创建独立关闭提交。
 
 ## 11. Blocked 处理
 
