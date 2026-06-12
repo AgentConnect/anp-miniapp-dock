@@ -1,6 +1,7 @@
 use crate::middleware::MIDDLEWARE_BOOTSTRAP;
+use wx_compat::notification_type_js_literal;
 
-pub const BRIDGE_BOOTSTRAP: &str = r#"
+pub const BRIDGE_BOOTSTRAP_TEMPLATE: &str = r#"
 (() => {
 'use strict';
 
@@ -91,9 +92,35 @@ function __dockRequire(parentId, specifier) {
   return module.exports;
 }
 
+function __dockNormalizeSkillPath(skillPath) {
+  if (typeof skillPath !== 'string') {
+    throw new Error('createSkill skillPath must be a string');
+  }
+  if (skillPath.includes('\0') || skillPath.includes('://') || skillPath.startsWith('/') || skillPath.startsWith('\\') || skillPath.includes('\\')) {
+    throw new Error('createSkill path outside skill package: ' + skillPath);
+  }
+
+  const parts = [];
+  for (const rawPart of skillPath.split('/')) {
+    if (!rawPart || rawPart === '.') {
+      continue;
+    }
+    if (rawPart === '..') {
+      if (parts.length === 0) {
+        throw new Error('createSkill path outside skill package: ' + skillPath);
+      }
+      parts.pop();
+      continue;
+    }
+    parts.push(rawPart);
+  }
+  return parts.join('/');
+}
+
 function __dockCreateSkill(skillPath) {
+  const normalizedSkillPath = __dockNormalizeSkillPath(skillPath);
   return {
-    skillPath,
+    skillPath: normalizedSkillPath,
     registerAPI(name, handler) {
       if (typeof name !== 'string' || name.length === 0) {
         throw new Error('registerAPI name must be a non-empty string');
@@ -115,10 +142,14 @@ function __dockCreateSkill(skillPath) {
   };
 }
 
+function __dockCallbackOptions(options) {
+  return options && typeof options === 'object' ? options : {};
+}
+
 const wx = Object.freeze({
   login(options) {
     const payload = JSON.parse(__dock.login());
-    const callbacks = options && typeof options === 'object' ? options : {};
+    const callbacks = __dockCallbackOptions(options);
     if (typeof callbacks.success === 'function') {
       callbacks.success(payload);
     }
@@ -128,7 +159,7 @@ const wx = Object.freeze({
     return Promise.resolve(payload);
   },
   request(options) {
-    const callbacks = options && typeof options === 'object' ? options : {};
+    const callbacks = __dockCallbackOptions(options);
     return Promise.resolve().then(() => {
       const payload = JSON.parse(__dock.request(__dockSafeJson(options || {})));
       const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.startsWith('request:fail');
@@ -145,7 +176,31 @@ const wx = Object.freeze({
     });
   },
   modelContext: Object.freeze({
-    createSkill: __dockCreateSkill
+    NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),
+    createSkill: __dockCreateSkill,
+    getSessionId() {
+      return __dock.modelContextGetSessionId();
+    },
+    expireAllCards(options) {
+      const callbacks = __dockCallbackOptions(options);
+      return Promise.resolve().then(() => {
+        const payload = JSON.parse(__dock.modelContextExpireAllCards(__dockSafeJson(options || {})));
+        const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.includes(':fail');
+        if (ok && typeof callbacks.success === 'function') {
+          callbacks.success(payload);
+        }
+        if (!ok && typeof callbacks.fail === 'function') {
+          callbacks.fail(payload);
+        }
+        if (typeof callbacks.complete === 'function') {
+          callbacks.complete(payload);
+        }
+        if (!ok) {
+          throw payload;
+        }
+        return payload;
+      });
+    }
   })
 });
 
@@ -190,7 +245,9 @@ Object.defineProperty(globalThis, '__dockCallApi', { value: __dockCallApi, confi
 "#;
 
 pub fn runtime_bootstrap() -> String {
-    format!("{MIDDLEWARE_BOOTSTRAP}\n{BRIDGE_BOOTSTRAP}")
+    let bridge = BRIDGE_BOOTSTRAP_TEMPLATE
+        .replace("__DOCK_NOTIFICATION_TYPE__", notification_type_js_literal());
+    format!("{MIDDLEWARE_BOOTSTRAP}\n{bridge}")
 }
 
 #[cfg(test)]

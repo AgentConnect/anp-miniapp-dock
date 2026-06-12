@@ -14,7 +14,7 @@ use rquickjs::function::Func;
 use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Function, Object, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use skill_loader::LoadedSkill;
+use skill_loader::{resolve_component_path, LoadedSkill};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
@@ -308,7 +308,13 @@ impl ApiVm {
             return Err(ApiVmError::MissingApi(call.api_name));
         }
 
-        execute_api_call(&self.modules, &self.config, call, host_did_auth)
+        execute_api_call(
+            &self.skill,
+            &self.modules,
+            &self.config,
+            call,
+            host_did_auth,
+        )
     }
 
     pub fn executor(self) -> QuickJsApiExecutor {
@@ -406,14 +412,16 @@ fn evaluate_registration(
 }
 
 fn execute_api_call(
+    skill: &LoadedSkill,
     modules: &CommonJsModules,
     config: &ApiVmConfig,
     call: ApiCall,
     host_did_auth: Option<HostDidAuthConfig>,
 ) -> Result<AtomicApiResult, ApiVmError> {
     let api_name = call.api_name.clone();
-    let bridge = HostBridgeRuntime::for_call(call.clone(), host_did_auth);
-    let (result, _trace) = with_runtime(modules, config, bridge, |ctx| {
+    let bridge = HostBridgeRuntime::for_call(skill.clone(), call.clone(), host_did_auth);
+    let runtime_bridge = bridge.clone();
+    let (result, _trace) = with_runtime(modules, config, runtime_bridge, |ctx| {
         let load_entry: Function = ctx
             .globals()
             .get("__dockLoadEntry")
@@ -439,9 +447,15 @@ fn execute_api_call(
             .catch(&ctx)
             .map_err(|error| map_caught_or_timeout(error, &api_name, config.timeout))?;
 
-        serde_json::from_str::<AtomicApiResult>(&result_json).map_err(|error| {
-            ApiVmError::InvalidResult(api_name.clone(), format!("{error}; payload={result_json}"))
-        })
+        let mut result =
+            serde_json::from_str::<AtomicApiResult>(&result_json).map_err(|error| {
+                ApiVmError::InvalidResult(
+                    api_name.clone(),
+                    format!("{error}; payload={result_json}"),
+                )
+            })?;
+        bridge.attach_model_context_meta(&mut result);
+        Ok(result)
     })?;
     Ok(result)
 }
@@ -511,6 +525,17 @@ fn install_host_bridge<'js>(
         Func::from(move |options_json: String| request_bridge.request_json(options_json));
     dock.set("request", request_fn).map_err(to_quickjs_error)?;
 
+    let session_bridge = bridge.clone();
+    let get_session_id_fn = Func::from(move || session_bridge.session_id());
+    dock.set("modelContextGetSessionId", get_session_id_fn)
+        .map_err(to_quickjs_error)?;
+
+    let expire_bridge = bridge.clone();
+    let expire_all_cards_fn =
+        Func::from(move |options_json: String| expire_bridge.expire_all_cards_json(options_json));
+    dock.set("modelContextExpireAllCards", expire_all_cards_fn)
+        .map_err(to_quickjs_error)?;
+
     let log_fn = Func::from(move |level: String, args: Vec<String>| {
         let level = match level.as_str() {
             "warn" => ConsoleLevel::Warn,
@@ -541,24 +566,159 @@ struct HostRequestOptions {
     data: Option<Value>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExpireAllCardsOptions {
+    #[serde(default)]
+    component_paths: Vec<String>,
+    #[serde(default, rename = "match")]
+    match_policy: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelContextCardEvent {
+    #[serde(rename = "type")]
+    event_type: &'static str,
+    component_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    match_policy: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct HostBridgeRuntime {
+    skill: Option<LoadedSkill>,
     call: Option<ApiCall>,
     host_did_auth: Option<HostDidAuthConfig>,
+    card_events: Rc<RefCell<Vec<ModelContextCardEvent>>>,
 }
 
 impl HostBridgeRuntime {
     fn registration() -> Self {
         Self {
+            skill: None,
             call: None,
             host_did_auth: None,
+            card_events: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
-    fn for_call(call: ApiCall, host_did_auth: Option<HostDidAuthConfig>) -> Self {
+    fn for_call(
+        skill: LoadedSkill,
+        call: ApiCall,
+        host_did_auth: Option<HostDidAuthConfig>,
+    ) -> Self {
         Self {
+            skill: Some(skill),
             call: Some(call),
             host_did_auth,
+            card_events: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    fn session_id(&self) -> String {
+        self.call
+            .as_ref()
+            .map(|call| call.session_id.clone())
+            .unwrap_or_default()
+    }
+
+    fn expire_all_cards_json(&self, options_json: String) -> String {
+        match self.expire_all_cards(&options_json) {
+            Ok(expired_count) => json!({
+                "errMsg": "modelContext.expireAllCards:ok",
+                "expiredCount": expired_count,
+            })
+            .to_string(),
+            Err(message) => json!({
+                "errMsg": format!("modelContext.expireAllCards:fail {message}"),
+                "code": "invalid_options",
+                "reason": message,
+                "suggestion": "Declare expirable components and pass safe relative componentPaths from mcp.json."
+            })
+            .to_string(),
+        }
+    }
+
+    fn expire_all_cards(&self, options_json: &str) -> Result<usize, String> {
+        let skill = self
+            .skill
+            .as_ref()
+            .ok_or_else(|| "modelContext is unavailable during API registration".to_owned())?;
+        let options: ExpireAllCardsOptions = serde_json::from_str(options_json).map_err(|_| {
+            "options must be an object with componentPaths array and match policy".to_owned()
+        })?;
+        if let Some(match_policy) = options.match_policy.as_deref() {
+            if !matches!(match_policy, "latest" | "session" | "all") {
+                return Err("match must be one of latest, session, or all".to_owned());
+            }
+        }
+
+        let mut component_paths = if options.component_paths.is_empty() {
+            skill
+                .manifest
+                .components
+                .iter()
+                .filter(|component| component.expirable == Some(true))
+                .map(|component| component.path.clone())
+                .collect::<Vec<_>>()
+        } else {
+            options.component_paths
+        };
+        component_paths.sort();
+        component_paths.dedup();
+
+        if component_paths.is_empty() {
+            return Err("no expirable componentPaths were declared or provided".to_owned());
+        }
+
+        for component_path in &component_paths {
+            resolve_component_path(&skill.root, component_path).map_err(|_| {
+                "componentPaths contains a path outside the Skill package".to_owned()
+            })?;
+            let Some(component) = skill
+                .manifest
+                .components
+                .iter()
+                .find(|component| component.path == *component_path)
+            else {
+                return Err("componentPaths contains an undeclared component".to_owned());
+            };
+            if component.expirable != Some(true) {
+                return Err(
+                    "componentPaths contains a component without expirable: true".to_owned(),
+                );
+            }
+        }
+
+        let expired_count = component_paths.len();
+        self.card_events.borrow_mut().push(ModelContextCardEvent {
+            event_type: "expireAllCards",
+            component_paths,
+            match_policy: options.match_policy,
+        });
+        Ok(expired_count)
+    }
+
+    fn attach_model_context_meta(&self, result: &mut AtomicApiResult) {
+        let card_events = self.card_events.borrow();
+        if card_events.is_empty() {
+            return;
+        }
+        let Ok(card_events) = serde_json::to_value(&*card_events) else {
+            return;
+        };
+        let meta = result.meta.get_or_insert_with(Default::default);
+        let model_context = meta
+            .entry("modelContext".to_owned())
+            .or_insert_with(|| json!({}));
+        if let Some(object) = model_context.as_object_mut() {
+            object.insert("cardEvents".to_owned(), card_events);
+        } else {
+            meta.insert(
+                "modelContext".to_owned(),
+                json!({ "cardEvents": card_events }),
+            );
         }
     }
 

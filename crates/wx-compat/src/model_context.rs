@@ -3,6 +3,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::sync::{Arc, Mutex};
 
+pub const NOTIFICATION_TYPE_INPUT: &str = "input";
+pub const NOTIFICATION_TYPE_RESULT: &str = "result";
+pub const NOTIFICATION_TYPE_EXPIRE: &str = "expire";
+pub const NOTIFICATION_TYPE_OVERFLOW: &str = "overflow";
+
+pub fn notification_type_js_literal() -> &'static str {
+    "{ Input: 'input', Result: 'result', Expire: 'expire', Overflow: 'overflow' }"
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelatedPage {
     pub path: String,

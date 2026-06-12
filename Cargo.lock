@@ -407,6 +407,7 @@ dependencies = [
  "rquickjs",
  "serde",
  "serde_json",
+ "wx-compat",
 ]
 
 [[package]]
@@ -1097,6 +1098,7 @@ dependencies = [
  "serde_json",
  "skill-loader",
  "thiserror 1.0.69",
+ "wx-compat",
 ]
 
 [[package]]

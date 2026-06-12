@@ -11,8 +11,9 @@ use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use wx_compat::notification_type_js_literal;
 
-const COMPONENT_BOOTSTRAP: &str = r#"
+const COMPONENT_BOOTSTRAP_TEMPLATE: &str = r#"
 (() => {
 'use strict';
 
@@ -263,12 +264,7 @@ async function __dockExpire(payloadJson) {
 
 const wx = Object.freeze({
   modelContext: Object.freeze({
-    NotificationType: Object.freeze({
-      Input: 'input',
-      Result: 'result',
-      Expire: 'expire',
-      Overflow: 'overflow'
-    }),
+    NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),
     getContext() {
       return __dockInstance ? __dockInstance.__dockModelContext : __dockCreateModelContext(Object.create(null));
     },
@@ -322,6 +318,11 @@ Object.defineProperty(globalThis, '__dockDispatchEvent', { value: __dockDispatch
 Object.defineProperty(globalThis, '__dockExpire', { value: __dockExpire, configurable: false, writable: false });
 })();
 "#;
+
+fn component_bootstrap() -> String {
+    COMPONENT_BOOTSTRAP_TEMPLATE
+        .replace("__DOCK_NOTIFICATION_TYPE__", notification_type_js_literal())
+}
 
 #[derive(Debug, Clone)]
 pub struct ComponentVmConfig {
@@ -540,7 +541,7 @@ impl ComponentInstance {
             .map_err(to_quickjs_error)?;
 
         context.with(|ctx| {
-            ctx.eval::<(), _>(COMPONENT_BOOTSTRAP)
+            ctx.eval::<(), _>(component_bootstrap())
                 .catch(&ctx)
                 .map_err(caught_error)?;
             ctx.eval::<(), _>(source).catch(&ctx).map_err(caught_error)

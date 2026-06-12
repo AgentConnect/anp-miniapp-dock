@@ -6,7 +6,9 @@ pub mod request;
 pub mod storage;
 
 pub use model_context::{
-    CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink, ModelContext, RelatedPage,
+    notification_type_js_literal, CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink,
+    ModelContext, RelatedPage, NOTIFICATION_TYPE_EXPIRE, NOTIFICATION_TYPE_INPUT,
+    NOTIFICATION_TYPE_OVERFLOW, NOTIFICATION_TYPE_RESULT,
 };
 pub use permissions::{Capability, CapabilityProfile, PermissionDecision, WxEnvironmentKind};
 pub use request::{
