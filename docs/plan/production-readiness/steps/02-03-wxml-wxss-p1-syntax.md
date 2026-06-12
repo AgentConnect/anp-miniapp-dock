@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 21:38:22 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 21:54:00 +0800 |
+| Commit | `c8bb813` |
 | Review evidence | 本文 Review 环节已记录：修复复杂 selector 静默吞掉的问题；确认 expression evaluator 为 allowlist-only，不执行任意 JS；disabled button 不产生 tap/catchtap action；`catchtap` 只扩展 Render IR 事件语义并仍映射为受控 tap；未引入 02-04 表单节点或 02-05 dynamic request/timer。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime wx` 14 passed under filter（lib 5 passed、wxml_bindings 9 passed）；`cargo test -p component-runtime` 36 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime docs/architecture docs/plan` 无输出；本步骤 diff 敏感词抽样未新增真实 secret、本机绝对路径或隐私数据，唯一命中来自既有 02-02 台账文字。 |
-| Next action | 创建 focused implementation commit，然后回填 done 状态并进入 Step 02-04 |
+| Next action | 进入 Step 02-04 表单与静态媒体节点 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：02-03
 - [x] unsupported WXML/WXSS 不 panic，不执行 JS，不静默成功。
 - [x] 组件兼容矩阵和 Phase 2 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -106,8 +106,8 @@ Step index：02-03
 - Commit 范围：只包含 WXML/WXSS P1 语法、直接 tests 和相关文档。
 - Commit 前状态：`git status --short` 包含本 Step 的 `component-runtime` WXML/WXSS P1 实现、focused tests、组件矩阵、Phase 2 文档、Step 文档和主 Plan in-progress/review 记录，未发现其它 Step 完成工作。
 - 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/events.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/src/wxss.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-03-wxml-wxss-p1-syntax.md`、`docs/plan/production-readiness-roadmap.md`。
-- Commit 后证据：待 implementation commit 后回填。
-- 遗留未提交变更：待 implementation commit 后回填。
+- Commit 后证据：实现提交 `c8bb813 phase2: add wxml wxss p1 syntax`；提交后 `git status --short --branch` = `## main...origin/main [ahead 35]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase2: add wxml wxss p1 syntax`
 
 ## 11. Blocked 处理
