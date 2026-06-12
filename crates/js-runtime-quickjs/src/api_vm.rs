@@ -2,9 +2,11 @@ use crate::bridge::runtime_bootstrap;
 use crate::commonjs::CommonJsModules;
 use anp::authentication::AuthMode;
 use anp_adapter::{
-    bearer_token_expiry_ms, sign_challenge_proof, ChallengeLoginRequest, ChallengeLoginResponse,
-    ChallengeProofPayload, DidChallenge as AdapterDidChallenge, DidCredentialConfig,
-    FileDidCredentialProvider, IdentitySession,
+    decode_capability_token_scopes, sign_challenge_proof, ChallengeLoginRequest,
+    ChallengeLoginResponse, ChallengeProofPayload, DidAuthReceipt, DidAuthSession,
+    DidAuthSessionError, DidAuthSessionKey, DidAuthSessionManager,
+    DidChallenge as AdapterDidChallenge, DidCredentialConfig, FileDidCredentialProvider,
+    IdentitySession,
 };
 use dock_core::error::{DockCoreError, ErrorCode};
 use dock_core::host::ApiExecutor;
@@ -21,9 +23,11 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use thiserror::Error;
+use wx_compat::{
+    CapabilityProfile, RequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
+};
 
 #[derive(Debug, Clone)]
 pub struct ApiVmConfig {
@@ -47,7 +51,7 @@ pub struct HostDidAuthConfig {
     pub did_document_path: PathBuf,
     pub private_key_path: PathBuf,
     pub check_private_key_permissions: bool,
-    token_cache: Arc<Mutex<BTreeMap<AuthSessionKey, CachedAuthSession>>>,
+    session_manager: DidAuthSessionManager,
 }
 
 impl HostDidAuthConfig {
@@ -59,13 +63,22 @@ impl HostDidAuthConfig {
             did_document_path: did_document_path.into(),
             private_key_path: private_key_path.into(),
             check_private_key_permissions: true,
-            token_cache: Arc::new(Mutex::new(BTreeMap::new())),
+            session_manager: DidAuthSessionManager::new(),
         }
     }
 
     pub fn without_private_key_permission_check(mut self) -> Self {
         self.check_private_key_permissions = false;
         self
+    }
+
+    pub fn with_session_manager(mut self, session_manager: DidAuthSessionManager) -> Self {
+        self.session_manager = session_manager;
+        self
+    }
+
+    pub fn session_manager(&self) -> &DidAuthSessionManager {
+        &self.session_manager
     }
 
     fn credential_config(&self) -> DidCredentialConfig {
@@ -76,37 +89,6 @@ impl HostDidAuthConfig {
         config.check_private_key_permissions = self.check_private_key_permissions;
         config
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct AuthSessionKey {
-    base_url: String,
-    merchant_did: String,
-    user_did: String,
-    agent_did: Option<String>,
-    skill_id: String,
-    session_id: String,
-}
-
-#[derive(Debug, Clone)]
-struct CachedAuthSession {
-    token: String,
-    expires_at_ms: Option<u64>,
-    scopes: Vec<String>,
-}
-
-impl CachedAuthSession {
-    fn is_expired(&self) -> bool {
-        self.expires_at_ms
-            .is_some_and(|expires_at_ms| expires_at_ms <= now_ms().saturating_add(5_000))
-    }
-}
-
-fn now_ms() -> u64 {
-    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        return 0;
-    };
-    duration.as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -520,6 +502,11 @@ fn install_host_bridge<'js>(
     let login_fn = Func::from(move || login_bridge.login_json());
     dock.set("login", login_fn).map_err(to_quickjs_error)?;
 
+    let check_session_bridge = bridge.clone();
+    let check_session_fn = Func::from(move || check_session_bridge.check_session_json());
+    dock.set("checkSession", check_session_fn)
+        .map_err(to_quickjs_error)?;
+
     let request_bridge = bridge.clone();
     let request_fn =
         Func::from(move |options_json: String| request_bridge.request_json(options_json));
@@ -724,20 +711,23 @@ impl HostBridgeRuntime {
 
     fn login_json(&self) -> String {
         match self.ensure_login(None) {
-            Ok(Some(session)) => json!({
-                "code": "dock-login-code-localhost",
-                "errMsg": "login:ok",
-                "didAuth": {
-                    "status": "ok",
-                    "tokenReceived": true,
-                    "tokenVisibleToSkill": false,
-                    "userDid": self.call.as_ref().and_then(|call| call.user_did.clone()),
-                    "agentDid": self.call.as_ref().and_then(|call| call.agent_did.clone()),
-                    "merchantDid": self.call.as_ref().and_then(|call| call.merchant_did.clone()),
-                    "scopes": session.scopes
-                }
-            })
-            .to_string(),
+            Ok(Some((key, session))) => {
+                let receipt = DidAuthReceipt::from_session(&key, &session);
+                json!({
+                    "code": receipt.code,
+                    "errMsg": "login:ok",
+                    "didAuth": {
+                        "status": "ok",
+                        "tokenReceived": receipt.token_received,
+                        "tokenVisibleToSkill": receipt.token_visible_to_skill,
+                        "userDid": receipt.user_did,
+                        "agentDid": receipt.agent_did,
+                        "merchantDid": receipt.merchant_did,
+                        "scopes": receipt.scopes
+                    }
+                })
+                .to_string()
+            }
             Ok(None) => json!({
                 "code": "dock-login-code-localhost",
                 "errMsg": "login:ok",
@@ -755,28 +745,55 @@ impl HostBridgeRuntime {
         }
     }
 
-    fn request_json(&self, options_json: String) -> String {
-        match self.host_request(&options_json) {
-            Ok(value) => value.to_string(),
+    fn check_session_json(&self) -> String {
+        match self.check_session() {
+            Ok(true) => json!({
+                "errMsg": "checkSession:ok"
+            })
+            .to_string(),
+            Ok(false) => json!({
+                "errMsg": "checkSession:fail auth_failed",
+                "code": "auth_failed",
+                "reason": "DID auth session is not configured for this call"
+            })
+            .to_string(),
             Err(message) => json!({
-                "errMsg": format!("request:fail {message}")
+                "errMsg": "checkSession:fail auth_failed",
+                "code": "auth_failed",
+                "reason": message
             })
             .to_string(),
         }
     }
 
-    fn host_request(&self, options_json: &str) -> Result<Value, String> {
-        let options: HostRequestOptions =
-            serde_json::from_str(options_json).map_err(|error| error.to_string())?;
+    fn request_json(&self, options_json: String) -> String {
+        match self.host_request(&options_json) {
+            Ok(value) => value.to_string(),
+            Err(error) => error.to_json().to_string(),
+        }
+    }
+
+    fn host_request(&self, options_json: &str) -> Result<Value, HostRequestFailure> {
+        let options: HostRequestOptions = serde_json::from_str(options_json).map_err(|_| {
+            HostRequestFailure::invalid_options("request options must be valid JSON")
+        })?;
         let data = options.data.unwrap_or(Value::Null);
         let method = options
             .method
             .as_deref()
             .unwrap_or("GET")
             .to_ascii_uppercase();
-        let parsed = ParsedHttpUrl::parse(&options.url)?;
+        let parsed =
+            ParsedHttpUrl::parse(&options.url).map_err(HostRequestFailure::invalid_options)?;
         if !parsed.is_loopback() {
-            return Err("wx.request demo bridge only allows localhost URLs".to_owned());
+            return Err(HostRequestFailure::network_denied(
+                "wx.request demo bridge only allows localhost URLs",
+            ));
+        }
+        if parsed.scheme != "http" {
+            return Err(HostRequestFailure::invalid_options(
+                "wx.request demo bridge only supports http:// localhost URLs",
+            ));
         }
 
         let mut request_url = options.url.clone();
@@ -791,23 +808,41 @@ impl HostBridgeRuntime {
             data.to_string()
         };
 
-        let session = self.ensure_login(Some(parsed.origin()))?;
-        let bearer = session.as_ref().map(|session| session.token.as_str());
-        let headers = options
-            .header
-            .into_iter()
-            .filter(|(name, _)| !name.eq_ignore_ascii_case("authorization"))
-            .collect::<BTreeMap<_, _>>();
+        if let Some(name) = host_owned_header(&options.header) {
+            return Err(HostRequestFailure::permission_denied(format!(
+                "JS-provided {name} header is not allowed; host attaches auth material"
+            )));
+        }
 
-        let (status, headers, response_body) =
-            http_request_url(&request_url, &method, bearer, Some(&body), headers)?;
-        let data = serde_json::from_str::<Value>(&response_body)
-            .unwrap_or_else(|_| Value::String(response_body.to_owned()));
+        let session = self
+            .ensure_login(Some(parsed.origin()))
+            .map_err(HostRequestFailure::auth_failed)?;
+        let bearer = session
+            .as_ref()
+            .map(|(_, session)| session.bearer_token().to_owned());
+        let method = wx_method(&method).map_err(HostRequestFailure::invalid_options)?;
+
+        let broker = LocalDidRequestBroker { bearer };
+        let response = broker
+            .request(
+                &CapabilityProfile::atomic_api(),
+                WxRequest {
+                    url: request_url,
+                    method,
+                    headers: options.header,
+                    data: if body.is_empty() {
+                        None
+                    } else {
+                        Some(Value::String(body))
+                    },
+                },
+            )
+            .map_err(HostRequestFailure::from_request_error)?;
 
         Ok(json!({
-            "statusCode": status,
-            "header": headers,
-            "data": data,
+            "statusCode": response.status_code,
+            "header": response.headers,
+            "data": response.data,
             "errMsg": "request:ok"
         }))
     }
@@ -815,10 +850,41 @@ impl HostBridgeRuntime {
     fn ensure_login(
         &self,
         request_origin: Option<String>,
-    ) -> Result<Option<CachedAuthSession>, String> {
+    ) -> Result<Option<(DidAuthSessionKey, DidAuthSession)>, String> {
         let Some(auth_config) = &self.host_did_auth else {
             return Ok(None);
         };
+        let Some(key) = self.session_key(request_origin)? else {
+            return Ok(None);
+        };
+        auth_config
+            .session_manager
+            .ensure_session(key.clone(), |key| {
+                self.perform_did_login(auth_config, key)
+                    .map_err(DidAuthSessionError::LoginFailed)
+            })
+            .map(|session| Some((key, session)))
+            .map_err(safe_did_session_error)
+    }
+
+    fn check_session(&self) -> Result<bool, String> {
+        let Some(auth_config) = &self.host_did_auth else {
+            return Ok(false);
+        };
+        let Some(key) = self.session_key(None)? else {
+            return Ok(false);
+        };
+        auth_config
+            .session_manager
+            .check_session(&key)
+            .map(|_| true)
+            .map_err(safe_did_session_error)
+    }
+
+    fn session_key(
+        &self,
+        request_origin: Option<String>,
+    ) -> Result<Option<DidAuthSessionKey>, String> {
         let Some(call) = &self.call else {
             return Ok(None);
         };
@@ -837,39 +903,21 @@ impl HostBridgeRuntime {
             .merchant_did
             .clone()
             .unwrap_or_else(|| "did:wba:coffee-merchant.example".to_owned());
-        let key = AuthSessionKey {
-            base_url: base_url.clone(),
+        Ok(Some(DidAuthSessionKey::new(
+            base_url,
             merchant_did,
             user_did,
-            agent_did: call.agent_did.clone(),
-            skill_id: call.skill_id.clone(),
-            session_id: call.session_id.clone(),
-        };
-        if let Some(cached) = auth_config
-            .token_cache
-            .lock()
-            .map_err(|_| "DID token cache is unavailable".to_owned())?
-            .get(&key)
-            .filter(|session| !session.is_expired())
-            .cloned()
-        {
-            return Ok(Some(cached));
-        }
-
-        let login = self.perform_did_login(auth_config, &key)?;
-        auth_config
-            .token_cache
-            .lock()
-            .map_err(|_| "DID token cache is unavailable".to_owned())?
-            .insert(key, login.clone());
-        Ok(Some(login))
+            call.agent_did.clone(),
+            call.skill_id.clone(),
+            call.session_id.clone(),
+        )))
     }
 
     fn perform_did_login(
         &self,
         auth_config: &HostDidAuthConfig,
-        key: &AuthSessionKey,
-    ) -> Result<CachedAuthSession, String> {
+        key: &DidAuthSessionKey,
+    ) -> Result<DidAuthSession, String> {
         let challenge_value = post_json_url(
             &format!("{}/agents/coffee/auth/challenge", key.base_url),
             None,
@@ -925,7 +973,7 @@ impl HostBridgeRuntime {
         if login.capability_token.trim().is_empty() {
             return Err("DID login did not return a capability token".to_owned());
         }
-        let scopes = capability_token_scopes(&login.capability_token).unwrap_or_else(|| {
+        let scopes = decode_capability_token_scopes(&login.capability_token).unwrap_or_else(|| {
             vec![
                 "coffee:drinks:read".to_owned(),
                 "coffee:order:confirm".to_owned(),
@@ -933,11 +981,11 @@ impl HostBridgeRuntime {
                 "coffee:order:read".to_owned(),
             ]
         });
-        Ok(CachedAuthSession {
-            token: login.capability_token,
-            expires_at_ms: login.expires_at_ms,
+        Ok(DidAuthSession::new(
+            login.capability_token,
+            login.expires_at_ms,
             scopes,
-        })
+        ))
     }
 }
 
@@ -950,6 +998,137 @@ struct HostDidChallenge {
     issued_at_ms: u64,
     expires_at_ms: Option<u64>,
     audience: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostRequestFailure {
+    code: &'static str,
+    reason: String,
+}
+
+impl HostRequestFailure {
+    fn invalid_options(reason: impl Into<String>) -> Self {
+        Self {
+            code: "invalid_options",
+            reason: reason.into(),
+        }
+    }
+
+    fn permission_denied(reason: impl Into<String>) -> Self {
+        Self {
+            code: "permission_denied",
+            reason: reason.into(),
+        }
+    }
+
+    fn network_denied(reason: impl Into<String>) -> Self {
+        Self {
+            code: "network_denied",
+            reason: reason.into(),
+        }
+    }
+
+    fn auth_failed(reason: impl Into<String>) -> Self {
+        Self {
+            code: "auth_failed",
+            reason: reason.into(),
+        }
+    }
+
+    fn transport_failed(reason: impl Into<String>) -> Self {
+        Self {
+            code: "transport_failed",
+            reason: reason.into(),
+        }
+    }
+
+    fn from_request_error(error: WxRequestError) -> Self {
+        match error {
+            WxRequestError::Denied(reason) => Self::network_denied(reason.redacted_for_display()),
+            WxRequestError::Transport(reason) => {
+                Self::transport_failed(reason.redacted_for_display())
+            }
+            WxRequestError::Unsupported(reason) => {
+                Self::transport_failed(reason.redacted_for_display())
+            }
+        }
+    }
+
+    fn to_json(&self) -> Value {
+        json!({
+            "errMsg": format!("request:fail {}", self.code),
+            "code": self.code,
+            "reason": self.reason,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LocalDidRequestBroker {
+    bearer: Option<String>,
+}
+
+impl RequestBroker for LocalDidRequestBroker {
+    fn request(
+        &self,
+        profile: &CapabilityProfile,
+        request: WxRequest,
+    ) -> Result<WxResponse, WxRequestError> {
+        profile
+            .ensure(wx_compat::Capability::Request)
+            .map_err(|denial| match denial {
+                wx_compat::PermissionDecision::Deny { reason, .. } => {
+                    WxRequestError::Denied(reason)
+                }
+                wx_compat::PermissionDecision::Allow => {
+                    WxRequestError::Denied("request capability is unavailable".to_owned())
+                }
+            })?;
+
+        let body = request
+            .data
+            .as_ref()
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let (status_code, headers, response_body) = http_request_url(
+            &request.url,
+            wx_method_name(request.method),
+            self.bearer.as_deref(),
+            Some(&body),
+            request.headers,
+        )
+        .map_err(|message| WxRequestError::Transport(message.redacted_for_display()))?;
+        let data =
+            serde_json::from_str::<Value>(&response_body).unwrap_or(Value::String(response_body));
+
+        Ok(WxResponse {
+            status_code,
+            headers: redact_response_headers(headers),
+            data,
+        })
+    }
+}
+
+fn wx_method(method: &str) -> Result<WxMethod, String> {
+    match method {
+        "GET" => Ok(WxMethod::Get),
+        "POST" => Ok(WxMethod::Post),
+        "PUT" => Ok(WxMethod::Put),
+        "DELETE" => Ok(WxMethod::Delete),
+        "PATCH" => Ok(WxMethod::Patch),
+        _ => Err(format!("unsupported request method: {method}")),
+    }
+}
+
+fn wx_method_name(method: WxMethod) -> &'static str {
+    match method {
+        WxMethod::Get => "GET",
+        WxMethod::Post => "POST",
+        WxMethod::Put => "PUT",
+        WxMethod::Delete => "DELETE",
+        WxMethod::Patch => "PATCH",
+    }
 }
 
 fn post_json_url(url: &str, bearer: Option<&str>, body: Value) -> Result<Value, String> {
@@ -965,45 +1144,40 @@ fn post_json_url(url: &str, bearer: Option<&str>, body: Value) -> Result<Value, 
     serde_json::from_str(&response_body).map_err(|error| error.to_string())
 }
 
-fn capability_token_scopes(token: &str) -> Option<Vec<String>> {
-    let _ = bearer_token_expiry_ms(token)?;
-    let payload = token.split('.').nth(1)?;
-    let decoded = base64_url_decode(payload).ok()?;
-    let value = serde_json::from_slice::<Value>(&decoded).ok()?;
-    value
-        .get("scopes")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .filter(|items| !items.is_empty())
+fn safe_did_session_error(error: DidAuthSessionError) -> String {
+    match error {
+        DidAuthSessionError::Unavailable => "DID auth session cache is unavailable".to_owned(),
+        DidAuthSessionError::Missing => "DID auth session is missing".to_owned(),
+        DidAuthSessionError::Expired => "DID auth session is expired".to_owned(),
+        DidAuthSessionError::LoginFailed(message) => message.redacted_for_display(),
+    }
 }
 
-fn base64_url_decode(input: &str) -> Result<Vec<u8>, String> {
-    const TABLE: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let mut bits = 0_u32;
-    let mut bit_count = 0_u8;
-    let mut output = Vec::new();
-    for byte in input.bytes() {
-        if byte == b'=' {
-            break;
-        }
-        let value = TABLE
-            .bytes()
-            .position(|candidate| candidate == byte)
-            .ok_or_else(|| "invalid base64url character".to_owned())? as u32;
-        bits = (bits << 6) | value;
-        bit_count += 6;
-        while bit_count >= 8 {
-            bit_count -= 8;
-            output.push(((bits >> bit_count) & 0xff) as u8);
-        }
-    }
-    Ok(output)
+fn host_owned_header(headers: &BTreeMap<String, String>) -> Option<&str> {
+    headers
+        .keys()
+        .find(|name| {
+            name.eq_ignore_ascii_case("authorization")
+                || name.eq_ignore_ascii_case("signature")
+                || name.eq_ignore_ascii_case("signature-input")
+                || name.eq_ignore_ascii_case("cookie")
+        })
+        .map(String::as_str)
+}
+
+fn redact_response_headers(headers: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    headers
+        .into_iter()
+        .filter(|(name, _)| {
+            !name.eq_ignore_ascii_case("authorization")
+                && !name.eq_ignore_ascii_case("authentication-info")
+                && !name.eq_ignore_ascii_case("set-cookie")
+                && !name.eq_ignore_ascii_case("signature")
+                && !name.eq_ignore_ascii_case("signature-input")
+                && !name.eq_ignore_ascii_case("cookie")
+                && !name.to_ascii_lowercase().contains("token")
+        })
+        .collect()
 }
 
 fn http_request_url(
@@ -1104,6 +1278,7 @@ impl RedactedText for str {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedHttpUrl {
+    scheme: String,
     host: String,
     port: u16,
     path_with_query: String,
@@ -1111,9 +1286,12 @@ struct ParsedHttpUrl {
 
 impl ParsedHttpUrl {
     fn parse(url: &str) -> Result<Self, String> {
-        let rest = url
-            .strip_prefix("http://")
-            .ok_or_else(|| "only http:// localhost URLs are supported".to_owned())?;
+        let (scheme, rest) = url
+            .split_once("://")
+            .ok_or_else(|| "URL scheme is required".to_owned())?;
+        if scheme != "http" && scheme != "https" {
+            return Err("only http:// or https:// URLs are supported".to_owned());
+        }
         let (authority, path) = rest
             .split_once('/')
             .map(|(authority, path)| (authority, format!("/{path}")))
@@ -1132,6 +1310,7 @@ impl ParsedHttpUrl {
             return Err("URL host is required".to_owned());
         }
         Ok(Self {
+            scheme: scheme.to_owned(),
             host,
             port,
             path_with_query: path,
@@ -1151,7 +1330,7 @@ impl ParsedHttpUrl {
     }
 
     fn origin(&self) -> String {
-        format!("http://{}", self.host_header())
+        format!("{}://{}", self.scheme, self.host_header())
     }
 }
 

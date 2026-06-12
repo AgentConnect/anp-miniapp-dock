@@ -58,6 +58,9 @@ pub enum WxRequestError {
     #[error("request denied: {0}")]
     Denied(String),
 
+    #[error("request transport failed: {0}")]
+    Transport(String),
+
     #[error("request unsupported: {0}")]
     Unsupported(String),
 }

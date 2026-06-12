@@ -1,10 +1,15 @@
-use js_runtime_quickjs::{ApiCall, ApiVm, ApiVmConfig, ApiVmError};
+use anp_adapter::{DidAuthSession, DidAuthSessionKey, DidAuthSessionManager};
+use js_runtime_quickjs::{ApiCall, ApiVm, ApiVmConfig, ApiVmError, HostDidAuthConfig};
 use mcp_schema::{ApiDeclaration, ComponentDeclaration, SkillManifest, ValidationReport};
 use serde_json::json;
 use skill_loader::{LoadedComponent, LoadedSkill, SourceFile};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 #[test]
@@ -121,6 +126,370 @@ module.exports = skill
             .and_then(|content| content.get("code"))
             .and_then(|code| code.as_str()),
         Some("dock-login-code-localhost")
+    );
+}
+
+#[test]
+fn wx_login_returns_redacted_receipt_for_cached_did_session() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('login', async () => {
+  const login = await wx.login()
+  return {
+    content: [{ type: 'text', text: login.errMsg }],
+    structuredContent: {
+      code: login.code,
+      tokenVisibleToSkill: login.didAuth.tokenVisibleToSkill,
+      tokenReceived: login.didAuth.tokenReceived,
+      scopes: login.didAuth.scopes,
+      leaked: JSON.stringify(login).includes('cached-token')
+    }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["login"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+    let session_manager = DidAuthSessionManager::new();
+    session_manager
+        .put_session(
+            did_session_key("http://127.0.0.1:3000"),
+            DidAuthSession::new("cached-token", None, ["coffee:drinks:read"]),
+        )
+        .expect("seed session");
+    let host_auth = HostDidAuthConfig::new("missing-did.json", "missing-key.pem")
+        .with_session_manager(session_manager);
+
+    let result = vm
+        .call_with_host_did_auth(
+            did_api_call("login", json!({ "serverUrl": "http://127.0.0.1:3000" })),
+            Some(host_auth),
+        )
+        .expect("call login");
+
+    assert_eq!(result.content[0].text, "login:ok");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|code| code.as_str()),
+        Some("dock-login-receipt-session-1")
+    );
+    assert_eq!(
+        structured
+            .get("tokenVisibleToSkill")
+            .and_then(|value| value.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        structured
+            .get("tokenReceived")
+            .and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn wx_callback_exception_does_not_change_original_outcome() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('login', async () => {
+  const events = []
+  const login = await wx.login({
+    success() {
+      events.push('success')
+      throw new Error('callback secret should not reject')
+    },
+    complete() {
+      events.push('complete')
+    }
+  })
+  return {
+    content: [{ type: 'text', text: login.errMsg }],
+    structuredContent: { events }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["login"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "login", json!({})))
+        .expect("call login");
+
+    assert_eq!(result.content[0].text, "login:ok");
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.get("events"))
+            .and_then(|events| events.as_array())
+            .cloned(),
+        Some(vec![json!("success"), json!("complete")])
+    );
+}
+
+#[test]
+fn wx_check_session_reports_cached_did_session() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('check', async () => {
+  const check = await wx.checkSession()
+  return { content: [{ type: 'text', text: check.errMsg }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["check"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+    let session_manager = DidAuthSessionManager::new();
+    session_manager
+        .put_session(
+            did_session_key("http://127.0.0.1:3000"),
+            DidAuthSession::new("cached-token", None, ["coffee:drinks:read"]),
+        )
+        .expect("seed session");
+    let host_auth = HostDidAuthConfig::new("missing-did.json", "missing-key.pem")
+        .with_session_manager(session_manager);
+
+    let result = vm
+        .call_with_host_did_auth(
+            did_api_call("check", json!({ "serverUrl": "http://127.0.0.1:3000" })),
+            Some(host_auth),
+        )
+        .expect("call check");
+
+    assert_eq!(result.content[0].text, "checkSession:ok");
+}
+
+#[test]
+fn wx_check_session_rejects_missing_did_session() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('check', async () => {
+  try {
+    await wx.checkSession()
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: { code: error.code }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["check"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+    let host_auth = HostDidAuthConfig::new("missing-did.json", "missing-key.pem")
+        .with_session_manager(DidAuthSessionManager::new());
+
+    let result = vm
+        .call_with_host_did_auth(
+            did_api_call("check", json!({ "serverUrl": "http://127.0.0.1:3000" })),
+            Some(host_auth),
+        )
+        .expect("call check");
+
+    assert_eq!(result.content[0].text, "checkSession:fail auth_failed");
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.get("code"))
+            .and_then(|code| code.as_str()),
+        Some("auth_failed")
+    );
+}
+
+#[test]
+fn wx_request_rejects_js_provided_authorization_header() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('request', async () => {
+  try {
+    await wx.request({
+      url: 'http://127.0.0.1:3000/api/drinks',
+      header: { Authorization: 'Bearer attacker-token' }
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        leaked: String(error.reason || '').includes('attacker-token')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["request"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "request", json!({})))
+        .expect("call request");
+
+    assert_eq!(result.content[0].text, "request:fail permission_denied");
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.get("code"))
+            .and_then(|code| code.as_str()),
+        Some("permission_denied")
+    );
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.get("leaked"))
+            .and_then(|leaked| leaked.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn wx_request_rejects_non_loopback_url() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('request', async () => {
+  try {
+    await wx.request({ url: 'https://merchant.example/api/drinks' })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: { code: error.code, reason: error.reason }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["request"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "request", json!({})))
+        .expect("call request");
+
+    assert_eq!(result.content[0].text, "request:fail network_denied");
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.get("code"))
+            .and_then(|code| code.as_str()),
+        Some("network_denied")
+    );
+}
+
+#[test]
+fn wx_request_redacts_host_owned_response_headers() {
+    let (server_url, request_rx, server_handle) = spawn_sensitive_header_server();
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('request', async (ctx) => {
+  const response = await wx.request({ url: ctx.arguments.url })
+  return {
+    content: [{ type: 'text', text: response.errMsg }],
+    structuredContent: {
+      statusCode: response.statusCode,
+      header: response.header,
+      data: response.data,
+      leaked: JSON.stringify(response).includes('cached-token') ||
+        JSON.stringify(response).includes('response-token') ||
+        JSON.stringify(response).includes('session-secret') ||
+        JSON.stringify(response).includes('sig-secret')
+    }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["request"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+    let session_manager = DidAuthSessionManager::new();
+    session_manager
+        .put_session(
+            did_session_key(&server_url),
+            DidAuthSession::new("cached-token", None, ["coffee:drinks:read"]),
+        )
+        .expect("seed session");
+    let host_auth = HostDidAuthConfig::new("missing-did.json", "missing-key.pem")
+        .with_session_manager(session_manager);
+
+    let result = vm
+        .call_with_host_did_auth(
+            did_api_call(
+                "request",
+                json!({ "url": format!("{server_url}/api/drinks") }),
+            ),
+            Some(host_auth),
+        )
+        .expect("call request");
+    let raw_request = request_rx.recv().expect("server observed request");
+    server_handle.join().expect("server thread joins");
+
+    assert!(raw_request.contains("Authorization: Bearer cached-token"));
+    assert_eq!(result.content[0].text, "request:ok");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured
+            .get("statusCode")
+            .and_then(|value| value.as_u64()),
+        Some(200)
+    );
+    assert_eq!(
+        structured
+            .get("header")
+            .and_then(|header| header.get("X-Safe"))
+            .and_then(|value| value.as_str()),
+        Some("visible")
+    );
+    for sensitive in [
+        "Authorization",
+        "Set-Cookie",
+        "Signature",
+        "Signature-Input",
+        "X-Access-Token",
+    ] {
+        assert!(
+            structured
+                .get("header")
+                .and_then(|header| header.get(sensitive))
+                .is_none(),
+            "{sensitive} must be redacted from JS-visible response headers"
+        );
+    }
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
     );
 }
 
@@ -505,6 +874,55 @@ fn test_skill(
     api_names: Vec<&str>,
 ) -> LoadedSkill {
     test_skill_with_components(entry_js, api_modules, api_names, Vec::new())
+}
+
+fn did_api_call(api_name: &str, arguments: serde_json::Value) -> ApiCall {
+    let mut call = ApiCall::new("coffee", "session-1", api_name, arguments);
+    call.user_did = Some("did:wba:user.example".to_owned());
+    call.agent_did = Some("did:wba:agent.example".to_owned());
+    call.merchant_did = Some("did:wba:coffee-merchant.example".to_owned());
+    call
+}
+
+fn did_session_key(base_url: &str) -> DidAuthSessionKey {
+    DidAuthSessionKey::new(
+        base_url,
+        "did:wba:coffee-merchant.example",
+        "did:wba:user.example",
+        Some("did:wba:agent.example".to_owned()),
+        "coffee",
+        "session-1",
+    )
+}
+
+fn spawn_sensitive_header_server() -> (String, mpsc::Receiver<String>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let addr = listener.local_addr().expect("test server addr");
+    let (request_tx, request_rx) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let mut bytes = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        loop {
+            let read = stream.read(&mut buffer).expect("read request");
+            assert!(read > 0, "connection closed before request headers");
+            bytes.extend_from_slice(&buffer[..read]);
+            if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
+        let raw_request = String::from_utf8_lossy(&bytes).to_string();
+        request_tx.send(raw_request).expect("send request");
+        let body = r#"{"ok":true}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAuthorization: Bearer response-token\r\nSet-Cookie: sid=session-secret\r\nSignature: sig-secret\r\nSignature-Input: sig-input-secret\r\nX-Access-Token: response-token\r\nX-Safe: visible\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response");
+    });
+    (format!("http://{addr}"), request_rx, handle)
 }
 
 fn test_skill_with_components(

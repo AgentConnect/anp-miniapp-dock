@@ -315,10 +315,19 @@ where
         request: WxRequest,
     ) -> Result<WxResponse, WxRequestError> {
         match profile.check(Capability::Request) {
-            PermissionDecision::Allow => self
-                .client
-                .request(request)
-                .map_err(|error| WxRequestError::Denied(error.safe_message())),
+            PermissionDecision::Allow => {
+                self.client.request(request).map_err(|error| match error {
+                    AnpRequestError::Denied(_)
+                    | AnpRequestError::Credential(_)
+                    | AnpRequestError::Authentication(_)
+                    | AnpRequestError::Unauthorized(_) => {
+                        WxRequestError::Denied(error.safe_message())
+                    }
+                    AnpRequestError::Transport(_) | AnpRequestError::Serialization(_) => {
+                        WxRequestError::Transport(error.safe_message())
+                    }
+                })
+            }
             PermissionDecision::Deny { reason, .. } => Err(WxRequestError::Denied(reason)),
         }
     }

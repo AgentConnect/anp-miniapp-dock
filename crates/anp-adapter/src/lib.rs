@@ -2,6 +2,7 @@
 
 pub mod challenge;
 pub mod did;
+pub mod session;
 pub mod signed_request;
 pub mod token;
 
@@ -16,6 +17,10 @@ pub use challenge::{
 pub use did::{
     DidCredential, DidCredentialConfig, DidCredentialError, DidCredentialProvider,
     FileDidCredentialProvider, IdentitySession,
+};
+pub use session::{
+    decode_capability_token_scopes, DidAuthReceipt, DidAuthSession, DidAuthSessionError,
+    DidAuthSessionKey, DidAuthSessionManager,
 };
 pub use signed_request::{
     redact_for_log, AnpHttpClient, AnpRequestBroker, AnpRequestError, AuthMaterial, HttpTransport,

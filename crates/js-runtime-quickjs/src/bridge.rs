@@ -146,34 +146,44 @@ function __dockCallbackOptions(options) {
   return options && typeof options === 'object' ? options : {};
 }
 
-const wx = Object.freeze({
-  login(options) {
-    const payload = JSON.parse(__dock.login());
-    const callbacks = __dockCallbackOptions(options);
-    if (typeof callbacks.success === 'function') {
-      callbacks.success(payload);
+function __dockInvokeCallback(callback, payload) {
+  try {
+    callback(payload);
+  } catch (error) {
+    console.warn('wx callback error redacted');
+  }
+}
+
+function __dockAsyncOutcome(apiName, options, hostCall) {
+  const callbacks = __dockCallbackOptions(options);
+  return Promise.resolve().then(() => {
+    const payload = JSON.parse(hostCall());
+    const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.startsWith(apiName + ':fail');
+    if (ok && typeof callbacks.success === 'function') {
+      __dockInvokeCallback(callbacks.success, payload);
+    }
+    if (!ok && typeof callbacks.fail === 'function') {
+      __dockInvokeCallback(callbacks.fail, payload);
     }
     if (typeof callbacks.complete === 'function') {
-      callbacks.complete(payload);
+      __dockInvokeCallback(callbacks.complete, payload);
     }
-    return Promise.resolve(payload);
+    if (!ok) {
+      throw payload;
+    }
+    return payload;
+  });
+}
+
+const wx = Object.freeze({
+  login(options) {
+    return __dockAsyncOutcome('login', options, () => __dock.login());
+  },
+  checkSession(options) {
+    return __dockAsyncOutcome('checkSession', options, () => __dock.checkSession());
   },
   request(options) {
-    const callbacks = __dockCallbackOptions(options);
-    return Promise.resolve().then(() => {
-      const payload = JSON.parse(__dock.request(__dockSafeJson(options || {})));
-      const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.startsWith('request:fail');
-      if (ok && typeof callbacks.success === 'function') {
-        callbacks.success(payload);
-      }
-      if (!ok && typeof callbacks.fail === 'function') {
-        callbacks.fail(payload);
-      }
-      if (typeof callbacks.complete === 'function') {
-        callbacks.complete(payload);
-      }
-      return payload;
-    });
+    return __dockAsyncOutcome('request', options, () => __dock.request(__dockSafeJson(options || {})));
   },
   modelContext: Object.freeze({
     NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),
@@ -182,24 +192,7 @@ const wx = Object.freeze({
       return __dock.modelContextGetSessionId();
     },
     expireAllCards(options) {
-      const callbacks = __dockCallbackOptions(options);
-      return Promise.resolve().then(() => {
-        const payload = JSON.parse(__dock.modelContextExpireAllCards(__dockSafeJson(options || {})));
-        const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.includes(':fail');
-        if (ok && typeof callbacks.success === 'function') {
-          callbacks.success(payload);
-        }
-        if (!ok && typeof callbacks.fail === 'function') {
-          callbacks.fail(payload);
-        }
-        if (typeof callbacks.complete === 'function') {
-          callbacks.complete(payload);
-        }
-        if (!ok) {
-          throw payload;
-        }
-        return payload;
-      });
+      return __dockAsyncOutcome('modelContext.expireAllCards', options, () => __dock.modelContextExpireAllCards(__dockSafeJson(options || {})));
     }
   })
 });

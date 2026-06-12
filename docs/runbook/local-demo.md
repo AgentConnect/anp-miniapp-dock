@@ -62,7 +62,7 @@ Then run the local container against that localhost service:
 cargo run -p dock-cli -- run-demo --skill examples/coffee-skill --server http://127.0.0.1:8008
 ```
 
-During `run-demo`, the Skill JavaScript calls `wx.login()`, then uses `wx.request()` to access `/api/login`, `/api/drinks`, `/api/order/confirm`, and `/api/order/pay` on localhost.
+During `run-demo`, the Skill JavaScript calls `wx.login()`, then uses `wx.request()` to access `/api/login`, `/api/drinks`, `/api/order/confirm`, and `/api/order/pay` on localhost. With Host DID credentials configured, the Atomic API VM keeps the capability token inside `DidAuthSessionManager`, returns only a code-like redacted receipt to Skill JS, and `wx.checkSession()` can validate the cached session without exposing the token.
 
 ## Start The Rust Demo Server
 
@@ -147,13 +147,13 @@ The same values can be supplied through `ANP_DOCK_DID_DOCUMENT`, `ANP_DOCK_PRIVA
 2. Local server coffee API checks for drinks, order confirmation, and mock payment.
 3. Local Skill loading from `examples/coffee-skill`.
 4. Local Skill API execution through `dock-core` and the QuickJS API VM.
-5. Skill-side `wx.login` and `wx.request` calls to the localhost coffee service.
+5. Skill-side `wx.login`, `wx.checkSession`, and `wx.request` calls to the localhost coffee service.
 6. Component VM rendering for `drink-list`, `order-confirm`, and `payment-result`.
 7. Component `api/call` action routing for `confirmOrder` and `payOrder`.
 8. Mock approval for high-risk consent and audit proof recording.
 9. Payment-result card expiration handling.
 
-CLI output is JSON. Capability tokens are used internally and are printed only as `[REDACTED]`.
+CLI output is JSON. Capability tokens, `Authorization`, HTTP signature headers, and DID private key paths are used internally and are printed only as `[REDACTED]` or omitted from JS-visible response headers.
 
 ## Run The Mac Chatbot Host
 
