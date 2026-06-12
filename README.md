@@ -10,6 +10,7 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - [anp-miniapp-dock System Architecture](docs/architecture/anp-skill-dock-architecture.md)
 - [Current capability baseline](docs/architecture/current-capability-baseline.md)
 - [wx API compatibility matrix](docs/architecture/wx-api-compatibility-matrix.md)
+- [Component compatibility matrix](docs/architecture/component-compatibility-matrix.md)
 - [MiniApp MCP Compatibility MVP](docs/architecture/miniapp-mcp-compatibility-mvp.md)
 - [MiniApp MCP Component Runtime](docs/architecture/miniapp-mcp-component-runtime.md)
 - [MiniApp MCP protocol notes](docs/weichat-miniapp-mcp-protocol/weichat-miniapp-mcp.txt)

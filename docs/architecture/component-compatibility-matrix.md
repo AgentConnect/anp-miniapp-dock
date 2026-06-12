@@ -1,0 +1,127 @@
+# 组件兼容矩阵
+
+> 状态：Phase 0 组件矩阵初版
+> 日期：2026-06-12
+> 范围：基于当前能力基线、组件运行时架构、Phase 2 计划和小程序 MCP 本地参考，标注 Component JS、WXML、WXSS、内置组件、事件、动态组件、Render IR、Host fallback 的当前状态、目标阶段、责任边界和验证证据。
+> 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 00-03。
+
+## 1. 使用口径
+
+本矩阵只描述 `anp-miniapp-dock` 的 **Agentic MiniApp Container** 组件运行时边界，不承诺完整复刻微信小程序 Runtime、页面路由、TabBar、半屏小程序页面、社交/广告生态或完整 WXML/WXSS。协议参考中的“支持”表示小程序 AI 开发模式能力，不等于本项目当前生产支持。
+
+状态枚举与 API 矩阵保持一致：
+
+| 状态 | 含义 |
+|---|---|
+| `supported` | 当前 runtime 已支持核心语义，并有源码、测试或 coffee fixture 证据。 |
+| `host-boundary` | Runtime 已产生结构化 action、Render IR、trait 或 fallback 边界，但真实 Host renderer/provider/card manager 尚未生产化。 |
+| `planned-p1` | Phase 2 P1 或首批组件增强需要实现。 |
+| `planned-p2` | Phase 2 后续或更长期兼容能力；不阻塞当前交易型卡片主线。 |
+| `demo-only` | 仅 coffee demo、CLI preview、mock renderer 或本地测试可用。 |
+| `unsupported-by-design` | 与容器边界冲突，或应由 Host 原生能力、merchant Agent API、CardSpec fallback 替代，默认 fail closed 或 warning fallback。 |
+
+高风险动作不得由 Render IR 直接执行。`api/call` 必须回到 `dock-core::Orchestrator.call_api`，重新经过 input validation、permission、ConsentGate 和 audit；文件、隐私、位置、电话、支付类动作必须由 Host provider 和 consent/audit 承接。
+
+## 2. Component JS 与生命周期
+
+| category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| Component JS | `Component({})` 单组件定义 | `supported` | P0 | 创建 Component VM instance 后编译 WXML/WXSS 为 Render IR。 | 无 | 每个组件独立 QuickJS context，不与 Atomic API VM 共享全局变量。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 多次 `Component()` 调用失败。 |
+| Component JS | `data` / `methods` / `this.data` | `supported` | P0 | method 更新 state 后重新生成 Render IR。 | 无 | method 只能通过受限 `wx.modelContext` 产生 action。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 支持 coffee 三组件主线。 |
+| Component JS | `properties` 基础注入 | `supported` | P0 + Phase 2 | properties 合并进初始 data，可被 WXML binding 读取。 | 无 | 不应把 `_meta` 私有数据暴露给模型输出；仅进入组件输入。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 当前未完整实现类型转换、default、optional 语义。 |
+| Component JS | `lifetimes.created` / `attached` / `detached` | `supported` | P0 | trace 中记录 lifecycle，影响后续 Render IR。 | 无 | detach/expire 后事件被阻断。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | `detached` 目前主要由 expire 流程触发。 |
+| Component JS | `this.setData()` 与 dotted path | `supported` | P0 | 重新计算 WXML binding，输出新 Render IR。 | 无 | 不执行 DOM 或 Host side effect。 | [`set_data.rs`](../../crates/component-runtime/tests/set_data.rs) | `component-runtime` | 支持 `order.status` 这类路径更新。 |
+| Component JS | `this.triggerEvent()` | `planned-p1` | Phase 2 | 转换为 Render IR / Host event action，而不是直接调用宿主。 | Host renderer 需要处理事件上报。 | 不得绕过 Orchestrator 或 consent。 | 待新增 VM test | `component-runtime`、Host adapter | 当前 bootstrap 中为空实现。 |
+| Component JS | `observers` / property watcher | `planned-p2` | Phase 2+ | watcher 可触发 state 更新和 Render IR refresh。 | 无 | 防止循环更新和超时。 | 待新增 VM test | `component-runtime` | 当前未支持。 |
+| Component JS | `behaviors` / `relations` / `externalClasses` / `slots` / `pageLifetimes` | `unsupported-by-design` | 无 | 不映射；应拆成单卡片组件或 Host native flow。 | Host 可提供专用 native adapter。 | 避免进入完整自定义组件系统。 | 待 unsupported/warning fixture | `component-runtime` | 当前产品边界不复刻完整微信组件模型。 |
+| 沙箱 | 禁用 `fetch` / `WebSocket` / timer / `Function` / `eval` / `require` | `supported` | P0 | 无 Render IR 映射。 | dynamic 权限后另行受限开放。 | 默认禁止网络、timer 和逃逸入口。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 与 Atomic API VM 隔离。 |
+
+## 3. `wx.modelContext`、事件与 action 回流
+
+| category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| model context | `wx.modelContext.getContext(this)` | `supported` | P0 | 提供 notification handler 和 `sendFollowUpMessage` action。 | Host/Agent 消息层消费 action。 | 文本上行不能携带 token、Authorization、private key path。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime`、`dock-core` | coffee `drink-list` / `order-confirm` 使用该能力。 |
+| view context | `wx.modelContext.getViewContext(this)` | `supported` | P0 | 提供尺寸、card action 和页面关联 action。 | 真实尺寸、页面入口由 Host adapter 负责。 | URL/path 必须 canonicalize。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 当前 `getDimensions()` 返回固定 headless 尺寸。 |
+| notification | `NotificationType.Input` / `Result` / `Expire` | `supported` | P0 | 通知驱动 state 更新和 Render IR refresh。 | card manager 生产策略待 Phase 2/4。 | Expire 后事件不可继续触发高风险动作。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | coffee 组件依赖 Result；payment-result 触发过期。 |
+| notification | `NotificationType.Overflow` | `host-boundary` | Phase 2 | Host 尺寸测量后回传 overflow event。 | 依赖真实 Host renderer。 | overflow 只影响展示和 fallback，不应触发业务写操作。 | 待 Phase 2 fixture | `component-runtime`、Host renderer | 常量存在，真实事件未实现。 |
+| event | tap / image load / image error | `supported` | P0 | RenderEventBinding 记录 method 和 dataset。 | Host renderer 负责把真实用户事件回传 runtime。 | 当前只允许 tap 和 image 事件；其他复杂事件不进入 P0。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) | `component-runtime` | 符合协议中原子组件事件限制。 |
+| event | longpress / touch / scroll / input composition | `unsupported-by-design` | 无 | 不映射或 warning。 | Host 可做原生表单/详情页。 | 避免复杂手势和输入法事件扩大攻击面。 | 待 unsupported fixture | `component-runtime`、Host adapter | 表单 P1 走受控 node/action，不开放完整事件模型。 |
+| action | `sendFollowUpMessage` | `supported` | P0 | `ComponentVmAction::SendFollowUpMessage`；包含 `api/call` 时拆出 ApiCall action。 | Host/Agent 消息层展示上行。 | 不直接执行 API；`api/call` 单独回 Orchestrator。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `component-runtime`、`dock-core`、`dock-cli` | coffee 选择饮品和确认支付主线已覆盖。 |
+| action | `api/call` | `supported` | P0 | Component action 转 `dock-core::ComponentAction::ApiCall`。 | 无 | 必须重新经过 inputSchema、permission、ConsentGate、audit。 | [`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `component-runtime`、`dock-core` | 不能由组件直接调用 executor。 |
+| action | `expirePreviousCards` / `expireAllCards` | `supported` | P0 + Phase 2 | action 记录 componentPaths/match；Render IR 后续显示过期态。 | 生产 card manager、audit 和 expirable 过滤待收敛。 | 只应影响声明 `expirable: true` 的组件；当前 manifest 元数据需 Step 01-02 补齐。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `component-runtime`、`wx-compat`、`dock-cli` | 当前 coffee manifest 尚未声明 `expirable`，生产语义需补。 |
+| action | `setRelatedPage({ path, query })` | `host-boundary` | Phase 2/4 | 作为 structured action/metadata 捕获。 | Host 负责关联页面入口和 query 展示。 | path/query 必须 canonicalize 和脱敏。 | action 源码覆盖；缺 Host E2E | `component-runtime`、Host adapter | `components[].relatedPage` manifest 校验待 Step 01-02。 |
+| action | `openDetailPage({ url })` | `host-boundary` | Phase 2/4 | 捕获为 action，Host 以 BottomSheet/WebView/native fallback 打开。 | 真实详情页由 Host adapter 实现。 | URL 内容可能 L3/L4，必须 allowlist/consent/redaction。 | action 源码覆盖；缺 Host E2E | `component-runtime`、Host adapter | 不实现完整半屏小程序页面。 |
+| action | `preloadDetailPage({ url })` | `planned-p1` | Phase 2 | 可实现为 Host 预加载或 safe no-op。 | 依赖 Host renderer。 | 预加载不得绕过 allowlist 或发出未授权网络请求。 | 待新增 fixture | Host adapter | 当前未实现。 |
+
+## 4. WXML、WXSS 与内置组件
+
+| category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 内置组件 | `view` / `text` / `image` / `button` / 横向 `scroll-view` | `supported` | P0 | `RenderNodeKind::{View,Text,Image,Button,ScrollView}`。 | Host renderer 需要实现这些 node kind。 | image URL 不应读取本地任意路径；button 只触发绑定事件。 | [`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) | `component-runtime` | `scroll-view` 当前以 `scrollX`/`scrollY` props 表示，P0 验证横向。 |
+| 内置组件 | `input` / `textarea` / `radio` / `checkbox` / `picker` | `planned-p1` | Phase 2 | 新增 Render IR node kind 或 Host form action。 | Host renderer/provider 负责真实输入控件。 | 表单值不能绕过 input validation、permission 和 consent。 | 待 address-form fixture/snapshot | `component-runtime`、Host renderer | 交易型地址/规格选择需要。 |
+| 内置组件 | `map` preview / `canvas` static | `planned-p1` | Phase 2 | `map-preview` / `canvas-static` node。 | Host renderer 负责静态预览。 | 不开放 `MapContext.*` 交互和任意 canvas 脚本。 | 待 location-map-preview fixture | `component-runtime`、Host renderer | 完整地图交互仍 unsupported。 |
+| 内置组件 | `video` / `web-view` / `navigator` / ad / social open-type | `unsupported-by-design` | 无 | 不映射；fallback 到 CardSpec/Host native flow。 | Host 可提供独立详情页或原生操作。 | 防止跳出容器、广告和社交链路。 | 待 unsupported fixture | `component-runtime`、Host adapter | 与产品边界冲突。 |
+| WXML | 单根/多根包装、基础 tag/attribute 解析 | `supported` | P0 | 多根文档包装为 `view`。 | 无 | parse failed 走 fallback。 | [`wxml.rs`](../../crates/component-runtime/src/wxml.rs)、[`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) | `component-runtime` | 不支持 template/import/include。 |
+| WXML | `{{ path }}` binding、`.length`、文本/属性插值 | `supported` | P0 | 写入 RenderNode `text` / `props` / dataset。 | 无 | 不执行任意 JS 表达式。 | [`compiler.rs`](../../crates/component-runtime/src/compiler.rs)、[`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) | `component-runtime` | `price + tax` 等复杂表达式只产生 warning。 |
+| WXML | `wx:if` / `wx:for` / `wx:key` | `supported` | P0 | 条件过滤和节点展开；key 写入 `props.key`。 | 无 | 仅支持 path expression。 | [`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) | `component-runtime` | 当前无 `wx:elif` / `wx:else`。 |
+| WXML | `wx:elif` / `wx:else` / `catchtap` / disabled button 抑制 | `planned-p1` | Phase 2 | 增强 compiler 和 event binding。 | Host renderer 仍只回传受控事件。 | disabled 必须阻断 action。 | 待 parser/compiler fixture | `component-runtime` | Phase 2 P1。 |
+| WXML | 简单表达式 `!flag`、equality、literal、boolean | `planned-p1` | Phase 2 | 受限 expression evaluator，不执行 JS。 | 无 | 禁止 function call / arbitrary JS。 | 待 parser/compiler tests | `component-runtime` | 当前仅 path。 |
+| WXML | template/import/include、自定义组件嵌套、slots、selector query | `unsupported-by-design` | 无 | 不映射或 warning fallback。 | Host native adapter 可替代高价值场景。 | 避免完整小程序组件系统。 | 待 unsupported/warning fixture | `component-runtime` | 后续若支持必须先更新矩阵和 threat model。 |
+| WXSS | class selector 与基础 style 属性 | `supported` | P0 | `RenderStyle` 字段：display、flex-direction、width、height、margin、padding、color、background、opacity、font、border、text-align。 | Host renderer 解释 RenderStyle。 | unsupported property 只 warning，不执行代码。 | [`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs)、[`wxss.rs`](../../crates/component-runtime/src/wxss.rs) | `component-runtime` | `rpx` 归一化为 `px`。 |
+| WXSS | id selector、tag selector、simple descendant selector | `planned-p1` | Phase 2 | 扩展 style matching。 | Host renderer 不应依赖 CSS 级联完整语义。 | 复杂选择器不能导致样式逃逸。 | 待 WXSS tests | `component-runtime` | 当前非 class selector warning。 |
+| WXSS | `gap`、`justify-content`、`align-items`、min/max、`box-shadow`、`overflow-x` | `planned-p1` | Phase 2 | 扩展 `RenderStyle` 或 `extra`。 | Host renderer 可忽略未知 style 并 warning。 | 不能影响安全，仅影响展示。 | 待 style snapshot | `component-runtime`、Host renderer | Phase 2 P1。 |
+| WXSS | animation、transition、complex transform、media query、filter/mask、custom font | `unsupported-by-design` | 无 | warning fallback 或忽略。 | Host 可做品牌级 native adapter。 | 避免高成本渲染和不一致行为。 | 待 warning fixture | `component-runtime` | 当前 `transform` 已 warning。 |
+
+## 5. Render IR、fallback 与 fixture
+
+| category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| Render IR | Platform-neutral node tree | `supported` | P0 | `RenderNode { id, kind, text, props, style, events, children, accessibility }`。 | Host renderer 消费 JSON。 | `debug`/sensitive fields 不应进入生产 Render IR。 | [`render_ir.rs`](../../crates/component-runtime/src/render_ir.rs) | `component-runtime` | 当前未包含 schemaVersion。 |
+| Render IR | schema version | `planned-p1` | Phase 2 | 输出 `schemaVersion: dock.render-ir.v1`。 | Host adapter 用版本做兼容。 | Breaking change 必须 bump version。 | 待 Render IR snapshot | `component-runtime`、Host adapter | Phase 2 子文档已定义目标。 |
+| Render IR | action registry | `supported` | P0 + Phase 2 | `sendFollowUpMessage`、`api/call`、expire、detail page action。 | Host/Orchestrator 分别处理。 | 高风险动作不能由 Render IR 直接执行。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) | `component-runtime`、`dock-core` | `openDetailPage`/`setRelatedPage` 仍是 Host boundary。 |
+| Fallback | render failure -> CardSpec / structuredContent / content | `supported` | P0 | `dock-core::RenderRouter::fallback` 记录 fallback reason。 | Host/CLI 决定最终展示。 | fallback 也必须保持 redaction。 | [`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `dock-core`、`dock-cli`、`card-spec` | 当前 reason 字符串需 Phase 2 枚举化。 |
+| Fallback | fallback reason enum | `planned-p1` | Phase 2 | `no_component_path`、`component_load_failed`、`wxml_parse_failed` 等。 | Host adapter 可展示稳定错误。 | 不泄露路径、token 或私有数据。 | 待 fallback tests | `dock-core`、`dock-cli`、`card-spec` | Phase 2 子文档已列建议。 |
+| Fixture | coffee 三组件 | `supported` | P0 | list/confirm/payment-result Render IR 和 action flow。 | CLI 是 demo harness，不是生产 Host。 | mock payment 仍需 ConsentGate/audit；不是真实支付。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `examples/coffee-skill`、`component-runtime`、`dock-cli` | 当前唯一完整组件 fixture。 |
+| Fixture | address-form / media-review / dynamic-status / location-map-preview | `planned-p1` | Phase 2 | 覆盖表单、文件/media、动态 request/timer、map preview。 | 依赖 Host provider 和 renderer。 | L3/L4 必须进入 ConsentGate/audit。 | 待新增 fixtures/snapshots | `examples/*-skill`、`testdata/render-ir` | Phase 2 fixture 计划。 |
+| Snapshot | Render IR golden snapshots | `planned-p1` | Phase 2 | 分层 snapshot：root、actions、warnings、audit summary。 | Host renderer 可独立验证。 | Snapshot 不含随机 id、时间戳、token、signature。 | 待 `testdata/render-ir` | `component-runtime`、`dock-cli` | 当前测试直接断言关键字段，未集中 golden。 |
+| CLI | `preview-component` | `demo-only` | P0/Phase 5 | 输出 Component VM Render IR JSON。 | 开发者本地工具，不是 Host protocol。 | 输出不得泄露 token/Authorization/private path。 | [`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `dock-cli` | 可作为 Phase 5 兼容报告输入。 |
+
+## 6. Dynamic 与 Host 边界
+
+| category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| Dynamic | 默认禁止 `wx.request` / timer | `supported` | P0 | 无 Render IR 映射。 | 无 | 默认 fail closed，避免组件绕过 RequestBroker。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) | `component-runtime`、`wx-compat` | 当前 JS 全局禁用 `fetch`、`setTimeout`、`setInterval`。 |
+| Dynamic | `components[].permissions.scope.dynamic` 识别 | `host-boundary` | Phase 1/2 | capability profile 可表达 dynamic request。 | manifest 校验和 JS 注入待 Step 01-02/Phase 2。 | 必须继续走 allowlist、token boundary、audit summary。 | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) | `wx-compat`、`mcp-schema`、`skill-loader` | 当前 profile builder 有能力，manifest 端尚未完整接入。 |
+| Dynamic | 受限 `wx.request` | `planned-p1` | Phase 2 | 不进入 Render IR；由 component capability broker 执行。 | RequestBroker/Host network provider。 | allowlist fail closed，禁止 JS 覆盖 Authorization。 | 待 dynamic-status fixture | `wx-compat`、`js-runtime-quickjs`、`component-runtime`、`anp-adapter` | 必须等 Phase 1 `wx.request` 正式路径稳定。 |
+| Dynamic | `setTimeout` / `setInterval` / clear | `planned-p1` | Phase 2 | timer 触发 state refresh 或 action。 | Host lifecycle 负责后台暂停/恢复。 | 数量、频率、生命周期限制；expire/detach 自动清理。 | 待 dynamic-status fixture | `component-runtime`、Host adapter | 当前全局禁用。 |
+| Host renderer | Flutter/SwiftUI/Web/native card adapter | `host-boundary` | Phase 4 | 消费 Render IR JSON。 | 生产 Host adapter 未冻结。 | Host 不支持 node/action 时必须 fallback，不得静默执行未知 action。 | 当前 Mac app 为 demo-only | Host adapter、`dock-cli` | 容器只承诺 Render IR contract。 |
+| Host UI | 完整半屏小程序页面、TabBar、页面路由 | `unsupported-by-design` | 无 | 不映射。 | Host 可提供受控详情页 fallback。 | 禁止跳出容器或打开广告/社交链路。 | 待 unsupported fixture | Host adapter | 与 Agentic MiniApp Container 边界冲突。 |
+
+## 7. Owner 与证据索引
+
+| owner | 证据 |
+|---|---|
+| `component-runtime` | [`component_vm.rs`](../../crates/component-runtime/src/component_vm.rs)、[`compiler.rs`](../../crates/component-runtime/src/compiler.rs)、[`render_ir.rs`](../../crates/component-runtime/src/render_ir.rs)、[`wxml.rs`](../../crates/component-runtime/src/wxml.rs)、[`wxss.rs`](../../crates/component-runtime/src/wxss.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`set_data.rs`](../../crates/component-runtime/tests/set_data.rs)、[`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) |
+| `wx-compat` | [`permissions.rs`](../../crates/wx-compat/src/permissions.rs)、[`model_context.rs`](../../crates/wx-compat/src/model_context.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |
+| `dock-core` | [`orchestrator.rs`](../../crates/dock-core/src/orchestrator.rs)、[`host.rs`](../../crates/dock-core/src/host.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) |
+| `dock-cli` / demo | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs)、[`local-demo.md`](../runbook/local-demo.md)、[`current-capability-baseline.md`](current-capability-baseline.md) |
+| `examples/coffee-skill` | [`mcp.json`](../../examples/coffee-skill/mcp.json)、[`drink-list`](../../examples/coffee-skill/components/drink-list/index.wxml)、[`order-confirm`](../../examples/coffee-skill/components/order-confirm/index.wxml)、[`payment-result`](../../examples/coffee-skill/components/payment-result/index.wxml) |
+
+## 8. Phase 2 决策点
+
+Phase 2 实现前必须基于本矩阵冻结以下契约：
+
+- Render IR `schemaVersion`、node kind registry、action registry 和 fallback reason enum。
+- `components[].relatedPage`、`permissions.scope.dynamic`、`expirable`、`expiredText` 的 manifest 校验和 runtime metadata 流向。
+- `this.triggerEvent()`、`catchtap`、disabled button、Overflow 的事件语义。
+- 表单 node 的 Host action / component state 边界，以及表单值如何回到 Orchestrator input validation。
+- dynamic request/timer 的 permission、allowlist、资源限制、detach/expire cleanup 和 audit summary。
+- Host renderer 不支持 node/style/action 时的 fallback 策略和 warning 可观测性。
+
+## 9. 安全红线
+
+- Render IR、CLI JSON、audit export 和 Host payload 不得包含 Authorization、capability token、HTTP Signature、private key path、手机号、地址、文件内容或未脱敏位置。
+- 组件内 `api/call` 只能回到 Orchestrator，不能直接执行 Skill API、HTTP 请求或支付/隐私动作。
+- dynamic request/timer 默认关闭；声明 dynamic 后仍必须受 allowlist、token boundary、资源限制和 audit 约束。
+- Host 不认识的 action、node kind 或高风险能力必须 fail closed 或 fallback，不得静默 no-op 成功。
+- 组件矩阵中的 `host-boundary` 不能在后续文档中写成 production-ready，除非已有 Host provider、测试和 release gate 证据。

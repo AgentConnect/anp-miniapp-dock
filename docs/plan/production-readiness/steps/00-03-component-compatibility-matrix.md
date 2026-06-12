@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-03
-状态：draft
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
-| Branch | 待执行时记录 |
-| Started | 待记录 |
+| Status | review |
+| Branch | `main` |
+| Started | 2026-06-12 10:33:02 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 00-01 完成后，建立 Component Runtime 与 Render IR 能力矩阵 |
+| Review evidence | 初审未发现需修复的组件矩阵内容问题；确认 Runtime/Host 责任分离，未把 Host renderer、dynamic request/timer、完整页面/半屏能力误标为 production-ready |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 5]`；`git diff --check -- docs/architecture/component-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-03-component-compatibility-matrix.md` 无输出；覆盖抽样 `rg "Component|WXML|WXSS|Render IR|sendFollowUpMessage|api/call|expireAllCards|dynamic" docs/architecture/component-compatibility-matrix.md docs/architecture/miniapp-mcp-component-runtime.md docs/plan/production-readiness/phase-2-component-runtime-alignment.md` 命中矩阵、架构和 Phase 2 计划；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；安全边界抽样确认 `api/call`、dynamic、L3/L4、token/redaction、Host unknown action 均有约束；Host 边界抽样确认 renderer/provider/card manager 均未写成容器已生产支持 |
+| Next action | 创建 Step 00-03 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -62,11 +62,11 @@ Step index：00-03
 
 ## 7. 验收标准
 
-- [ ] 矩阵覆盖 Component JS、WXML、WXSS、内置组件、事件、`wx.modelContext`、动态组件、Render IR / Host adapter。
-- [ ] 当前 P0 支持、Phase 2 P1/P2 计划、unsupported-by-design 能力分离清晰。
-- [ ] 每项能力有 owner crate、target phase、fixture/snapshot 需求或不需要的原因。
-- [ ] 高风险 action 不能通过 Render IR 直接执行，必须回 Orchestrator/Host provider consent。
-- [ ] Review 发现已修复或明确记录。
+- [x] 矩阵覆盖 Component JS、WXML、WXSS、内置组件、事件、`wx.modelContext`、动态组件、Render IR / Host adapter。
+- [x] 当前 P0 支持、Phase 2 P1/P2 计划、unsupported-by-design 能力分离清晰。
+- [x] 每项能力有 owner crate、target phase、fixture/snapshot 需求或不需要的原因。
+- [x] 高风险 action 不能通过 Render IR 直接执行，必须回 Orchestrator/Host provider consent。
+- [x] Review 发现已修复或明确记录。
 - [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -87,11 +87,11 @@ Step index：00-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 文档 Step 通常不新增测试，但需说明 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 无阻塞问题 | 矩阵未把 Host renderer、dynamic request/timer、`openDetailPage`、完整半屏页面、完整 WXML/WXSS 或完整自定义组件系统写成当前生产能力。 |
+| 已修复问题 | 无文档内容修复 | 验证中发现一次 status 枚举检查命令未跳过表头，会误报 `status`；已用修正后的按表结构检查重跑，未把失败命令作为通过证据。 |
+| 剩余风险 | 可接受 | 协议组件支持列表和 WXSS 属性范围较长，本 Step 以 P0/P1/P2 能力和大类 unsupported 分组覆盖；Phase 2 实现前需冻结 Render IR schemaVersion、fallback reason enum 和 fixture/snapshot 体系。 |
+| 新增或缺失测试 | 未新增自动化测试 | 本 Step 为文档矩阵冻结；验证使用 diff whitespace 检查、覆盖抽样、状态枚举结构化检查、Markdown 链接检查、安全边界抽样和 Host 边界抽样。 |
+| 已更新或缺失文档 | 已更新 | 新增 `anp/anp-miniapp-dock/docs/architecture/component-compatibility-matrix.md`，并在 `anp/anp-miniapp-dock/README.md` 增加入口链接；主 Plan 与本 Step 文档已回填 review/verification evidence。 |
 
 ## 10. Commit 要求
 
