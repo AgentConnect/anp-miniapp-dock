@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-01
-状态：draft
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
-| Branch | 待执行时记录 |
-| Started | 待记录 |
+| Status | review |
+| Branch | `main` |
+| Started | 2026-06-12 10:53:13 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 00-02 完成后，冻结 callback/Promise、错误语义和 bridge 入口契约 |
+| Review evidence | 初审未发现需修复的契约问题；确认 callback/Promise、`wx.request` HTTP status、unsupported shape、JS-provided auth header、sync API 和 redaction 均已有冻结行为 |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 9]`；`git diff --check -- docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md` 无输出；未决行为检查 `rg -n "或 resolve\\?|待确认|TODO|不确定" docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md` 无命中；脱敏检查命中 token/authorization/signature/private/credential/phone/address/fileContent 规则；契约抽样命中 HTTP response、4xx/5xx、Authorization、Signature、Promise reject、success/fail/complete、unsupported、provider_unavailable、consent_required、network_denied、invalid_options、WxApiCall、WxApiOutcome；contract 与矩阵 Markdown 链接检查无破链 |
+| Next action | 创建 Step 01-01 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -60,11 +60,11 @@ Step index：01-01
 
 ## 7. 验收标准
 
-- [ ] `phase-1-wx-api-bridge-contract.md` 不再保留未决的 `reject(result) 或 resolve?` 文案，必须有冻结行为。
-- [ ] 文档明确 `wx.request` HTTP status、network error、permission deny、unsupported、consent required 的 callback/Promise 行为。
-- [ ] `WxApiCall` / `WxApiOutcome` 字段与 Phase 1 broker 计划一致。
-- [ ] redaction 规则覆盖 token、authorization、signature、secret、private、credential、phone、address、fileContent。
-- [ ] Review 发现已修复或明确记录。
+- [x] `phase-1-wx-api-bridge-contract.md` 不再保留未决的 `reject(result) 或 resolve?` 文案，必须有冻结行为。
+- [x] 文档明确 `wx.request` HTTP status、network error、permission deny、unsupported、consent required 的 callback/Promise 行为。
+- [x] `WxApiCall` / `WxApiOutcome` 字段与 Phase 1 broker 计划一致。
+- [x] redaction 规则覆盖 token、authorization、signature、secret、private、credential、phone、address、fileContent。
+- [x] Review 发现已修复或明确记录。
 - [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -85,11 +85,11 @@ Step index：01-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 本 Step 是契约文档，测试在实现 Step 添加 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 无阻塞问题 | contract 已删除未决 `reject(result) 或 resolve?`，并冻结通用失败 Promise reject、`wx.request` HTTP response resolve、broker/local failure reject、unsupported deterministic failure、sync API exception 和 callback exception 处理。 |
+| 已修复问题 | 已同步矩阵漂移 | `wx-api-compatibility-matrix.md` 原本仍写着 Step 01-01 待确认；已改为引用冻结契约，并同步 `wx.request` 非 2xx、JS-provided auth header、login/checkSession 和 modelContext callback/Promise 决策。 |
+| 剩余风险 | 可接受 | 当前 `js-runtime-quickjs` demo bridge 的 `wx.request` fail Promise 仍按 demo-only 行为 resolve；本 Step 不改代码，已在 contract 和矩阵中明确 Step 01-04 迁移到冻结契约。 |
+| 新增或缺失测试 | 未新增自动化测试 | 本 Step 为契约文档冻结；后续 Step 01-03/01-04 实现 JS wrapper 和 RequestBroker 时必须新增 callback/Promise、unsupported、redaction 和 `Authorization` 拒绝测试。 |
+| 已更新或缺失文档 | 已更新 | 更新 `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md` 和 `anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md`；主 Plan 与本 Step 文档已回填 review/verification evidence。 |
 
 ## 10. Commit 要求
 

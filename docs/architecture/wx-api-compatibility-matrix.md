@@ -27,10 +27,11 @@
 | API 类别 | 当前决策 | 后续要求 |
 |---|---|---|
 | 已实现 Skill API 注册 | `createSkill`、`registerAPI`、`skill.use` 使用当前 QuickJS bridge 语义。 | Step 01-01 只需要补文档化和路径校验，不改变现有成功路径。 |
-| 当前 demo `wx.login` / `wx.request` | 已返回 Promise，并触发 `success` / `fail` / `complete` callback；状态仍是 `demo-only`。 | Step 01-01 必须冻结所有 `fail` 场景是 Promise reject 还是 resolve；`wx.request` 非 2xx 的 success/fail 语义需单独确认。 |
-| 计划中的异步 `wx.*` | 默认同时支持 callback 与 Promise，返回对象包含 `errMsg`。 | 统一走 Phase 1 `WxApiOutcome` wrapper，不能每个 API 独立拼装。 |
-| 同步 storage / account API | 不使用 callback/Promise。 | 同步错误必须是确定的 JS exception 或稳定返回形态，需在 Step 01-01 冻结。 |
-| unsupported API | 必须存在 deterministic stub。 | 返回 `errMsg: "<api>:fail unsupported"`，并包含 safe `reason` / `suggestion`；不得出现 `undefined is not a function` 或静默成功。 |
+| 当前 demo `wx.login` / `wx.request` | 已返回 Promise，并触发 `success` / `fail` / `complete` callback；状态仍是 `demo-only`。 | 后续 Step 01-04 迁移到 [`phase-1-wx-api-bridge-contract.md`](../plan/production-readiness/phase-1-wx-api-bridge-contract.md) 冻结契约；当前 demo 行为不能作为生产契约。 |
+| 计划中的异步 `wx.*` | 同时支持 callback 与 Promise，返回对象包含 `errMsg`。 | 统一走 Phase 1 `WxApiOutcome` wrapper：成功 `success` + `complete` + Promise resolve；失败 `fail` + `complete` + Promise reject。 |
+| `wx.request` HTTP response | RequestBroker 收到 HTTP response 后，即使是 4xx/5xx，也返回 `request:ok`、调用 `success`、Promise resolve，并暴露 `statusCode`。 | allowlist deny、auth/header violation、network transport、timeout、invalid options 等 broker/local failure 才进入 `request:fail`、`fail` callback 和 Promise reject。 |
+| 同步 storage / account API | 不使用 callback/Promise。 | 成功直接返回值；失败抛出带脱敏 `errMsg` / `code` 的 `Error`。 |
+| unsupported API | 必须存在 deterministic stub。 | 返回 `errMsg: "<api>:fail unsupported"`，并包含 safe `reason` / `suggestion`；调用 `fail`、Promise reject；不得出现 `undefined is not a function` 或静默成功。 |
 
 ## 3. `wx.modelContext` 新增 API
 
@@ -39,8 +40,8 @@
 | Skill | `wx.modelContext.createSkill(skillPath)` | 原子接口 | `supported` | P0 | QuickJS bridge 创建 Skill handle，后续加强 `skillPath` canonicalize。 | L0 | `js-runtime-quickjs`、`skill-loader` | 同步返回 handle | [`register_api.rs`](../../crates/js-runtime-quickjs/tests/register_api.rs) | 当前不支持跨 Skill 远端注册。 |
 | Skill | `skill.registerAPI(name, handler)` | 原子接口 | `supported` | P0 | Runtime registry；manifest 与注册名一致性由 VM/loader 校验。 | L0 | `js-runtime-quickjs`、`dock-core` | 同步注册 | [`register_api.rs`](../../crates/js-runtime-quickjs/tests/register_api.rs) | 重名或未声明 API fail closed。 |
 | Skill | `skill.use(middleware)` | 原子接口 | `supported` | P0 | middleware onion chain，与 handler 共用 timeout。 | L0 | `js-runtime-quickjs` | async middleware Promise | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) | 支持多 middleware 和 `next()` 重入保护。 |
-| Session | `wx.modelContext.getSessionId()` | 原子接口 | `planned-p1` | Step 01-03 | 从 `ApiCallContext.session_id` 返回，不暴露 token/session secret。 | L1 | `js-runtime-quickjs`、`wx-compat`、`dock-core` | Phase 1 冻结 | 待新增 VM test | `wx-compat::ModelContext` 已有 Rust helper，尚未注入 Atomic API VM。 |
-| Card | `wx.modelContext.expireAllCards({ componentPaths, match })` | 原子接口 | `planned-p1` | Step 01-03 | 生成 runtime-level card event，component paths canonicalize，只影响 `expirable: true`。 | L2 | `js-runtime-quickjs`、`wx-compat`、`dock-core`、`component-runtime` | Promise + callbacks 需冻结 | 待新增 card event/audit test | 组件 VM 已有 action 捕获；原子接口 VM 尚未正式注入。 |
+| Session | `wx.modelContext.getSessionId()` | 原子接口 | `planned-p1` | Step 01-03 | 从 `ApiCallContext.session_id` 返回，不暴露 token/session secret。 | L1 | `js-runtime-quickjs`、`wx-compat`、`dock-core` | 同步返回 session id | 待新增 VM test | `wx-compat::ModelContext` 已有 Rust helper，尚未注入 Atomic API VM。 |
+| Card | `wx.modelContext.expireAllCards({ componentPaths, match })` | 原子接口 | `planned-p1` | Step 01-03 | 生成 runtime-level card event，component paths canonicalize，只影响 `expirable: true`。 | L2 | `js-runtime-quickjs`、`wx-compat`、`dock-core`、`component-runtime` | callback + Promise；失败 reject | 待新增 card event/audit test | 组件 VM 已有 action 捕获；原子接口 VM 尚未正式注入。 |
 | Component context | `wx.modelContext.getContext(this)` | 原子组件 / 半屏页面 | `supported` | P0 | Component VM 注入 model context，支持 notification handler 和 `sendFollowUpMessage`。 | L0/L2 | `component-runtime`、`dock-core` | 同步返回 context | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | 半屏页面真实 Host 环境仍是 host-boundary。 |
 | Component view | `wx.modelContext.getViewContext(this)` | 原子组件 | `supported` | P0 | Component VM 注入 view context，暴露尺寸、card action 和页面关联 action。 | L0/L2 | `component-runtime` | 同步返回 context | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | 当前尺寸为 runtime 默认值；真实 Host 尺寸需要 Host adapter。 |
 | Notification | `wx.modelContext.NotificationType.Input` | 原子组件 | `supported` | P0 | Component mount 时发送 Input notification。 | L0 | `component-runtime` | 常量 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | 与 Atomic API VM 常量一致性需 Step 01-03 防漂移测试。 |
@@ -57,9 +58,9 @@
 
 | category | api | protocol_environment | status | target_phase | runtime_mapping | risk_level | owner_crate | callback_promise | tests | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 登录 | `wx.login` | 原子接口；动态组件需 `scope.dynamic` | `demo-only` | Step 01-04 | ANP DID challenge/login，返回 code-like receipt；token 仅 Host 持有。 | L1 | `js-runtime-quickjs`、`anp-adapter`、`demo-server` | 当前 demo 支持 Promise/callback；Phase 1 冻结失败语义 | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | 当前返回 `dock-login-code-localhost`，不是生产语义。 |
-| 登录 | `wx.checkSession` | 原子接口；动态组件需 `scope.dynamic` | `planned-p1` | Step 01-04 | 查询 `DidAuthSessionManager` token/session 状态，过期/撤销 fail closed。 | L1 | `js-runtime-quickjs`、`anp-adapter` | Phase 1 冻结 | 待新增 | 必须不泄露 token 或 proof。 |
-| 网络 | `wx.request` | 原子接口；动态组件需 `scope.dynamic` | `demo-only` | Step 01-04 | 正式路径为 RequestBroker + allowlist + DID signature/cached bearer；当前 JS bridge 只允许 loopback demo。 | L1-L4 by URL/data | `js-runtime-quickjs`、`wx-compat`、`anp-adapter` | 当前 demo 支持 Promise/callback；非 2xx 语义待 Step 01-01 | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `wx-compat` / `anp-adapter` 已有 host-boundary building blocks；JS 传入 `Authorization` 必须剥离或拒绝。 |
+| 登录 | `wx.login` | 原子接口；动态组件需 `scope.dynamic` | `demo-only` | Step 01-04 | ANP DID challenge/login，返回 code-like receipt；token 仅 Host 持有。 | L1 | `js-runtime-quickjs`、`anp-adapter`、`demo-server` | callback + Promise；失败 reject | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | 当前返回 `dock-login-code-localhost`，不是生产语义；Step 01-04 必须迁移到冻结契约。 |
+| 登录 | `wx.checkSession` | 原子接口；动态组件需 `scope.dynamic` | `planned-p1` | Step 01-04 | 查询 `DidAuthSessionManager` token/session 状态，过期/撤销 fail closed。 | L1 | `js-runtime-quickjs`、`anp-adapter` | callback + Promise；失败 reject | 待新增 | 必须不泄露 token 或 proof。 |
+| 网络 | `wx.request` | 原子接口；动态组件需 `scope.dynamic` | `demo-only` | Step 01-04 | 正式路径为 RequestBroker + allowlist + DID signature/cached bearer；当前 JS bridge 只允许 loopback demo。 | L1-L4 by URL/data | `js-runtime-quickjs`、`wx-compat`、`anp-adapter` | HTTP response resolve；broker/local failure reject | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) | `wx-compat` / `anp-adapter` 已有 host-boundary building blocks；JS 传入 `Authorization` / `Signature` 必须拒绝并不出站。 |
 | 网络状态 | `wx.getNetworkType` | 原子接口 | `planned-p2` | Phase 1.5/2 | Host snapshot provider，headless 可返回 deterministic fallback。 | L1 | `wx-compat`、Host adapter | Phase 1 冻结 | 待新增 | 不应暴露过多设备隐私。 |
 | 网络状态 | `wx.onNetworkStatusChange` / `wx.offNetworkStatusChange` | 原子接口 | `planned-p2` | Phase 2/4 | Host listener；无 Host 时 deterministic unsupported。 | L1 | Host adapter | callback listener | 待新增 | headless 环境可 no-op fail closed。 |
 | 网络状态 | `wx.onNetworkWeakChange` / `wx.offNetworkWeakChange` | 原子接口 | `planned-p2` | Phase 2/4 | Host listener；仅作为提示，不影响业务正确性。 | L1 | Host adapter | callback listener | 待新增 | 可后置。 |
@@ -140,11 +141,11 @@
 
 ## 7. Phase 1 决策点
 
-Step 01-01 必须基于本矩阵冻结以下契约：
+Step 01-01 已基于本矩阵在 [`phase-1-wx-api-bridge-contract.md`](../plan/production-readiness/phase-1-wx-api-bridge-contract.md) 冻结以下契约；后续实现 Step 不得再隐式改变这些行为：
 
 - `WxApiOutcome` 统一结构、`errMsg` code、unsupported shape 和 redaction。
-- callback 与 Promise 在 fail、unsupported、timeout、permission denied、consent required、HTTP 非 2xx 场景下的行为。
-- `wx.request` 是否剥离还是拒绝 JS-provided `Authorization`；默认建议拒绝或剥离后记录 audit。
+- callback 与 Promise 在 fail、unsupported、timeout、permission denied、consent required、HTTP 非 2xx 场景下的行为：通用失败 reject；`wx.request` HTTP response resolve。
+- `wx.request` 拒绝 JS-provided `Authorization` / `Signature` / `Signature-Input` / `Cookie`，不出站，不静默剥离后继续。
 - storage sync API 的异常/返回语义，以及 key/value size limit。
 - `wx.modelContext.NotificationType` 在 Atomic API VM 与 Component VM 中的单源或防漂移测试。
 - L3/L4 API 的 Host provider contract、mock 标识、consent proof 与 audit 字段。
