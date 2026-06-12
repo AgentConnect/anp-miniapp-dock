@@ -44,9 +44,12 @@ fn component_profile_denies_request_and_timer_by_default() {
 
 #[test]
 fn dynamic_component_profile_can_enable_request_broker_boundary() {
-    let profile = CapabilityProfile::component().with_dynamic_component_request();
+    let profile = CapabilityProfile::component()
+        .with_dynamic_component_request()
+        .with_dynamic_component_timer();
 
     assert!(profile.check(Capability::Request).is_allowed());
+    assert!(profile.check(Capability::Timer).is_allowed());
 }
 
 #[test]

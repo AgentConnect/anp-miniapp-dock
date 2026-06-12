@@ -1,10 +1,16 @@
 use component_runtime::{
     ComponentEvent, ComponentEventKind, ComponentInput, ComponentInstance, ComponentMetadata,
-    ComponentPackage, ComponentTraceKind, ComponentVmAction, ComponentVmError, RenderNodeKind,
+    ComponentPackage, ComponentTraceKind, ComponentVmAction, ComponentVmConfig, ComponentVmError,
+    DynamicComponentConfig, RenderNodeKind,
 };
 use serde_json::{json, Map};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::time::Duration;
+use wx_compat::{CapabilityProfile, RequestBroker, WxRequest, WxRequestError, WxResponse};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -39,6 +45,47 @@ fn component_input() -> ComponentInput {
         )])),
         meta: None,
         component_metadata: ComponentMetadata::default(),
+    }
+}
+
+#[derive(Debug)]
+struct MockRequestBroker {
+    calls: RefCell<Vec<WxRequest>>,
+}
+
+impl MockRequestBroker {
+    fn new() -> Rc<Self> {
+        Rc::new(Self {
+            calls: RefCell::new(Vec::new()),
+        })
+    }
+
+    fn calls(&self) -> Vec<WxRequest> {
+        self.calls.borrow().clone()
+    }
+}
+
+impl RequestBroker for MockRequestBroker {
+    fn request(
+        &self,
+        profile: &CapabilityProfile,
+        request: WxRequest,
+    ) -> Result<WxResponse, WxRequestError> {
+        if !profile.check(wx_compat::Capability::Request).is_allowed() {
+            return Err(WxRequestError::Denied(
+                "request capability denied in test broker".to_owned(),
+            ));
+        }
+        self.calls.borrow_mut().push(request.clone());
+        let mut headers = BTreeMap::new();
+        headers.insert("x-safe".to_owned(), "ok".to_owned());
+        headers.insert("Authorization".to_owned(), "Bearer test-token".to_owned());
+        headers.insert("x-token-id".to_owned(), "secret-token".to_owned());
+        Ok(WxResponse {
+            status_code: 200,
+            headers,
+            data: json!({"status": "fresh"}),
+        })
     }
 }
 
@@ -265,6 +312,291 @@ Component({
         outcome.render.root.children[0].text.as_deref(),
         Some("true")
     );
+}
+
+#[test]
+fn sandbox_gate_blocks_escape_and_remote_globals_before_dynamic() {
+    let root = write_component(
+        "sandbox-gate",
+        r#"
+Component({
+  data: { blocked: false },
+  lifetimes: {
+    created() {
+      let constructorBlocked = false
+      try {
+        constructorBlocked = typeof ({}).constructor.constructor === 'undefined'
+      } catch (_) {
+        constructorBlocked = true
+      }
+      this.setData({
+        blocked: constructorBlocked
+          && typeof eval === 'undefined'
+          && typeof Function === 'undefined'
+          && typeof process === 'undefined'
+          && typeof fetch === 'undefined'
+          && typeof WebSocket === 'undefined'
+          && typeof require === 'undefined'
+          && typeof __dockDynamicRequestJson === 'undefined'
+          && typeof setTimeout === 'undefined'
+          && typeof setInterval === 'undefined'
+      })
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ blocked }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let mut instance = ComponentInstance::new(package).expect("create vm");
+
+    let outcome = instance
+        .mount(ComponentInput::new("searchDrinks"))
+        .expect("mount");
+
+    assert_eq!(outcome.state.get("blocked"), Some(&json!(true)));
+}
+
+#[test]
+fn sandbox_gate_interrupts_long_running_component_code() {
+    let root = write_component(
+        "sandbox-timeout",
+        r#"
+Component({
+  lifetimes: {
+    created() {
+      while (true) {}
+    }
+  }
+})
+"#,
+        r#"<view><text>timeout</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let config = ComponentVmConfig {
+        timeout: Duration::from_millis(1),
+        ..ComponentVmConfig::default()
+    };
+    let mut instance = ComponentInstance::with_config(package, config).expect("create vm");
+
+    assert!(matches!(
+        instance.mount(ComponentInput::new("searchDrinks")),
+        Err(ComponentVmError::Timeout(_))
+    ));
+}
+
+#[test]
+fn dynamic_request_and_timer_default_deny_without_scope_dynamic() {
+    let root = write_component(
+        "dynamic-default-deny",
+        r#"
+Component({
+  data: { requestDenied: false, timerDenied: false },
+  lifetimes: {
+    async created() {
+      try {
+        await wx.request({ url: 'https://merchant.example/status' })
+      } catch (error) {
+        this.setData({ requestDenied: error.code === 'permission_denied' })
+      }
+      this.setData({ timerDenied: typeof setTimeout === 'undefined' })
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ requestDenied }}</text><text>{{ timerDenied }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let mut instance = ComponentInstance::new(package).expect("create vm");
+
+    let outcome = instance
+        .mount(ComponentInput::new("searchDrinks"))
+        .expect("mount");
+
+    assert_eq!(outcome.state.get("requestDenied"), Some(&json!(true)));
+    assert_eq!(outcome.state.get("timerDenied"), Some(&json!(true)));
+}
+
+#[test]
+fn dynamic_component_request_uses_broker_and_redacts_response_headers() {
+    let root = write_component(
+        "dynamic-request",
+        r#"
+Component({
+  data: { status: '', safeHeader: '', leaked: false, failed: false, events: [] },
+  lifetimes: {
+    async created() {
+      const events = []
+      try {
+        const response = await wx.request({
+          url: 'https://merchant.example/status',
+          method: 'POST',
+          data: { orderId: 'order_demo_001' },
+          header: { 'x-client': 'component' },
+          success(payload) {
+            events.push('success:' + payload.errMsg)
+            throw new Error('callback error must be redacted')
+          },
+          complete(payload) {
+            events.push('complete:' + payload.errMsg)
+          }
+        })
+        events.push('resolved:' + response.errMsg)
+        this.setData({
+          status: response.data.status,
+          safeHeader: response.header['x-safe'],
+          leaked: Boolean(response.header.Authorization || response.header['x-token-id'] || response.header['authentication-info']),
+          events
+        })
+      } catch (_) {
+        this.setData({ failed: true })
+      }
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ status }}</text><text>{{ safeHeader }}</text><text>{{ leaked }}</text><text>{{ failed }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let broker = MockRequestBroker::new();
+    let config = ComponentVmConfig {
+        dynamic: DynamicComponentConfig::default().with_request_broker(broker.clone()),
+        ..ComponentVmConfig::default()
+    };
+    let mut input = ComponentInput::new("status");
+    input.component_metadata.dynamic = true;
+    let mut instance = ComponentInstance::with_config(package, config).expect("create vm");
+
+    let outcome = instance.mount(input).expect("mount");
+
+    assert_eq!(outcome.state.get("status"), Some(&json!("fresh")));
+    assert_eq!(outcome.state.get("safeHeader"), Some(&json!("ok")));
+    assert_eq!(outcome.state.get("leaked"), Some(&json!(false)));
+    assert_eq!(outcome.state.get("failed"), Some(&json!(false)));
+    assert_eq!(
+        outcome.state.get("events"),
+        Some(&json!([
+            "success:request:ok",
+            "complete:request:ok",
+            "resolved:request:ok"
+        ]))
+    );
+    assert_eq!(broker.calls().len(), 1);
+    assert_eq!(broker.calls()[0].url, "https://merchant.example/status");
+    assert_eq!(
+        broker.calls()[0]
+            .headers
+            .get("x-client")
+            .map(String::as_str),
+        Some("component")
+    );
+}
+
+#[test]
+fn dynamic_request_rejects_host_owned_auth_headers() {
+    let root = write_component(
+        "dynamic-request-auth-deny",
+        r#"
+Component({
+  data: { denied: false, reason: '' },
+  lifetimes: {
+    async created() {
+      try {
+        await wx.request({
+          url: 'https://merchant.example/status',
+          header: { Authorization: 'Bearer should-not-leave-js' }
+        })
+      } catch (error) {
+        this.setData({ denied: error.code === 'permission_denied', reason: error.reason })
+      }
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ denied }}</text><text>{{ reason }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let broker = MockRequestBroker::new();
+    let config = ComponentVmConfig {
+        dynamic: DynamicComponentConfig::default().with_request_broker(broker.clone()),
+        ..ComponentVmConfig::default()
+    };
+    let mut input = ComponentInput::new("status");
+    input.component_metadata.dynamic = true;
+    let mut instance = ComponentInstance::with_config(package, config).expect("create vm");
+
+    let outcome = instance.mount(input).expect("mount");
+
+    assert_eq!(outcome.state.get("denied"), Some(&json!(true)));
+    assert!(outcome
+        .state
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .contains("Authorization"));
+    assert!(broker.calls().is_empty());
+}
+
+#[test]
+fn dynamic_timers_have_limit_clear_and_expire_cleanup() {
+    let root = write_component(
+        "dynamic-timers",
+        r#"
+Component({
+  data: { count: 0, limitHit: false, detached: false },
+    lifetimes: {
+    attached() {
+      const cleared = setTimeout(() => this.setData({ count: 99 }), 0)
+      clearTimeout(cleared)
+      setTimeout(() => this.setData({ count: this.data.count + 1 }), 0)
+      setInterval(() => this.setData({ count: this.data.count + 1 }), 0)
+      try {
+        setTimeout(() => {}, 0)
+        setTimeout(() => {}, 0)
+        setTimeout(() => {}, 0)
+      } catch (_) {
+        this.setData({ limitHit: true })
+      }
+    },
+    detached() {
+      this.setData({ detached: true })
+      try {
+        setTimeout(() => this.setData({ count: 500 }), 0)
+      } catch (_) {}
+    }
+  },
+  methods: {
+    noop() {}
+  }
+})
+"#,
+        r#"<view><text>{{ count }}</text><text>{{ limitHit }}</text><text>{{ detached }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let config = ComponentVmConfig {
+        dynamic: DynamicComponentConfig::default().with_max_timers(2),
+        ..ComponentVmConfig::default()
+    };
+    let mut input = ComponentInput::new("status");
+    input.component_metadata.dynamic = true;
+    let mut instance = ComponentInstance::with_config(package, config).expect("create vm");
+
+    let mounted = instance.mount(input).expect("mount");
+    assert_eq!(mounted.state.get("count"), Some(&json!(2)));
+    assert_eq!(mounted.state.get("limitHit"), Some(&json!(true)));
+
+    let flushed = instance
+        .dispatch_event(&ComponentEvent::new(ComponentEventKind::Tap, "noop"))
+        .expect("dispatch");
+    assert_eq!(flushed.state.get("count"), Some(&json!(3)));
+
+    let expired = instance.expire(json!({})).expect("expire");
+    assert_eq!(expired.state.get("detached"), Some(&json!(true)));
+    assert_eq!(expired.state.get("count"), Some(&json!(3)));
+    assert!(matches!(
+        instance.dispatch_event(&ComponentEvent::new(ComponentEventKind::Tap, "noop")),
+        Err(ComponentVmError::Expired)
+    ));
 }
 
 #[test]

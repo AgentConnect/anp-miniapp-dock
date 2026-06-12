@@ -15,7 +15,7 @@ pub use compiler::{
 pub use component_vm::{
     ComponentInput, ComponentInstance, ComponentMetadata, ComponentOperationOutcome,
     ComponentTraceEntry, ComponentTraceKind, ComponentVmAction, ComponentVmConfig,
-    ComponentVmError,
+    ComponentVmError, DynamicComponentConfig,
 };
 pub use events::{ComponentEvent, ComponentEventKind};
 pub use loader::{ComponentLoadError, ComponentPackage};

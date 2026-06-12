@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-05
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 22:05:11 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 02-04 完成后，启动 dynamic component controls |
+| Review evidence | 2026-06-12 22:30:25 +0800 commit 前 Review：修复 native request bridge 全局暴露、component `wx.request` callback 语义与 Atomic API bridge 不一致、`setInterval` 退化为一次性 flush、resource-limit 缺少 focused timeout 测试；剩余 Host transport/background scheduler/persistent audit 按 Phase 4 边界记录。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime dynamic` 5 passed；`cargo test -p component-runtime sandbox` 2 passed；`cargo test -p component-runtime` 46 passed；`cargo test -p wx-compat` 22 passed；`cargo test -p anp-adapter request` 2 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/wx-compat crates/js-runtime-quickjs crates/anp-adapter docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词抽样仅命中 redaction 规则、测试假值和安全文档。 |
+| Next action | 创建 `phase2: add dynamic component controls` focused commit，并回填 commit hash / done 状态 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -68,15 +68,15 @@ Step index：02-05
 
 ## 7. 验收标准
 
-- [ ] 未声明 `permissions.scope.dynamic` 的组件默认无法使用 `wx.request`、`setTimeout`、`setInterval`。
-- [ ] 在开放 dynamic `wx.request` / timer 前，Component VM 已有 constructor/eval/Function/process/fetch/WebSocket/remote require escape regression 和未授权 timer deny tests。
-- [ ] 声明 dynamic 的组件只能使用受限 `wx.request`，且继续经过 allowlist、DID/session、JS auth header fail closed、redaction 和 audit。
-- [ ] timer 有数量和频率限制，`clearTimeout` / `clearInterval` 生效。
-- [ ] resource limit 或 timeout hit 返回稳定脱敏错误，不泄露 token、Authorization、signature、Host private metadata 或隐私原文。
-- [ ] expire/detach 后 pending timers、dynamic request callbacks 和后续 actions 被清理或拒绝。
-- [ ] dynamic audit summary 脱敏，Host background pause 若未实现则记录为 host-boundary 而非 production-ready。
-- [ ] 组件兼容矩阵、Threat Model、Release Gates 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 未声明 `permissions.scope.dynamic` 的组件默认无法使用 `wx.request`、`setTimeout`、`setInterval`。
+- [x] 在开放 dynamic `wx.request` / timer 前，Component VM 已有 constructor/eval/Function/process/fetch/WebSocket/remote require escape regression 和未授权 timer deny tests。
+- [x] 声明 dynamic 的组件只能使用受限 `wx.request`，且继续经过 allowlist、DID/session、JS auth header fail closed、redaction 和 audit。
+- [x] timer 有数量和频率限制，`clearTimeout` / `clearInterval` 生效。
+- [x] resource limit 或 timeout hit 返回稳定脱敏错误，不泄露 token、Authorization、signature、Host private metadata 或隐私原文。
+- [x] expire/detach 后 pending timers、dynamic request callbacks 和后续 actions 被清理或拒绝。
+- [x] dynamic audit summary 脱敏，Host background pause 若未实现则记录为 host-boundary 而非 production-ready。
+- [x] 组件兼容矩阵、Threat Model、Release Gates 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -86,7 +86,7 @@ Step index：02-05
 | 格式 | `cd anp/anp-miniapp-dock && cargo fmt --check` | 通过 |
 | Dynamic tests | `cd anp/anp-miniapp-dock && cargo test -p component-runtime dynamic` | dynamic request/timer/cleanup tests 通过；若 filter 不匹配，记录实际命令 |
 | Component sandbox gate | `cd anp/anp-miniapp-dock && cargo test -p component-runtime sandbox` | escape/resource-limit/default deny tests 通过；若 filter 不匹配，记录实际命令 |
-| Compat / request tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat component_permissions && cargo test -p anp-adapter request` | permission 和 RequestBroker 回归通过 |
+| Compat / request tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat && cargo test -p anp-adapter request` | permission 和 RequestBroker 回归通过 |
 | Workspace 回归 | `cd anp/anp-miniapp-dock && cargo test --workspace` | 通过；如耗时受限，记录 focused 替代和风险 |
 | 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/component-runtime crates/wx-compat crates/js-runtime-quickjs crates/anp-adapter docs/architecture docs/runbook docs/security docs/plan` | 无空白错误 |
 | 安全抽样 | 手工检查 dynamic request/timer/audit output | 不含 token、Authorization、signature、private key path 或隐私原文 |
@@ -100,11 +100,11 @@ Step index：02-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 4 项 commit 前问题 | 1. `__dockDynamicRequestJson` 初版作为全局函数存在，非 dynamic 脚本理论上可直接调用 native bridge；2. component `wx.request` 初版先 `complete` 后 `success/fail`，且 callback exception 可能改变原始结果，不符合 Atomic API bridge 语义；3. `setInterval` 初版只执行一次，无法在后续 event flush 中受限刷新；4. resource-limit gate 缺少 focused timeout 回归测试。 |
+| 已修复问题 | 已修复 | native bridge 在 bootstrap 闭包中捕获后立即隐藏全局；callback 调整为 success/fail -> complete，callback exception 被吞掉且不改变 Promise outcome；interval 在每次 mount/event flush 中最多执行一次；新增长循环 timeout 测试。 |
+| 剩余风险 | 已记录为后续边界 | 当前 headless runtime 只执行 delay 0 timer flush，不提供真实后台调度器；production Host RequestBroker transport、registry allowlist、request audit persistence 和 background pause 仍在 Phase 4；Phase 3 仍需全量 sandbox/resource release gate。 |
+| 新增或缺失测试 | 已新增本 Step 必要 tests | 新增默认 deny、dynamic request broker/redaction/callback、auth header deny、timer limit/clear/expire cleanup、native bridge hidden、constructor/eval/Function/process/fetch/WebSocket/require escape、long-running timeout tests；dynamic-status golden fixture 留给 Step 02-06。 |
+| 已更新或缺失文档 | 已同步 | 更新 `docs/architecture/component-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`；无本 Step 必须补充的缺失文档。 |
 
 ## 10. Commit 要求
 
@@ -115,6 +115,12 @@ Step index：02-05
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase2: add dynamic component controls`
+
+Commit 前记录：
+
+- Commit 前状态：`git status --short` 显示 `crates/component-runtime/src/component_vm.rs`、`crates/component-runtime/src/lib.rs`、`crates/component-runtime/tests/component_lifecycle.rs`、`crates/wx-compat/src/permissions.rs`、`crates/wx-compat/tests/component_permissions.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-05-dynamic-component-controls.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
+- 纳入文件：上述文件均属于 Step 02-05 dynamic component controls 的实现、测试、文档和台账。
+- 遗留未提交变更：无与本 Step 无关的已知变更。
 
 ## 11. Blocked 处理
 

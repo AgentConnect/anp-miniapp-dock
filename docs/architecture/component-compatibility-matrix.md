@@ -34,7 +34,7 @@
 | Component JS | `this.triggerEvent()` | `planned-p1` | Phase 2 | 转换为 Render IR / Host event action，而不是直接调用宿主。 | Host renderer 需要处理事件上报。 | 不得绕过 Orchestrator 或 consent。 | 待新增 VM test | `component-runtime`、Host adapter | 当前 bootstrap 中为空实现。 |
 | Component JS | `observers` / property watcher | `planned-p2` | Phase 2+ | watcher 可触发 state 更新和 Render IR refresh。 | 无 | 防止循环更新和超时。 | 待新增 VM test | `component-runtime` | 当前未支持。 |
 | Component JS | `behaviors` / `relations` / `externalClasses` / `slots` / `pageLifetimes` | `unsupported-by-design` | 无 | 不映射；应拆成单卡片组件或 Host native flow。 | Host 可提供专用 native adapter。 | 避免进入完整自定义组件系统。 | 待 unsupported/warning fixture | `component-runtime` | 当前产品边界不复刻完整微信组件模型。 |
-| 沙箱 | 禁用 `fetch` / `WebSocket` / timer / `Function` / `eval` / `require` | `supported` | P0 | 无 Render IR 映射。 | dynamic 权限后另行受限开放。 | 默认禁止网络、timer 和逃逸入口。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 与 Atomic API VM 隔离。 |
+| 沙箱 | 禁用 `fetch` / `WebSocket` / timer / `Function` / `eval` / `require` | `supported` | P0 + Step 02-05 | 无 Render IR 映射。 | dynamic 权限后只开放受限 `wx.request` 与 timer getter。 | 默认禁止任意网络、timer 和逃逸入口；native request bridge 不暴露给组件全局。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `component-runtime` | 与 Atomic API VM 隔离；Phase 3 继续补全专项 sandbox release gate。 |
 
 ## 3. `wx.modelContext`、事件与 action 回流
 
@@ -90,10 +90,10 @@
 
 | category | capability | status | target_phase | render_ir_mapping | host_boundary | security_notes | fixture_or_snapshot | owner_crate | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| Dynamic | 默认禁止 `wx.request` / timer | `supported` | P0 | 无 Render IR 映射。 | 无 | 默认 fail closed，避免组件绕过 RequestBroker。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) | `component-runtime`、`wx-compat` | 当前 JS 全局禁用 `fetch`、`setTimeout`、`setInterval`。 |
-| Dynamic | `components[].permissions.scope.dynamic` 识别 | `host-boundary` | Step 02-02 + Phase 2 | capability profile 可表达 dynamic request；manifest declaration 进入 redacted runtime metadata / validate report。 | JS 注入和真实 dynamic request/timer 仍待 Step 02-05。 | 默认仍 deny；声明 dynamic 后也必须继续走 allowlist、token boundary、资源限制和 audit summary。 | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `wx-compat`、`mcp-schema`、`skill-loader`、`component-runtime`、`dock-cli` | Step 02-02 只打通 metadata flow；runtime 开放仍需 Step 02-05 gate。 |
-| Dynamic | 受限 `wx.request` | `planned-p1` | Phase 2 | 不进入 Render IR；由 component capability broker 执行。 | RequestBroker/Host network provider。 | allowlist fail closed，禁止 JS 覆盖 Authorization。 | 待 dynamic-status fixture | `wx-compat`、`js-runtime-quickjs`、`component-runtime`、`anp-adapter` | 必须等 Phase 1 `wx.request` 正式路径稳定。 |
-| Dynamic | `setTimeout` / `setInterval` / clear | `planned-p1` | Phase 2 | timer 触发 state refresh 或 action。 | Host lifecycle 负责后台暂停/恢复。 | 数量、频率、生命周期限制；expire/detach 自动清理。 | 待 dynamic-status fixture | `component-runtime`、Host adapter | 当前全局禁用。 |
+| Dynamic | 默认禁止 `wx.request` / timer | `supported` | P0 + Step 02-05 | 无 Render IR 映射。 | 无 | 默认 fail closed；非 dynamic 组件 `wx.request` 返回 `permission_denied`，`setTimeout` / `setInterval` getter 为 `undefined`，避免绕过 RequestBroker。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) | `component-runtime`、`wx-compat` | `fetch` / `WebSocket` / `require` 仍始终禁用。 |
+| Dynamic | `components[].permissions.scope.dynamic` 识别 | `supported` | Step 02-02 + Step 02-05 | manifest declaration 进入 redacted runtime metadata / validate report，并驱动 Component VM dynamic gate。 | 生产 Host policy / registry 仍可在 Phase 4 收紧。 | 默认仍 deny；声明 dynamic 后也必须继续走 RequestBroker、token boundary、资源限制和 audit summary。 | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) | `wx-compat`、`mcp-schema`、`skill-loader`、`component-runtime`、`dock-cli` | Step 02-05 已接入 runtime gate；完整 Host policy 和生产 transport 仍待 Phase 4。 |
+| Dynamic | 受限 `wx.request` | `host-boundary` | Step 02-05 + Phase 4 | 不进入 Render IR；由 `DynamicComponentConfig` 注入 `RequestBroker`，默认 `UnsupportedRequestBroker` fail closed。 | RequestBroker/Host network provider。 | JS 提供 `Authorization` / `Signature` / `Signature-Input` / `Cookie` fail closed；响应头脱敏；broker 错误 reason 脱敏；无 production Host transport 时不得标为 production-ready。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、dynamic-status fixture 待 Step 02-06 | `wx-compat`、`component-runtime`、`anp-adapter`、Host adapter | Step 02-05 完成最小 broker boundary；Host registry allowlist、request audit persistence 和真实 transport 仍是 Phase 4。 |
+| Dynamic | `setTimeout` / `setInterval` / clear | `host-boundary` | Step 02-05 + Phase 4 | 受限 timer 可触发 state refresh；headless runtime 在 mount/event flush 中执行 delay 0 timer。 | Host lifecycle 负责后台暂停/恢复和真实调度器。 | timer 数量限制、clear 生效、expire/detach 自动清理；非 dynamic 组件 timer 不存在。 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、dynamic-status fixture 待 Step 02-06 | `component-runtime`、Host adapter | 当前不承诺后台 scheduler；Host background pause 仍按 Phase 4 边界处理。 |
 | Host renderer | Flutter/SwiftUI/Web/native card adapter | `host-boundary` | Phase 4 | 消费 Render IR JSON。 | 生产 Host adapter 未冻结。 | Host 不支持 node/action 时必须 fallback，不得静默执行未知 action。 | 当前 Mac app 为 demo-only | Host adapter、`dock-cli` | 容器只承诺 Render IR contract。 |
 | Host UI | 完整半屏小程序页面、TabBar、页面路由 | `unsupported-by-design` | 无 | 不映射。 | Host 可提供受控详情页 fallback。 | 禁止跳出容器或打开广告/社交链路。 | 待 unsupported fixture | Host adapter | 与 Agentic MiniApp Container 边界冲突。 |
 
@@ -115,13 +115,13 @@ Phase 2 实现前必须基于本矩阵冻结以下契约：
 - `components[].relatedPage`、`permissions.scope.dynamic`、`expirable`、`expiredText` 的 runtime metadata 流向、Host 行为和 production gate。
 - `this.triggerEvent()`、`catchtap`、disabled button、Overflow 的事件语义。
 - 表单 node 的 Host action / component state 边界，以及表单值如何回到 Orchestrator input validation。
-- dynamic request/timer 的 permission、allowlist、资源限制、detach/expire cleanup 和 audit summary。
+- dynamic request/timer 的 permission、allowlist、资源限制、detach/expire cleanup 和 audit summary；生产 Host transport/background scheduler 仍需 Phase 4 收敛。
 - Host renderer 不支持 node/style/action 时的 fallback 策略和 warning 可观测性。
 
 ## 9. 安全红线
 
 - Render IR、CLI JSON、audit export 和 Host payload 不得包含 Authorization、capability token、HTTP Signature、private key path、手机号、地址、文件内容或未脱敏位置。
 - 组件内 `api/call` 只能回到 Orchestrator，不能直接执行 Skill API、HTTP 请求或支付/隐私动作。
-- dynamic request/timer 默认关闭；声明 dynamic 后仍必须受 allowlist、token boundary、资源限制和 audit 约束。
+- dynamic request/timer 默认关闭；声明 dynamic 后仍必须受 RequestBroker、allowlist、token boundary、资源限制和 audit 约束。
 - Host 不认识的 action、node kind 或高风险能力必须 fail closed 或 fallback，不得静默 no-op 成功。
 - 组件矩阵中的 `host-boundary` 不能在后续文档中写成 production-ready，除非已有 Host provider、测试和 release gate 证据。

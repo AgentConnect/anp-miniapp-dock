@@ -72,8 +72,8 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs) |
-| Component sandbox、default no network/timer、expire 后事件失败 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) |
-| Component profile 默认 deny request/timer，dynamic 才可表达 request boundary | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |
+| Component sandbox、default no network/timer、native bridge hidden、expire 后事件失败 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) |
+| Component profile 默认 deny request/timer，dynamic 才可表达 request/timer boundary | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |
 | Request allowlist deny by default / miss deny without transport | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | token scope isolation、HTTP Signature fallback、401 retry | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | DID auth session cache 隔离、过期 refresh、clear/revoke 语义 | [`session.rs`](../../crates/anp-adapter/src/session.rs) |
@@ -82,6 +82,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Atomic API scoped storage JS bridge、sync/async shape、DID/merchant/skill scope、JSON-safe validation、model-visible 隔离 | [`storage.rs`](../../crates/wx-compat/src/storage.rs)、[`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
 | Atomic API 与 Component VM device/app info 最小字段、防指纹和 shared default 防漂移 | [`model_context.rs`](../../crates/wx-compat/src/model_context.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) |
 | Atomic API 高风险 Host boundary：无 provider fail closed、未 consent 不执行 provider、dev-only mock 标识、opaque handle、本地路径拒绝、payment 不收集密码 | [`high_risk.rs`](../../crates/wx-compat/src/high_risk.rs)、[`high_risk_provider.rs`](../../crates/wx-compat/tests/high_risk_provider.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
+| Component dynamic request/timer 最小 gate：`scope.dynamic` 驱动注入、默认 deny、auth header deny、response header redaction、timer limit/clear/expire cleanup | [`component_vm.rs`](../../crates/component-runtime/src/component_vm.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |
 | L3 payment consent 和 audit redaction | [`payment_requires_consent.rs`](../../crates/consent-audit/tests/payment_requires_consent.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) |
 | CLI/demo redaction | [`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 
@@ -99,8 +100,8 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 | Gate | 启用阶段 | 当前处理 |
 |---|---|---|
-| production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；demo-only localhost transport 仍不得 production release |
-| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | Phase 3 | 当前由分散测试覆盖基础项 |
+| production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；Step 02-05 已给 dynamic component request 接入 injected broker boundary；demo-only/unsupported transport 仍不得 production release |
+| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | Phase 3 | Step 02-05 已覆盖 dynamic 前置最小 gate；Phase 3 仍需扩展为 release blocker 专项回归集 |
 | token refresh/revoke/logout、jti replay、DID resolver trust anchor | Phase 3/4 | 当前 only TTL/scope/challenge proof |
 | persistent audit sink、retention、redacted export | Phase 3/4 | 当前 in-memory/mock |
 | Skill package digest/signature、publisher DID、trusted publisher allowlist | Phase 3/5 | 当前 path/manifest validation |
@@ -139,13 +140,14 @@ cargo test -p dock-cli --test coffee_order_flow
 - `preview-component` 和 `call-api` render payload 输出 `schemaVersion: "dock.render-ir.v1"`。
 - component manifest `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` 进入 redacted runtime metadata / validate report，且不进入 JS state 或 model-visible result。
 - render failure 可以 fallback 到 CardSpec，并输出稳定 fallback reason enum string。
+- dynamic 组件只有声明 `scope.dynamic` 后才注入受限 request/timer；默认 deny、auth header deny、timer limit/clear/expire cleanup 已有 focused tests。
 
 Planned gates：
 
 | Gate | 启用阶段 |
 |---|---|
 | Render IR golden snapshots | Phase 2 |
-| address-form、media-review、dynamic-status、location-map-preview fixtures | Phase 2 |
+| address-form、media-review、dynamic-status、location-map-preview fixtures 和 snapshots | Phase 2 Step 02-06 |
 | Host renderer unknown node/action conformance | Phase 4 |
 
 ## 7. Demo-only 禁止项

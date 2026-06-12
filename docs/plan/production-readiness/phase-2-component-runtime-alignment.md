@@ -121,6 +121,8 @@ Step 02-03 已完成 id selector、tag selector、一层 simple descendant selec
 
 Step 02-02 只让 `scope.dynamic` 在 runtime metadata 中可观测；真正开放 request/timer 必须等 Step 02-05 的 sandbox escape、resource-limit、cleanup gate 通过。
 
+Step 02-05 已完成最小 dynamic component gate：Component VM 默认仍 deny `wx.request` 和 timer；只有 runtime metadata 中 `scope.dynamic` 生效时才注入受限 `wx.request` / `setTimeout` / `setInterval` / clear；request 通过 injected `RequestBroker`，默认 `UnsupportedRequestBroker` fail closed，JS 提供 `Authorization` / `Signature` / `Signature-Input` / `Cookie` 会被拒绝，响应 auth/token-like headers 会脱敏；timer 有数量限制、clear 和 expire/detach cleanup。当前 headless runtime 只在 mount/event flush 中执行 delay 0 timer，不提供生产 Host background scheduler；Host background pause、真实 polling helper、生产网络 transport 和 request audit persistence 仍属于 Phase 4 / Host 边界。
+
 ### 3.6 Component Action 回流
 
 组件内动作不直接执行高风险操作，只能返回 action 给 Host/Orchestrator：

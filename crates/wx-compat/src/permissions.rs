@@ -90,6 +90,13 @@ impl CapabilityProfile {
         self
     }
 
+    pub fn with_dynamic_component_timer(mut self) -> Self {
+        if self.environment == WxEnvironmentKind::Component {
+            self.allowed.insert(Capability::Timer);
+        }
+        self
+    }
+
     pub fn new(
         environment: WxEnvironmentKind,
         allowed: impl IntoIterator<Item = Capability>,
