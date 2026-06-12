@@ -433,6 +433,32 @@ pub enum ComponentVmAction {
     },
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related_page: Option<Value>,
+    #[serde(default)]
+    pub dynamic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_dynamic: Option<Value>,
+    #[serde(default)]
+    pub expirable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expired_text: Option<String>,
+}
+
+impl ComponentMetadata {
+    pub fn new(component_path: impl Into<String>) -> Self {
+        Self {
+            component_path: Some(component_path.into()),
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ComponentInput {
@@ -447,6 +473,8 @@ pub struct ComponentInput {
     pub structured_content: Option<Map<String, Value>>,
     #[serde(default, rename = "_meta")]
     pub meta: Option<Map<String, Value>>,
+    #[serde(default)]
+    pub component_metadata: ComponentMetadata,
 }
 
 impl ComponentInput {
@@ -458,6 +486,7 @@ impl ComponentInput {
             content: Vec::new(),
             structured_content: None,
             meta: None,
+            component_metadata: ComponentMetadata::default(),
         }
     }
 
@@ -491,6 +520,7 @@ pub struct ComponentOperationOutcome {
     pub actions: Vec<ComponentVmAction>,
     pub trace: Vec<ComponentTraceEntry>,
     pub state: Value,
+    pub metadata: ComponentMetadata,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -506,6 +536,7 @@ pub struct ComponentInstance {
     context: Context,
     deadline: Rc<RefCell<Option<OperationDeadline>>>,
     state: Value,
+    metadata: ComponentMetadata,
     trace: Vec<ComponentTraceEntry>,
     expired: bool,
     mounted: bool,
@@ -558,6 +589,7 @@ impl ComponentInstance {
             context,
             deadline,
             state: Value::Object(Map::new()),
+            metadata: ComponentMetadata::default(),
             trace: Vec::new(),
             expired: false,
             mounted: false,
@@ -574,6 +606,7 @@ impl ComponentInstance {
             .map_err(|error| ComponentVmError::InvalidJson(error.to_string()))?;
         let properties_json = serde_json::to_string(&input.properties)
             .map_err(|error| ComponentVmError::InvalidJson(error.to_string()))?;
+        self.metadata = input.component_metadata;
         let snapshot =
             self.call_snapshot("__dockMount", (seed_json, properties_json, input_json))?;
         self.mounted = true;
@@ -656,6 +689,7 @@ impl ComponentInstance {
             actions: snapshot.actions,
             trace: snapshot.trace,
             state: self.state.clone(),
+            metadata: self.metadata.clone(),
         })
     }
 }

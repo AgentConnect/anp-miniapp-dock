@@ -73,6 +73,8 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
         .any(
             |component| component["path"] == "components/payment-result/index"
                 && component["loaded"] == true
+                && component["runtimeMetadata"]["dynamic"] == false
+                && component["runtimeMetadata"]["expirable"] == false
         ));
     assert!(validate["compatibilityReport"]["risks"]
         .as_array()
@@ -107,6 +109,11 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
         call["render"]["payload"]["render"]["schemaVersion"],
         "dock.render-ir.v1"
     );
+    assert_eq!(
+        call["render"]["payload"]["metadata"]["componentPath"],
+        "components/drink-list/index"
+    );
+    assert_eq!(call["render"]["payload"]["metadata"]["dynamic"], false);
     assert!(call["modelVisible"].get("_meta").is_none());
 
     let component = cli_json([
@@ -126,6 +133,10 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
     ]);
     assert_eq!(component["status"], "ok");
     assert_eq!(component["render"]["schemaVersion"], "dock.render-ir.v1");
+    assert_eq!(
+        component["metadata"]["componentPath"],
+        "components/drink-list/index"
+    );
     assert_eq!(component["render"]["root"]["kind"], "view");
 
     let card = cli_json([

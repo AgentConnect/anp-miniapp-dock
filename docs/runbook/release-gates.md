@@ -137,6 +137,7 @@ cargo test -p dock-cli --test coffee_order_flow
 
 - coffee 三组件能 mount、render、dispatch tap、触发 `api/call` 和 expire。
 - `preview-component` 和 `call-api` render payload 输出 `schemaVersion: "dock.render-ir.v1"`。
+- component manifest `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` 进入 redacted runtime metadata / validate report，且不进入 JS state 或 model-visible result。
 - render failure 可以 fallback 到 CardSpec，并输出稳定 fallback reason enum string。
 
 Planned gates：

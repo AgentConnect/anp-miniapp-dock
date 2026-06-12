@@ -36,6 +36,8 @@ Phase 2 要把当前 coffee 三卡片可用的 Component Runtime 扩展为稳定
 3. 然后在 `component-runtime` 的 `ComponentInput` 或 component metadata 中传入；
 4. 最后让 `dock-cli validate` 输出组件能力报告。
 
+Step 02-02 已完成当前 metadata flow：`relatedPage`、`permissions.scope.dynamic`、`expirable`、`expiredText` 由 manifest 进入 Component Runtime `ComponentMetadata` 和 `dock-cli` render / validate envelope；unsafe `relatedPage.path` 不进入 runtime metadata，query 与 scopeDynamic 中的 token-like 字段会脱敏。该 flow 只表达权限与 Host metadata，不开放 dynamic request/timer。
+
 ### 3.2 Component JS 增强
 
 P1 支持：
@@ -110,6 +112,8 @@ P1 增加：
 - expire/detach 自动清理；
 - Host background 自动暂停；
 - 动态请求进入 audit summary。
+
+Step 02-02 只让 `scope.dynamic` 在 runtime metadata 中可观测；真正开放 request/timer 必须等 Step 02-05 的 sandbox escape、resource-limit、cleanup gate 通过。
 
 ### 3.6 Component Action 回流
 

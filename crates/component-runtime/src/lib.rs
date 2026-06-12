@@ -13,8 +13,9 @@ pub use compiler::{
     ComponentCompileError, ComponentRenderOutput,
 };
 pub use component_vm::{
-    ComponentInput, ComponentInstance, ComponentOperationOutcome, ComponentTraceEntry,
-    ComponentTraceKind, ComponentVmAction, ComponentVmConfig, ComponentVmError,
+    ComponentInput, ComponentInstance, ComponentMetadata, ComponentOperationOutcome,
+    ComponentTraceEntry, ComponentTraceKind, ComponentVmAction, ComponentVmConfig,
+    ComponentVmError,
 };
 pub use events::{ComponentEvent, ComponentEventKind};
 pub use loader::{ComponentLoadError, ComponentPackage};

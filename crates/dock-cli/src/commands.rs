@@ -7,8 +7,8 @@ use anp_adapter::{
 use card_spec::{fallback_from_result, FallbackReason};
 use clap::{Parser, Subcommand};
 use component_runtime::{
-    ComponentEvent, ComponentInput, ComponentInstance, ComponentPackage, ComponentRenderOutput,
-    ComponentVmAction, RenderEventKind, RenderNode,
+    ComponentEvent, ComponentInput, ComponentInstance, ComponentMetadata, ComponentPackage,
+    ComponentRenderOutput, ComponentVmAction, RenderEventKind, RenderNode,
 };
 use consent_audit::ConsentRequest;
 use dock_core::{
@@ -545,16 +545,18 @@ fn validate_component_reports(skill: &LoadedSkill) -> Vec<Value> {
 
 fn component_report(component: &ComponentDeclaration, skill: &LoadedSkill) -> Value {
     let loaded = skill.components.contains_key(&component.path);
+    let metadata = manifest_component_metadata(&skill.manifest, &component.path).ok();
     json!({
         "path": component.path,
         "loaded": loaded,
-        "relatedPage": component.related_page.clone(),
+        "relatedPage": metadata.as_ref().and_then(|metadata| metadata.related_page.clone()),
         "permissions": {
-            "dynamic": component.dynamic_permission().is_some(),
-            "scopeDynamic": component.dynamic_permission()
+            "dynamic": metadata.as_ref().is_some_and(|metadata| metadata.dynamic),
+            "scopeDynamic": metadata.as_ref().and_then(|metadata| metadata.scope_dynamic.clone())
         },
-        "expirable": component.expirable.unwrap_or(false),
-        "expiredText": component.expired_text.clone(),
+        "expirable": metadata.as_ref().is_some_and(|metadata| metadata.expirable),
+        "expiredText": metadata.as_ref().and_then(|metadata| metadata.expired_text.clone()),
+        "runtimeMetadata": metadata,
         "fallback": if loaded { Value::Null } else { json!("component_load_failed") },
     })
 }
@@ -704,12 +706,18 @@ fn preview_component(
     let input = parse_component_input(json_input)?;
     let package = load_component_package(skill_path, component_path)?;
     let mut instance = ComponentInstance::new(package)?;
+    let metadata = load_component_metadata(skill_path, component_path)?;
+    let input = ComponentInput {
+        component_metadata: metadata,
+        ..input
+    };
     let outcome = instance.mount(input)?;
     Ok(json!({
         "status": "ok",
         "componentPath": component_path,
         "render": component_render_json(&outcome.render),
         "actions": outcome.actions,
+        "metadata": outcome.metadata,
         "trace": outcome.trace,
         "state": outcome.state
     }))
@@ -759,6 +767,7 @@ fn run_demo(
     let search = runtime.call("searchDrinks", search_args.clone())?;
     let mut drink_component = mount_for_outcome(
         skill_path,
+        runtime.orchestrator.skill(),
         "searchDrinks",
         search_args,
         search.result.clone(),
@@ -772,6 +781,7 @@ fn run_demo(
     let confirm = runtime.call("confirmOrder", confirm_args.clone())?;
     let mut order_component = mount_for_outcome(
         skill_path,
+        runtime.orchestrator.skill(),
         "confirmOrder",
         confirm_args,
         confirm.result.clone(),
@@ -785,6 +795,7 @@ fn run_demo(
     let payment = runtime.call("payOrder", pay_args.clone())?;
     let mut payment_component = mount_for_outcome(
         skill_path,
+        runtime.orchestrator.skill(),
         "payOrder",
         pay_args,
         payment.result.clone(),
@@ -894,6 +905,7 @@ impl RuntimeHarness {
             executor,
             ComponentRenderRouter {
                 skill_root: skill.root,
+                manifest: skill.manifest,
             },
             audit.clone(),
         );
@@ -956,6 +968,7 @@ impl ConsentGate for ApproveConsent {
 #[derive(Clone)]
 struct ComponentRenderRouter {
     skill_root: PathBuf,
+    manifest: mcp_schema::SkillManifest,
 }
 
 impl RenderRouter for ComponentRenderRouter {
@@ -975,11 +988,19 @@ impl RenderRouter for ComponentRenderRouter {
                 .collect(),
             structured_content: input.structured_content.clone(),
             meta: input.meta.clone(),
+            component_metadata: ComponentMetadata::default(),
         };
         let package = load_component_package(&self.skill_root, &input.component_path)
             .map_err(|error| DockCoreError::core(ErrorCode::RenderFailed, error.to_string()))?;
         let mut instance = ComponentInstance::new(package)
             .map_err(|error| DockCoreError::core(ErrorCode::RenderFailed, error.to_string()))?;
+        let metadata = manifest_component_metadata(&self.manifest, &input.component_path).map_err(
+            |error| DockCoreError::core(ErrorCode::RenderFailed, redact_text(&error.to_string())),
+        )?;
+        let component_input = ComponentInput {
+            component_metadata: metadata,
+            ..component_input
+        };
         let outcome = instance
             .mount(component_input)
             .map_err(|error| DockCoreError::core(ErrorCode::RenderFailed, error.to_string()))?;
@@ -990,6 +1011,7 @@ impl RenderRouter for ComponentRenderRouter {
             payload: json!({
                 "render": component_render_json(&outcome.render),
                 "actions": outcome.actions,
+                "metadata": outcome.metadata,
                 "trace": outcome.trace,
                 "state": outcome.state
             }),
@@ -1033,6 +1055,7 @@ struct MountedComponent {
 
 fn mount_for_outcome(
     skill_path: &Path,
+    skill: &LoadedSkill,
     api_name: &str,
     arguments: Value,
     result: AtomicApiResult,
@@ -1040,7 +1063,12 @@ fn mount_for_outcome(
 ) -> Result<MountedComponent, CliError> {
     let package = load_component_package(skill_path, component_path)?;
     let mut instance = ComponentInstance::new(package)?;
-    let mount = instance.mount(component_input(api_name, arguments, &result))?;
+    let metadata = manifest_component_metadata(&skill.manifest, component_path)?;
+    let input = ComponentInput {
+        component_metadata: metadata,
+        ..component_input(api_name, arguments, &result)
+    };
+    let mount = instance.mount(input)?;
     Ok(MountedComponent { instance, mount })
 }
 
@@ -1056,7 +1084,120 @@ fn component_input(api_name: &str, arguments: Value, result: &AtomicApiResult) -
             .collect(),
         structured_content: result.structured_content.clone(),
         meta: result.meta.clone(),
+        component_metadata: ComponentMetadata::default(),
     }
+}
+
+fn load_component_metadata(
+    skill_path: &Path,
+    component_path: &str,
+) -> Result<ComponentMetadata, CliError> {
+    let skill = load_skill(skill_path)?;
+    manifest_component_metadata(&skill.manifest, component_path)
+}
+
+fn manifest_component_metadata(
+    manifest: &mcp_schema::SkillManifest,
+    component_path: &str,
+) -> Result<ComponentMetadata, CliError> {
+    let component = manifest
+        .components
+        .iter()
+        .find(|component| component_paths_match(&component.path, component_path))
+        .ok_or_else(|| CliError::Demo(format!("component `{component_path}` is not declared")))?;
+    let mut metadata = ComponentMetadata::new(component.path.clone());
+    metadata.related_page = component.related_page.as_ref().and_then(safe_related_page);
+    metadata.dynamic = component.dynamic_permission().is_some();
+    metadata.scope_dynamic = component.dynamic_permission().map(redact_metadata_value);
+    metadata.expirable = component.expirable.unwrap_or(false);
+    metadata.expired_text = component.expired_text.as_deref().map(redact_metadata_text);
+    Ok(metadata)
+}
+
+fn safe_related_page(related_page: &Value) -> Option<Value> {
+    let object = related_page.as_object()?;
+    let path = object.get("path")?.as_str()?.trim();
+    if path.is_empty() || path.starts_with('/') || path.contains("..") || path.contains('\0') {
+        return None;
+    }
+
+    let mut safe = Map::new();
+    safe.insert("path".to_owned(), Value::String(path.to_owned()));
+    if let Some(query) = object.get("query").and_then(Value::as_object) {
+        safe.insert(
+            "query".to_owned(),
+            Value::Object(
+                query
+                    .iter()
+                    .map(|(key, value)| {
+                        if is_sensitive_metadata_key(key) {
+                            (key.clone(), Value::String("[REDACTED]".to_owned()))
+                        } else {
+                            (key.clone(), redact_metadata_value(value))
+                        }
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    Some(Value::Object(safe))
+}
+
+fn component_paths_match(declared: &str, requested: &str) -> bool {
+    declared == requested || strip_index_suffix(declared) == strip_index_suffix(requested)
+}
+
+fn strip_index_suffix(path: &str) -> &str {
+    path.strip_suffix("/index").unwrap_or(path)
+}
+
+fn redact_metadata_value(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| {
+                    if is_sensitive_metadata_key(key) {
+                        (key.clone(), Value::String("[REDACTED]".to_owned()))
+                    } else {
+                        (key.clone(), redact_metadata_value(value))
+                    }
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(redact_metadata_value).collect()),
+        Value::String(text) => Value::String(redact_metadata_text(text)),
+        _ => value.clone(),
+    }
+}
+
+fn redact_metadata_text(text: &str) -> String {
+    if looks_sensitive_metadata_text(text) {
+        "[REDACTED]".to_owned()
+    } else {
+        text.to_owned()
+    }
+}
+
+fn is_sensitive_metadata_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
+    [
+        "token",
+        "authorization",
+        "signature",
+        "secret",
+        "private",
+        "credential",
+        "password",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn looks_sensitive_metadata_text(text: &str) -> bool {
+    text.starts_with('/')
+        || text.starts_with("\\\\")
+        || text.contains(":\\")
+        || text.starts_with("file:")
 }
 
 fn load_component_package(
@@ -1462,6 +1603,7 @@ fn parse_component_input(source: &str) -> Result<ComponentInput, CliError> {
                 .or_else(|| value.get("meta"))
                 .and_then(Value::as_object)
                 .cloned(),
+            component_metadata: ComponentMetadata::default(),
         }),
     }
 }
@@ -1625,6 +1767,98 @@ mod tests {
                         .as_str()
                         .is_some_and(|message| message.contains("declared but not registered"))
             }));
+    }
+
+    #[test]
+    fn validate_reports_component_runtime_metadata() {
+        let dir = TempDir::new("dock-cli-metadata-fixture").expect("temp dir");
+        let root = dir.path().to_path_buf();
+        fs::create_dir_all(root.join("components/status-card")).expect("component dir");
+        fs::write(root.join("SKILL.md"), "# Metadata Skill").expect("write SKILL.md");
+        fs::write(
+            root.join("index.js"),
+            "const skill = wx.modelContext.createSkill(__dirname)\n\
+             skill.registerAPI('status', async () => ({ content: [{ type: 'text', text: 'ok' }] }))\n\
+             module.exports = skill\n",
+        )
+        .expect("write index.js");
+        fs::write(
+            root.join("components/status-card/index.wxml"),
+            "<view><text>{{ apiName }}</text></view>",
+        )
+        .expect("write wxml");
+        fs::write(
+            root.join("mcp.json"),
+            r#"{
+              "apis": [{
+                "name": "status",
+                "description": "status API",
+                "inputSchema": {},
+                "_meta": { "ui": { "componentPath": "components/status-card/index" } }
+              }],
+              "components": [{
+                "path": "components/status-card/index",
+                "permissions": {
+                  "scope.dynamic": { "desc": "refresh status" }
+                },
+                "relatedPage": {
+                  "path": "pages/status/detail",
+                  "query": {
+                    "source": "card",
+                    "secretToken": "should-not-leak"
+                  }
+                },
+                "expirable": true,
+                "expiredText": "Status expired"
+              }]
+            }"#,
+        )
+        .expect("write manifest");
+
+        let output = validate(&root).expect("validate metadata");
+        let component = output["compatibilityReport"]["components"][0].clone();
+
+        assert_eq!(component["loaded"], true);
+        assert_eq!(
+            component["runtimeMetadata"]["componentPath"],
+            "components/status-card/index"
+        );
+        assert_eq!(component["runtimeMetadata"]["dynamic"], true);
+        assert_eq!(component["runtimeMetadata"]["expirable"], true);
+        assert_eq!(
+            component["runtimeMetadata"]["expiredText"],
+            "Status expired"
+        );
+        assert_eq!(
+            component["runtimeMetadata"]["relatedPage"]["path"],
+            "pages/status/detail"
+        );
+        assert_eq!(
+            component["runtimeMetadata"]["relatedPage"]["query"]["secretToken"],
+            "[REDACTED]"
+        );
+        assert!(!component.to_string().contains("should-not-leak"));
+    }
+
+    #[test]
+    fn component_metadata_matches_index_path_alias() {
+        let manifest: mcp_schema::SkillManifest = serde_json::from_value(json!({
+            "apis": [],
+            "components": [{
+                "path": "components/status-card/index",
+                "expirable": true
+            }]
+        }))
+        .expect("manifest");
+
+        let metadata =
+            manifest_component_metadata(&manifest, "components/status-card").expect("metadata");
+
+        assert_eq!(
+            metadata.component_path.as_deref(),
+            Some("components/status-card/index")
+        );
+        assert!(metadata.expirable);
     }
 
     #[test]

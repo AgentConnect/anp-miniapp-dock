@@ -1,6 +1,6 @@
 use component_runtime::{
-    ComponentEvent, ComponentEventKind, ComponentInput, ComponentInstance, ComponentPackage,
-    ComponentTraceKind, ComponentVmAction, ComponentVmError, RenderNodeKind,
+    ComponentEvent, ComponentEventKind, ComponentInput, ComponentInstance, ComponentMetadata,
+    ComponentPackage, ComponentTraceKind, ComponentVmAction, ComponentVmError, RenderNodeKind,
 };
 use serde_json::{json, Map};
 use std::fs;
@@ -38,6 +38,7 @@ fn component_input() -> ComponentInput {
             json!([{ "id": "latte", "name": "Latte" }]),
         )])),
         meta: None,
+        component_metadata: ComponentMetadata::default(),
     }
 }
 
@@ -347,6 +348,62 @@ Component({
 }
 
 #[test]
+fn component_metadata_is_runtime_visible_without_entering_js_state() {
+    let root = write_component(
+        "metadata",
+        r#"
+Component({
+  data: { leaked: false },
+  lifetimes: {
+    created() {
+      this.setData({ leaked: Boolean(this.data.componentMetadata) })
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ leaked }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let mut input = ComponentInput::new("searchDrinks");
+    input.component_metadata = ComponentMetadata {
+        component_path: Some("components/drink-list/index".to_owned()),
+        related_page: Some(json!({
+            "path": "pages/drink/detail",
+            "query": { "source": "card" }
+        })),
+        dynamic: true,
+        scope_dynamic: Some(json!({ "desc": "刷新饮品库存" })),
+        expirable: true,
+        expired_text: Some("饮品列表已过期，请重新搜索".to_owned()),
+    };
+    let mut instance = ComponentInstance::new(package).expect("create vm");
+
+    let outcome = instance.mount(input).expect("mount");
+
+    assert_eq!(
+        outcome.metadata.component_path.as_deref(),
+        Some("components/drink-list/index")
+    );
+    assert_eq!(
+        outcome
+            .metadata
+            .related_page
+            .as_ref()
+            .and_then(|page| page.get("path"))
+            .and_then(serde_json::Value::as_str),
+        Some("pages/drink/detail")
+    );
+    assert!(outcome.metadata.dynamic);
+    assert!(outcome.metadata.expirable);
+    assert_eq!(
+        outcome.metadata.expired_text.as_deref(),
+        Some("饮品列表已过期，请重新搜索")
+    );
+    assert_eq!(outcome.state.get("componentMetadata"), None);
+    assert_eq!(outcome.state.get("leaked"), Some(&json!(false)));
+}
+
+#[test]
 fn image_load_and_error_events_dispatch_to_methods() {
     let root = write_component(
         "image-events",
@@ -408,6 +465,7 @@ fn coffee_components_run_result_notifications_and_emit_actions() {
                 json!([{ "id": "latte", "name": "Latte", "price": 18, "image": "/latte.png" }]),
             )])),
             meta: None,
+            component_metadata: ComponentMetadata::default(),
         })
         .expect("mount drink-list")
         .render;
@@ -448,6 +506,7 @@ fn coffee_components_run_result_notifications_and_emit_actions() {
                 ("payable".to_owned(), json!(18)),
             ])),
             meta: None,
+            component_metadata: ComponentMetadata::default(),
         })
         .expect("mount order-confirm")
         .render;
@@ -481,6 +540,7 @@ fn coffee_components_run_result_notifications_and_emit_actions() {
                 ("status".to_owned(), json!("paid")),
             ])),
             meta: None,
+            component_metadata: ComponentMetadata::default(),
         })
         .expect("mount payment-result");
     assert!(matches!(
