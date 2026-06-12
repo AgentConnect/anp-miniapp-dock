@@ -17,14 +17,14 @@
 ## 使用方式
 
 1. 先读总览 roadmap，确认当前要进入哪个 Phase，并查看其中的 `Resume From Here`、执行台账、Codex Goal 执行协议和 Review 门禁。
-2. 进入对应 Phase 文档，按“开发顺序”拆 issue；已经拆出的首批 Step 必须优先以 [`steps/`](steps/) 下的小 Plan 为执行入口。
+2. 进入对应 Phase 文档，按“开发顺序”拆 issue；已经拆出的 Step 必须优先以 [`steps/`](steps/) 下的小 Plan 为执行入口。
 3. 如果 Phase 文档引用深入子文档，先冻结子文档中的契约，再写代码。
 4. 每个 issue 或 Step 必须同时更新：实现、测试、兼容矩阵、runbook 或开发者文档。
 5. 每个 Step 完成前必须按小 Plan 的“Review 环节”做 commit 前 Review；每个 Phase 完成前必须按对应文档的“阶段完成检查”做一次阶段审计。
 
-## 首批 Codex Goal Step 文档
+## Codex Goal Step 文档
 
-以下 Step 是 Phase 0 和 Phase 1 的首批可执行拆分。状态、依赖、commit 和证据以 [`../production-readiness-roadmap.md`](../production-readiness-roadmap.md) 的执行台账为准。
+以下 Step 是当前已经拆出的可执行小 Plan。状态、依赖、commit 和证据以 [`../production-readiness-roadmap.md`](../production-readiness-roadmap.md) 的执行台账为准；当前恢复指针从 Step 01-05 开始。
 
 | Step | 小 Plan | 范围 |
 |---|---|---|
@@ -36,6 +36,16 @@
 | 01-02 | [Skill package 与 manifest 对齐](steps/01-02-skill-package-manifest-alignment.md) | Phase 1 manifest 校验、兼容报告 |
 | 01-03 | [`wx.modelContext` 原子接口桥接](steps/01-03-model-context-bridge.md) | Phase 1 modelContext JS bridge 与 card event |
 | 01-04 | [DID 会话与 RequestBroker 收敛](steps/01-04-did-session-request-broker.md) | Phase 1 `DidAuthSessionManager`、登录、会话、请求 |
+| 01-05 | [Unsupported API Registry 与统一 fail shape](steps/01-05-unsupported-api-registry-fail-shape.md) | Phase 1 unsupported registry、统一 fail shape |
+| 01-06 | [Storage JS Bridge](steps/01-06-storage-js-bridge.md) | Phase 1 storage async/sync JS bridge |
+| 01-07 | [Device/App Info Atomic API](steps/01-07-device-app-info-atomic-api.md) | Phase 1 `wx.getDeviceInfo`、`wx.getAppBaseInfo` 原子接口 |
+| 01-08 | [高风险 API Host Boundary 与 fail-closed](steps/01-08-high-risk-api-host-boundary.md) | Phase 1 phone/address/location/media/payment/scan/phone call Host boundary |
+| 02-01 | [Render IR schemaVersion 与 fallback reason enum](steps/02-01-render-ir-schema-fallback-reasons.md) | Phase 2 Render IR contract 和 fallback reason |
+| 02-02 | [Component manifest metadata runtime flow](steps/02-02-component-manifest-metadata-runtime-flow.md) | Phase 2 component metadata runtime 流向 |
+| 02-03 | [WXML/WXSS P1 语法增强](steps/02-03-wxml-wxss-p1-syntax.md) | Phase 2 WXML/WXSS P1 parser/compiler/style |
+| 02-04 | [表单与静态媒体节点](steps/02-04-form-static-media-nodes.md) | Phase 2 form、map-preview、canvas-static Render IR nodes |
+| 02-05 | [Dynamic component controls](steps/02-05-dynamic-component-controls.md) | Phase 2 dynamic request、timer、resource cleanup |
+| 02-06 | [Fixture 与 Render IR snapshots](steps/02-06-fixtures-render-ir-snapshots.md) | Phase 2 fixtures 和 Render IR golden snapshots |
 
 ## 共同 Definition of Done
 
