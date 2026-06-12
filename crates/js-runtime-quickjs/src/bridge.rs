@@ -12,6 +12,22 @@ function __dockSafeJson(value) {
   return JSON.stringify(value);
 }
 
+function __dockJsonOptionsOrFailure(apiName, value) {
+  try {
+    return { ok: true, json: __dockSafeJson(value) };
+  } catch (_error) {
+    return {
+      ok: false,
+      json: JSON.stringify({
+        errMsg: apiName + ':fail invalid_options',
+        code: 'invalid_options',
+        reason: 'options must be JSON-safe',
+        suggestion: 'Pass plain JSON values without functions, symbols, BigInt, or cycles.'
+      })
+    };
+  }
+}
+
 function __dockLog(level, args) {
   __dock.log(level, args.map((value) => {
     if (typeof value === 'string') {
@@ -189,6 +205,106 @@ function __dockUnsupportedSync(apiName) {
   throw error;
 }
 
+function __dockStoragePayloadError(payload) {
+  const error = new Error(payload.errMsg);
+  error.errMsg = payload.errMsg;
+  error.code = payload.code;
+  error.reason = payload.reason;
+  error.suggestion = payload.suggestion;
+  return error;
+}
+
+function __dockStorageFailureJson(apiName, reason, suggestion) {
+  return JSON.stringify({
+    errMsg: apiName + ':fail invalid_options',
+    code: 'invalid_options',
+    reason,
+    suggestion
+  });
+}
+
+function __dockJsonSafetyFailure(value, seen) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? null : 'storage data must contain only finite numbers';
+  }
+  if (typeof value === 'undefined') {
+    return 'storage data must not contain undefined';
+  }
+  if (typeof value === 'function') {
+    return 'storage data must not contain functions';
+  }
+  if (typeof value === 'symbol') {
+    return 'storage data must not contain symbols';
+  }
+  if (typeof value === 'bigint') {
+    return 'storage data must not contain BigInt values';
+  }
+  if (typeof value !== 'object') {
+    return 'storage data must be JSON-safe';
+  }
+  if (seen.indexOf(value) !== -1) {
+    return 'storage data must not contain cyclic references';
+  }
+  seen.push(value);
+  const keys = Array.isArray(value) ? value.keys() : Object.keys(value);
+  for (const key of keys) {
+    const child = Array.isArray(value) ? value[key] : value[key];
+    const failure = __dockJsonSafetyFailure(child, seen);
+    if (failure) {
+      return failure;
+    }
+  }
+  seen.pop();
+  return null;
+}
+
+function __dockStorageOptionsJson(apiName, options, requireData) {
+  const source = __dockCallbackOptions(options);
+  const payload = {};
+  if (Object.prototype.hasOwnProperty.call(source, 'key')) {
+    payload.key = source.key;
+  }
+  if (requireData) {
+    if (!Object.prototype.hasOwnProperty.call(source, 'data')) {
+      return {
+        ok: false,
+        json: __dockStorageFailureJson(apiName, 'storage data must be provided', 'Pass options.data for setStorage.')
+      };
+    }
+    const dataFailure = __dockJsonSafetyFailure(source.data, []);
+    if (dataFailure) {
+      return {
+        ok: false,
+        json: __dockStorageFailureJson(apiName, dataFailure, 'Store only plain JSON-safe values.')
+      };
+    }
+    payload.data = source.data;
+  }
+  return __dockJsonOptionsOrFailure(apiName, payload);
+}
+
+function __dockAsyncStorageOutcome(apiName, options, requireData, hostCall) {
+  return __dockAsyncOutcome(apiName, options, () => {
+    const optionsJson = __dockStorageOptionsJson(apiName, options || {}, requireData);
+    if (!optionsJson.ok) {
+      return optionsJson.json;
+    }
+    return hostCall(optionsJson.json);
+  });
+}
+
+function __dockSyncStorageOutcome(apiName, hostCall) {
+  const payload = JSON.parse(hostCall());
+  if (typeof payload.errMsg === 'string' && payload.errMsg.indexOf(':fail') !== -1) {
+    payload.errMsg = apiName + payload.errMsg.slice(payload.errMsg.indexOf(':'));
+    throw __dockStoragePayloadError(payload);
+  }
+  return payload;
+}
+
 function __dockInstallUnsupportedWxApi(apiDef) {
   const parts = apiDef.name.split('.');
   let index = parts[0] === 'wx' ? 1 : 0;
@@ -232,6 +348,43 @@ const wx = {
   },
   request(options) {
     return __dockAsyncOutcome('request', options, () => __dock.request(__dockSafeJson(options || {})));
+  },
+  getStorage(options) {
+    return __dockAsyncStorageOutcome('getStorage', options, false, (optionsJson) => __dock.getStorage(optionsJson));
+  },
+  setStorage(options) {
+    return __dockAsyncStorageOutcome('setStorage', options, true, (optionsJson) => __dock.setStorage(optionsJson));
+  },
+  removeStorage(options) {
+    return __dockAsyncStorageOutcome('removeStorage', options, false, (optionsJson) => __dock.removeStorage(optionsJson));
+  },
+  clearStorage(options) {
+    return __dockAsyncOutcome('clearStorage', options, () => __dock.clearStorage());
+  },
+  getStorageSync(key) {
+    const optionsJson = __dockStorageOptionsJson('getStorageSync', { key }, false);
+    if (!optionsJson.ok) {
+      throw __dockStoragePayloadError(JSON.parse(optionsJson.json));
+    }
+    const payload = __dockSyncStorageOutcome('getStorageSync', () => __dock.getStorage(optionsJson.json));
+    return payload.data;
+  },
+  setStorageSync(key, data) {
+    const optionsJson = __dockStorageOptionsJson('setStorageSync', { key, data }, true);
+    if (!optionsJson.ok) {
+      throw __dockStoragePayloadError(JSON.parse(optionsJson.json));
+    }
+    __dockSyncStorageOutcome('setStorageSync', () => __dock.setStorage(optionsJson.json));
+  },
+  removeStorageSync(key) {
+    const optionsJson = __dockStorageOptionsJson('removeStorageSync', { key }, false);
+    if (!optionsJson.ok) {
+      throw __dockStoragePayloadError(JSON.parse(optionsJson.json));
+    }
+    __dockSyncStorageOutcome('removeStorageSync', () => __dock.removeStorage(optionsJson.json));
+  },
+  clearStorageSync() {
+    __dockSyncStorageOutcome('clearStorageSync', () => __dock.clearStorage());
   },
   modelContext: Object.freeze({
     NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),

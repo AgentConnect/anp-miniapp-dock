@@ -128,6 +128,11 @@ WxApiOutcome
 - 空 key、超限 value fail closed；
 - storage 内容不自动进入 model visible result。
 
+当前状态：
+
+- Step 01-06 已完成 Atomic API `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 及同步版本的 JS bridge。
+- 当前 backend 是 runtime-local in-memory scoped storage；生产持久化、加密、migration、backend quota 和 cleanup 留到 Phase 4。
+
 ### 3.6 隐私、媒体、位置、支付和其它高风险 API
 
 优先级：

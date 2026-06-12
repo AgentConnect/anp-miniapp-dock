@@ -26,8 +26,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use wx_compat::{
-    unsupported_api, CapabilityProfile, RequestBroker, WxMethod, WxRequest, WxRequestError,
-    WxResponse,
+    unsupported_api, CapabilityProfile, InMemoryScopedStorage, RequestBroker, ScopedStorage,
+    StorageError, StorageScope, WxMethod, WxRequest, WxRequestError, WxResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -242,6 +242,7 @@ pub struct ApiVm {
     config: ApiVmConfig,
     registered_apis: Vec<RegisteredApi>,
     trace: ExecutionTrace,
+    storage: InMemoryScopedStorage,
 }
 
 impl ApiVm {
@@ -263,6 +264,7 @@ impl ApiVm {
             config,
             registered_apis,
             trace,
+            storage: InMemoryScopedStorage::new(),
         })
     }
 
@@ -297,6 +299,7 @@ impl ApiVm {
             &self.config,
             call,
             host_did_auth,
+            self.storage.clone(),
         )
     }
 
@@ -400,9 +403,10 @@ fn execute_api_call(
     config: &ApiVmConfig,
     call: ApiCall,
     host_did_auth: Option<HostDidAuthConfig>,
+    storage: InMemoryScopedStorage,
 ) -> Result<AtomicApiResult, ApiVmError> {
     let api_name = call.api_name.clone();
-    let bridge = HostBridgeRuntime::for_call(skill.clone(), call.clone(), host_did_auth);
+    let bridge = HostBridgeRuntime::for_call(skill.clone(), call.clone(), host_did_auth, storage);
     let runtime_bridge = bridge.clone();
     let (result, _trace) = with_runtime(modules, config, runtime_bridge, |ctx| {
         let load_entry: Function = ctx
@@ -514,6 +518,30 @@ fn install_host_bridge<'js>(
         Func::from(move |options_json: String| request_bridge.request_json(options_json));
     dock.set("request", request_fn).map_err(to_quickjs_error)?;
 
+    let get_storage_bridge = bridge.clone();
+    let get_storage_fn =
+        Func::from(move |options_json: String| get_storage_bridge.get_storage_json(options_json));
+    dock.set("getStorage", get_storage_fn)
+        .map_err(to_quickjs_error)?;
+
+    let set_storage_bridge = bridge.clone();
+    let set_storage_fn =
+        Func::from(move |options_json: String| set_storage_bridge.set_storage_json(options_json));
+    dock.set("setStorage", set_storage_fn)
+        .map_err(to_quickjs_error)?;
+
+    let remove_storage_bridge = bridge.clone();
+    let remove_storage_fn = Func::from(move |options_json: String| {
+        remove_storage_bridge.remove_storage_json(options_json)
+    });
+    dock.set("removeStorage", remove_storage_fn)
+        .map_err(to_quickjs_error)?;
+
+    let clear_storage_bridge = bridge.clone();
+    let clear_storage_fn = Func::from(move || clear_storage_bridge.clear_storage_json());
+    dock.set("clearStorage", clear_storage_fn)
+        .map_err(to_quickjs_error)?;
+
     let unsupported_api_fn =
         Func::from(move |api_name: String| Value::Object(unsupported_api(&api_name)).to_string());
     dock.set("unsupportedApi", unsupported_api_fn)
@@ -562,6 +590,15 @@ struct HostRequestOptions {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct StorageOptions {
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ExpireAllCardsOptions {
     #[serde(default)]
     component_paths: Vec<String>,
@@ -584,6 +621,7 @@ struct HostBridgeRuntime {
     skill: Option<LoadedSkill>,
     call: Option<ApiCall>,
     host_did_auth: Option<HostDidAuthConfig>,
+    storage: InMemoryScopedStorage,
     card_events: Rc<RefCell<Vec<ModelContextCardEvent>>>,
 }
 
@@ -593,6 +631,7 @@ impl HostBridgeRuntime {
             skill: None,
             call: None,
             host_did_auth: None,
+            storage: InMemoryScopedStorage::new(),
             card_events: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -601,11 +640,13 @@ impl HostBridgeRuntime {
         skill: LoadedSkill,
         call: ApiCall,
         host_did_auth: Option<HostDidAuthConfig>,
+        storage: InMemoryScopedStorage,
     ) -> Self {
         Self {
             skill: Some(skill),
             call: Some(call),
             host_did_auth,
+            storage,
             card_events: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -714,6 +755,140 @@ impl HostBridgeRuntime {
                 json!({ "cardEvents": card_events }),
             );
         }
+    }
+
+    fn get_storage_json(&self, options_json: String) -> String {
+        match self.storage_key_from_options("getStorage", &options_json) {
+            Ok((scope, key)) => match self.storage.get_storage(&scope, &key) {
+                Ok(Some(data)) => json!({
+                    "errMsg": "getStorage:ok",
+                    "data": data,
+                })
+                .to_string(),
+                Ok(None) => storage_failure_json(
+                    "getStorage",
+                    "invalid_options",
+                    "storage key was not found in this scope",
+                    "Initialize the key with wx.setStorage before reading it.",
+                ),
+                Err(error) => storage_error_json("getStorage", error),
+            },
+            Err(failure) => failure.to_json().to_string(),
+        }
+    }
+
+    fn set_storage_json(&self, options_json: String) -> String {
+        match self.storage_key_and_data_from_options("setStorage", &options_json) {
+            Ok((scope, key, data)) => match self.storage.set_storage(&scope, key, data) {
+                Ok(()) => json!({ "errMsg": "setStorage:ok" }).to_string(),
+                Err(error) => storage_error_json("setStorage", error),
+            },
+            Err(failure) => failure.to_json().to_string(),
+        }
+    }
+
+    fn remove_storage_json(&self, options_json: String) -> String {
+        match self.storage_key_from_options("removeStorage", &options_json) {
+            Ok((scope, key)) => match self.storage.remove_storage(&scope, &key) {
+                Ok(_) => json!({ "errMsg": "removeStorage:ok" }).to_string(),
+                Err(error) => storage_error_json("removeStorage", error),
+            },
+            Err(failure) => failure.to_json().to_string(),
+        }
+    }
+
+    fn clear_storage_json(&self) -> String {
+        match self.storage_scope("clearStorage") {
+            Ok(scope) => match self.storage.clear_storage(&scope) {
+                Ok(()) => json!({ "errMsg": "clearStorage:ok" }).to_string(),
+                Err(error) => storage_error_json("clearStorage", error),
+            },
+            Err(failure) => failure.to_json().to_string(),
+        }
+    }
+
+    fn storage_key_from_options(
+        &self,
+        api_name: &'static str,
+        options_json: &str,
+    ) -> Result<(StorageScope, String), StorageFailure> {
+        let options = storage_options(api_name, options_json)?;
+        let key = options
+            .key
+            .filter(|key| !key.trim().is_empty())
+            .ok_or_else(|| {
+                StorageFailure::invalid_options(
+                    api_name,
+                    "storage key must be a non-empty string",
+                    "Pass options.key for async storage APIs.",
+                )
+            })?;
+        let scope = self.storage_scope(api_name)?;
+        Ok((scope, key))
+    }
+
+    fn storage_key_and_data_from_options(
+        &self,
+        api_name: &'static str,
+        options_json: &str,
+    ) -> Result<(StorageScope, String, Value), StorageFailure> {
+        let options = storage_options(api_name, options_json)?;
+        let key = options
+            .key
+            .filter(|key| !key.trim().is_empty())
+            .ok_or_else(|| {
+                StorageFailure::invalid_options(
+                    api_name,
+                    "storage key must be a non-empty string",
+                    "Pass options.key for async storage APIs.",
+                )
+            })?;
+        let data = options.data.ok_or_else(|| {
+            StorageFailure::invalid_options(
+                api_name,
+                "storage data must be provided",
+                "Pass options.data for setStorage.",
+            )
+        })?;
+        let scope = self.storage_scope(api_name)?;
+        Ok((scope, key, data))
+    }
+
+    fn storage_scope(&self, api_name: &'static str) -> Result<StorageScope, StorageFailure> {
+        let Some(call) = &self.call else {
+            return Err(StorageFailure::provider_unavailable(
+                api_name,
+                "storage is unavailable during API registration",
+                "Call storage APIs from a registered API handler.",
+            ));
+        };
+        let Some(user_did) = call
+            .user_did
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+        else {
+            return Err(StorageFailure::provider_unavailable(
+                api_name,
+                "storage scope requires userDid",
+                "Provide userDid in the ApiCallContext before using wx storage.",
+            ));
+        };
+        let Some(merchant_did) = call
+            .merchant_did
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+        else {
+            return Err(StorageFailure::provider_unavailable(
+                api_name,
+                "storage scope requires merchantDid",
+                "Provide merchantDid in the ApiCallContext before using wx storage.",
+            ));
+        };
+        Ok(StorageScope::new(
+            user_did,
+            merchant_did,
+            call.skill_id.clone(),
+        ))
     }
 
     fn login_json(&self) -> String {
@@ -1011,6 +1186,131 @@ struct HostDidChallenge {
 struct HostRequestFailure {
     code: &'static str,
     reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StorageFailure {
+    api_name: &'static str,
+    code: &'static str,
+    reason: &'static str,
+    suggestion: &'static str,
+}
+
+impl StorageFailure {
+    fn invalid_options(
+        api_name: &'static str,
+        reason: &'static str,
+        suggestion: &'static str,
+    ) -> Self {
+        Self {
+            api_name,
+            code: "invalid_options",
+            reason,
+            suggestion,
+        }
+    }
+
+    fn provider_unavailable(
+        api_name: &'static str,
+        reason: &'static str,
+        suggestion: &'static str,
+    ) -> Self {
+        Self {
+            api_name,
+            code: "provider_unavailable",
+            reason,
+            suggestion,
+        }
+    }
+
+    fn to_json(&self) -> Value {
+        json!({
+            "errMsg": format!("{}:fail {}", self.api_name, self.code),
+            "code": self.code,
+            "reason": self.reason,
+            "suggestion": self.suggestion,
+        })
+    }
+}
+
+fn storage_options(
+    api_name: &'static str,
+    options_json: &str,
+) -> Result<StorageOptions, StorageFailure> {
+    serde_json::from_str(options_json).map_err(|_| {
+        StorageFailure::invalid_options(
+            api_name,
+            "storage options must be a JSON object",
+            "Pass JSON-safe storage options without functions, symbols, or cyclic values.",
+        )
+    })
+}
+
+fn storage_error_json(api_name: &'static str, error: StorageError) -> String {
+    let (code, reason, suggestion) = match error {
+        StorageError::EmptyKey => (
+            "invalid_options",
+            "storage key must be a non-empty string",
+            "Pass a non-empty key string.",
+        ),
+        StorageError::KeyContainsNul => (
+            "invalid_options",
+            "storage key contains an unsupported character",
+            "Use storage keys without NUL bytes.",
+        ),
+        StorageError::KeyTooLarge => (
+            "invalid_options",
+            "storage key is too large",
+            "Use a shorter storage key.",
+        ),
+        StorageError::SensitiveKey => (
+            "permission_denied",
+            "storage key is reserved for sensitive data",
+            "Do not store tokens, authorization headers, private keys, phone numbers, addresses, or file contents in wx storage.",
+        ),
+        StorageError::ValueTooLarge => (
+            "invalid_options",
+            "storage value is too large",
+            "Store a smaller JSON-safe value or keep large data in a Host-managed backend.",
+        ),
+        StorageError::ValueNotJsonSafe => (
+            "invalid_options",
+            "storage value is not JSON-safe",
+            "Store only JSON-safe values.",
+        ),
+        StorageError::QuotaExceeded => (
+            "quota_exceeded",
+            "storage quota exceeded",
+            "Remove unused keys before writing more data.",
+        ),
+        StorageError::LockPoisoned => (
+            "provider_unavailable",
+            "storage backend is unavailable",
+            "Retry later or use Host-managed state.",
+        ),
+    };
+    json!({
+        "errMsg": format!("{api_name}:fail {code}"),
+        "code": code,
+        "reason": reason,
+        "suggestion": suggestion,
+    })
+    .to_string()
+}
+
+fn storage_failure_json(
+    api_name: &'static str,
+    code: &'static str,
+    reason: &'static str,
+    suggestion: &'static str,
+) -> String {
+    json!({
+        "errMsg": format!("{api_name}:fail {code}"),
+        "code": code,
+        "reason": reason,
+        "suggestion": suggestion,
+    })
+    .to_string()
 }
 
 impl HostRequestFailure {

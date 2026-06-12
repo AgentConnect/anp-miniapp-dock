@@ -110,9 +110,9 @@ fn unsupported_registry_marks_sync_and_async_apis() {
     assert!(registry.iter().any(|api| {
         api.name == "requestPayment" && matches!(api.kind, UnsupportedApiKind::Async)
     }));
-    assert!(registry
-        .iter()
-        .any(|api| api.name == "getStorageSync" && matches!(api.kind, UnsupportedApiKind::Sync)));
+    assert!(registry.iter().any(|api| {
+        api.name == "getAccountInfoSync" && matches!(api.kind, UnsupportedApiKind::Sync)
+    }));
     assert!(registry
         .iter()
         .any(|api| api.name == "wx.cloud.callFunction"));

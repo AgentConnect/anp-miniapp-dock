@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-06
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 20:22:41 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 01-05 完成后，启动 storage JS bridge |
+| Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认 scope 使用 `userDid + merchantDid + skillId` 且不含 `sessionId`，sync/async 语义与 Step 01-01 契约一致，storage 内容不自动进入 model-visible result，未引入生产持久化承诺。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat storage` 8 passed；`cargo test -p js-runtime-quickjs storage` 6 passed；`cargo test -p js-runtime-quickjs wx_` 20 passed；`cargo test -p js-runtime-quickjs` 39 passed；`cargo test -p wx-compat` 16 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/runbook docs/security docs/plan` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过；敏感词抽样仅命中文档规则、测试假值和 redaction 断言。 |
+| Next action | 创建 Step 01-06 focused commit，然后回填 commit hash 与 done 状态 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,13 +65,13 @@ Step index：01-06
 
 ## 7. 验收标准
 
-- [ ] `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 支持 callback + Promise，成功和失败 shape 稳定。
-- [ ] `wx.getStorageSync` / `setStorageSync` / `removeStorageSync` / `clearStorageSync` 成功直接返回或返回 `undefined`，失败抛出脱敏 Error。
-- [ ] storage scope 使用 `userDid + merchantDid + skillId`，不同 scope 数据不可见。
-- [ ] 空 key、NUL、超限 key/value、非 JSON-safe value 和 quota 问题 fail closed。
-- [ ] storage value 不自动进入模型可见输出、日志、CLI JSON、Render IR 或 audit export。
-- [ ] API 矩阵和安全文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 支持 callback + Promise，成功和失败 shape 稳定。
+- [x] `wx.getStorageSync` / `setStorageSync` / `removeStorageSync` / `clearStorageSync` 成功直接返回或返回 `undefined`，失败抛出脱敏 Error。
+- [x] storage scope 使用 `userDid + merchantDid + skillId`，不同 scope 数据不可见。
+- [x] 空 key、NUL、超限 key/value、非 JSON-safe value 和 quota 问题 fail closed。
+- [x] storage value 不自动进入模型可见输出、日志、CLI JSON、Render IR 或 audit export。
+- [x] API 矩阵和安全文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -79,11 +79,13 @@ Step index：01-06
 | 检查项 | 命令 / 方法 | 预期证据 |
 |---|---|---|
 | 格式 | `cd anp/anp-miniapp-dock && cargo fmt --check` | 通过 |
-| Focused storage tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat storage` | scoped storage、validation、clear 测试通过 |
-| VM tests | `cd anp/anp-miniapp-dock && cargo test -p js-runtime-quickjs storage` | async / sync bridge 测试通过 |
-| Coffee 回归 | `cd anp/anp-miniapp-dock && cargo test -p dock-cli --test coffee_order_flow` | 通过 |
-| 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/runbook docs/security docs/plan` | 无空白错误 |
-| 脱敏抽样 | 手工检查 storage error、audit/debug 和 CLI 输出 | 不含 token、Authorization、signature、private key path 或隐私原文 |
+| Focused storage tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat storage` | 8 passed，覆盖 scoped storage、validation、clear 和 quota rollback |
+| VM tests | `cd anp/anp-miniapp-dock && cargo test -p js-runtime-quickjs storage` | 6 passed，覆盖 async / sync bridge、scope 隔离、JSON-safe 校验和 model-visible 隔离 |
+| Coffee 回归 | `cd anp/anp-miniapp-dock && cargo test -p dock-cli --test coffee_order_flow` | 3 passed |
+| 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/runbook docs/security docs/plan` | 无输出 |
+| 脱敏抽样 | 手工检查 storage error、audit/debug 和 CLI 输出 | 敏感词扫描仅命中文档规则、测试假值和 redaction 断言；未发现真实 secret、真实 token、private key path 或隐私原文 |
+
+补充回归：`cargo test -p js-runtime-quickjs wx_` 20 passed；`cargo test -p js-runtime-quickjs` 39 passed；`cargo test -p wx-compat` 16 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
@@ -94,11 +96,11 @@ Step index：01-06
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 未发现阻塞问题 | Review 覆盖 scope、sync/async shape、fail closed、model-visible 隔离和生产持久化边界。 |
+| 已修复问题 | 修复 storage focused test 只跑 0 个 VM 测试的问题；修复旧 unsupported sync storage 断言；修复 quota 测试实际命中 value limit 而非 scope quota 的问题；修复 sync storage fail `errMsg` 使用异步 API 名称的问题；补充 `merchantDid` 必填，避免 demo fallback 混淆 storage scope。 | 修复均已由 focused tests 和全量 crate tests 覆盖。 |
+| 剩余风险 | 当前 storage backend 为 runtime-local in-memory；生产持久化、加密、migration、backend quota、cleanup 和 retention 仍按 Phase 4 处理。组件环境 storage provider 仍待 Phase 2/4，不在本 Step 范围。 | 文档已在 API 矩阵、threat model、release gates 和 Phase 1 子文档中记录。 |
+| 新增或缺失测试 | 新增 `wx-compat` storage validation/clear/quota tests 和 `js-runtime-quickjs` async/sync/scope/JSON-safe/model-visible tests；未新增生产持久化测试。 | 持久化测试不属于 01-06。 |
+| 已更新或缺失文档 | 已更新 `docs/architecture/wx-api-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 1 contract/broker 文档和本 Step 文档。 | 未更新 Phase 4 详细持久化 Step，因为该范围已由 04-06 承接。 |
 
 ## 10. Commit 要求
 

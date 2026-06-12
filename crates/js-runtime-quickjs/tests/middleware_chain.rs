@@ -567,9 +567,9 @@ fn unsupported_sync_wx_api_throws_redacted_error() {
     let skill = test_skill(
         r#"
 const skill = wx.modelContext.createSkill(__dirname)
-skill.registerAPI('storage', () => {
+skill.registerAPI('account', () => {
   try {
-    wx.getStorageSync({ key: 'private-key' })
+    wx.getAccountInfoSync({ key: 'private-key' })
   } catch (error) {
     return {
       content: [{ type: 'text', text: error.errMsg }],
@@ -586,15 +586,18 @@ skill.registerAPI('storage', () => {
 module.exports = skill
 "#,
         BTreeMap::new(),
-        vec!["storage"],
+        vec!["account"],
     );
     let vm = ApiVm::load_skill(skill).expect("load VM");
 
     let result = vm
-        .call(ApiCall::new("skill", "session", "storage", json!({})))
-        .expect("call storage");
+        .call(ApiCall::new("skill", "session", "account", json!({})))
+        .expect("call account");
 
-    assert_eq!(result.content[0].text, "getStorageSync:fail unsupported");
+    assert_eq!(
+        result.content[0].text,
+        "getAccountInfoSync:fail unsupported"
+    );
     let structured = result.structured_content.as_ref().expect("structured");
     assert_eq!(
         structured.get("code").and_then(|value| value.as_str()),
@@ -604,6 +607,445 @@ module.exports = skill
         structured.get("leaked").and_then(|value| value.as_bool()),
         Some(false)
     );
+}
+
+#[test]
+fn wx_storage_async_callbacks_and_promise_work() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageAsync', async () => {
+  const events = []
+  const setResult = await wx.setStorage({
+    key: 'cart',
+    data: { drinkId: 'latte' },
+    success(payload) {
+      events.push('set-success:' + payload.errMsg)
+    },
+    complete(payload) {
+      events.push('set-complete:' + payload.errMsg)
+    }
+  })
+  const getResult = await wx.getStorage({
+    key: 'cart',
+    success(payload) {
+      events.push('get-success:' + payload.data.drinkId)
+    },
+    complete(payload) {
+      events.push('get-complete:' + payload.errMsg)
+    }
+  })
+  await wx.removeStorage({ key: 'cart' })
+  let missing
+  try {
+    await wx.getStorage({
+      key: 'cart',
+      fail(error) {
+        events.push('missing-fail:' + error.errMsg)
+      },
+      complete(error) {
+        events.push('missing-complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    missing = { errMsg: error.errMsg, code: error.code }
+  }
+  return {
+    content: [{ type: 'text', text: getResult.data.drinkId }],
+    structuredContent: {
+      setErrMsg: setResult.errMsg,
+      events,
+      missing
+    }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageAsync"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(did_api_call("storageAsync", json!({})))
+        .expect("call storageAsync");
+
+    assert_eq!(result.content[0].text, "latte");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("setErrMsg").and_then(|value| value.as_str()),
+        Some("setStorage:ok")
+    );
+    assert_eq!(
+        structured
+            .get("events")
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("set-success:setStorage:ok"),
+            json!("set-complete:setStorage:ok"),
+            json!("get-success:latte"),
+            json!("get-complete:getStorage:ok"),
+            json!("missing-fail:getStorage:fail invalid_options"),
+            json!("missing-complete:getStorage:fail invalid_options"),
+        ])
+    );
+    assert_eq!(
+        structured
+            .get("missing")
+            .and_then(|value| value.get("code"))
+            .and_then(|value| value.as_str()),
+        Some("invalid_options")
+    );
+}
+
+#[test]
+fn wx_storage_sync_returns_and_throws_redacted_errors() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageSync', () => {
+  wx.setStorageSync('cart', { drinkId: 'latte' })
+  const first = wx.getStorageSync('cart')
+  wx.removeStorageSync('cart')
+  let missing
+  try {
+    wx.getStorageSync('cart')
+  } catch (error) {
+    missing = { errMsg: error.errMsg, code: error.code }
+  }
+  wx.setStorageSync('cart', { drinkId: 'tea' })
+  wx.clearStorageSync()
+  let cleared
+  try {
+    wx.getStorageSync('cart')
+  } catch (error) {
+    cleared = { errMsg: error.errMsg, code: error.code }
+  }
+  let sensitive
+  try {
+    wx.setStorageSync('Authorization', 'Bearer private-token')
+  } catch (error) {
+    sensitive = {
+      errMsg: error.errMsg,
+      code: error.code,
+      leaked: JSON.stringify(error).includes('private-token') ||
+        JSON.stringify(error).includes('Authorization')
+    }
+  }
+  return {
+    content: [{ type: 'text', text: first.drinkId }],
+    structuredContent: { missing, cleared, sensitive }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageSync"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(did_api_call("storageSync", json!({})))
+        .expect("call storageSync");
+
+    assert_eq!(result.content[0].text, "latte");
+    let structured = result.structured_content.as_ref().expect("structured");
+    for field in ["missing", "cleared"] {
+        assert_eq!(
+            structured
+                .get(field)
+                .and_then(|value| value.get("errMsg"))
+                .and_then(|value| value.as_str()),
+            Some("getStorageSync:fail invalid_options")
+        );
+        assert_eq!(
+            structured
+                .get(field)
+                .and_then(|value| value.get("code"))
+                .and_then(|value| value.as_str()),
+            Some("invalid_options")
+        );
+    }
+    assert_eq!(
+        structured
+            .get("sensitive")
+            .and_then(|value| value.get("errMsg"))
+            .and_then(|value| value.as_str()),
+        Some("setStorageSync:fail permission_denied")
+    );
+    assert_eq!(
+        structured
+            .get("sensitive")
+            .and_then(|value| value.get("code"))
+            .and_then(|value| value.as_str()),
+        Some("permission_denied")
+    );
+    assert_eq!(
+        structured
+            .get("sensitive")
+            .and_then(|value| value.get("leaked"))
+            .and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn wx_storage_scope_uses_user_merchant_and_skill_without_session_id() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageScope', async (ctx) => {
+  if (ctx.arguments.mode === 'set') {
+    await wx.setStorage({ key: 'cart', data: { drinkId: ctx.arguments.drinkId } })
+  }
+  try {
+    const result = await wx.getStorage({ key: 'cart' })
+    return {
+      content: [{ type: 'text', text: result.data.drinkId }],
+      structuredContent: { drinkId: result.data.drinkId }
+    }
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: { code: error.code }
+    }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageScope"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    vm.call(scoped_api_call(
+        "coffee",
+        "session-1",
+        "storageScope",
+        "did:wba:alice.example",
+        "did:wba:merchant-a.example",
+        json!({ "mode": "set", "drinkId": "latte" }),
+    ))
+    .expect("seed storage");
+
+    let same_scope_other_session = vm
+        .call(scoped_api_call(
+            "coffee",
+            "session-2",
+            "storageScope",
+            "did:wba:alice.example",
+            "did:wba:merchant-a.example",
+            json!({ "mode": "get" }),
+        ))
+        .expect("same scope");
+    let other_user = vm
+        .call(scoped_api_call(
+            "coffee",
+            "session-1",
+            "storageScope",
+            "did:wba:bob.example",
+            "did:wba:merchant-a.example",
+            json!({ "mode": "get" }),
+        ))
+        .expect("other user");
+    let other_merchant = vm
+        .call(scoped_api_call(
+            "coffee",
+            "session-1",
+            "storageScope",
+            "did:wba:alice.example",
+            "did:wba:merchant-b.example",
+            json!({ "mode": "get" }),
+        ))
+        .expect("other merchant");
+    let other_skill = vm
+        .call(scoped_api_call(
+            "tea",
+            "session-1",
+            "storageScope",
+            "did:wba:alice.example",
+            "did:wba:merchant-a.example",
+            json!({ "mode": "get" }),
+        ))
+        .expect("other skill");
+
+    assert_eq!(same_scope_other_session.content[0].text, "latte");
+    for result in [other_user, other_merchant, other_skill] {
+        assert_eq!(result.content[0].text, "getStorage:fail invalid_options");
+        assert_eq!(
+            result
+                .structured_content
+                .as_ref()
+                .and_then(|value| value.get("code"))
+                .and_then(|value| value.as_str()),
+            Some("invalid_options")
+        );
+    }
+}
+
+#[test]
+fn wx_storage_requires_did_scope() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageScopeRequired', async () => {
+  const events = []
+  try {
+    await wx.setStorage({
+      key: 'cart',
+      data: { drinkId: 'latte' },
+      fail(error) {
+        events.push('fail:' + error.errMsg)
+      },
+      complete(error) {
+        events.push('complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: { code: error.code, events }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageScopeRequired"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new(
+            "skill",
+            "session",
+            "storageScopeRequired",
+            json!({}),
+        ))
+        .expect("call storageScopeRequired");
+
+    assert_eq!(
+        result.content[0].text,
+        "setStorage:fail provider_unavailable"
+    );
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|value| value.get("code"))
+            .and_then(|value| value.as_str()),
+        Some("provider_unavailable")
+    );
+    assert_eq!(
+        result
+            .structured_content
+            .as_ref()
+            .and_then(|value| value.get("events"))
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("fail:setStorage:fail provider_unavailable"),
+            json!("complete:setStorage:fail provider_unavailable"),
+        ])
+    );
+}
+
+#[test]
+fn wx_storage_rejects_non_json_safe_values() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageJsonSafe', async () => {
+  const cyclic = {}
+  cyclic.self = cyclic
+  const events = []
+  let asyncError
+  try {
+    await wx.setStorage({
+      key: 'cart',
+      data: cyclic,
+      fail(error) {
+        events.push('fail:' + error.errMsg)
+      },
+      complete(error) {
+        events.push('complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    asyncError = { errMsg: error.errMsg, code: error.code, reason: error.reason }
+  }
+  let syncError
+  try {
+    wx.setStorageSync('cart', function secretValue() {})
+  } catch (error) {
+    syncError = { errMsg: error.errMsg, code: error.code, reason: error.reason }
+  }
+  return {
+    content: [{ type: 'text', text: asyncError.errMsg }],
+    structuredContent: { events, asyncError, syncError }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageJsonSafe"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(did_api_call("storageJsonSafe", json!({})))
+        .expect("call storageJsonSafe");
+
+    assert_eq!(result.content[0].text, "setStorage:fail invalid_options");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured
+            .get("events")
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("fail:setStorage:fail invalid_options"),
+            json!("complete:setStorage:fail invalid_options"),
+        ])
+    );
+    assert_eq!(
+        structured
+            .get("syncError")
+            .and_then(|value| value.get("errMsg"))
+            .and_then(|value| value.as_str()),
+        Some("setStorageSync:fail invalid_options")
+    );
+}
+
+#[test]
+fn wx_storage_does_not_enter_model_visible_output_unless_returned() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storageModelVisible', async () => {
+  await wx.setStorage({ key: 'cart', data: { receipt: 'stored-secret-value' } })
+  return {
+    content: [{ type: 'text', text: 'stored' }],
+    structuredContent: { status: 'stored' }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storageModelVisible"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(did_api_call("storageModelVisible", json!({})))
+        .expect("call storageModelVisible");
+    let model_visible = serde_json::to_string(&result.model_visible()).expect("model visible");
+
+    assert_eq!(result.content[0].text, "stored");
+    assert!(!model_visible.contains("stored-secret-value"));
+    assert!(result.meta.is_none());
 }
 
 #[test]
@@ -1140,6 +1582,21 @@ fn did_api_call(api_name: &str, arguments: serde_json::Value) -> ApiCall {
     call.user_did = Some("did:wba:user.example".to_owned());
     call.agent_did = Some("did:wba:agent.example".to_owned());
     call.merchant_did = Some("did:wba:coffee-merchant.example".to_owned());
+    call
+}
+
+fn scoped_api_call(
+    skill_id: &str,
+    session_id: &str,
+    api_name: &str,
+    user_did: &str,
+    merchant_did: &str,
+    arguments: serde_json::Value,
+) -> ApiCall {
+    let mut call = ApiCall::new(skill_id, session_id, api_name, arguments);
+    call.user_did = Some(user_did.to_owned());
+    call.agent_did = Some("did:wba:agent.example".to_owned());
+    call.merchant_did = Some(merchant_did.to_owned());
     call
 }
 

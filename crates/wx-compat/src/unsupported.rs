@@ -21,64 +21,12 @@ const DEFAULT_REASON: &str = "This wx API is not supported by anp-miniapp-dock p
 const DEFAULT_SUGGESTION: &str =
     "Use an ANP merchant Agent API through wx.request or a Host-provided capability.";
 
-const STORAGE_REASON: &str = "Atomic API storage JS bridge is deferred to the scoped storage step.";
-const STORAGE_SUGGESTION: &str =
-    "Use API arguments or wait for the scoped wx storage bridge to be enabled.";
-
 const HOST_PROVIDER_REASON: &str =
     "This wx API requires an explicit Host provider and is currently fail-closed.";
 const UNSUPPORTED_BY_DESIGN_REASON: &str =
     "This wx API is outside the Agentic MiniApp Container production boundary.";
 
 pub const UNSUPPORTED_WX_APIS: &[UnsupportedApi] = &[
-    UnsupportedApi {
-        name: "getStorage",
-        kind: UnsupportedApiKind::Async,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "setStorage",
-        kind: UnsupportedApiKind::Async,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "removeStorage",
-        kind: UnsupportedApiKind::Async,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "clearStorage",
-        kind: UnsupportedApiKind::Async,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "getStorageSync",
-        kind: UnsupportedApiKind::Sync,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "setStorageSync",
-        kind: UnsupportedApiKind::Sync,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "removeStorageSync",
-        kind: UnsupportedApiKind::Sync,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
-    UnsupportedApi {
-        name: "clearStorageSync",
-        kind: UnsupportedApiKind::Sync,
-        reason: STORAGE_REASON,
-        suggestion: STORAGE_SUGGESTION,
-    },
     UnsupportedApi {
         name: "getDeviceInfo",
         kind: UnsupportedApiKind::Sync,

@@ -224,6 +224,7 @@ callback 入参和 Promise settlement value 必须是同一个脱敏 result obje
 - `key` 为空、超过大小限制、包含 NUL 或超出 runtime quota 时 fail closed。
 - storage scope 固定为 `userDid + merchantDid + skillId`，不得把 `sessionId` 作为长期 storage 隔离维度。
 - storage value 不自动进入 model-visible result；audit 只记录 key hash、size 和 redacted summary。
+- Step 01-06 已在 Atomic API VM 中实现 in-memory scoped storage bridge；生产持久化、加密、migration、backend quota 和 cleanup 仍是 Phase 4 边界。
 
 ### 8.5 Privacy / Payment / Device API
 

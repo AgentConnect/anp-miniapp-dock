@@ -79,6 +79,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | DID auth session cache 隔离、过期 refresh、clear/revoke 语义 | [`session.rs`](../../crates/anp-adapter/src/session.rs) |
 | Atomic API `wx.login` receipt、`wx.checkSession`、JS auth header fail closed、response header redaction | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
 | deterministic unsupported API stub、sync throw、nested `wx.cloud.*`、unknown root fallback、safe reason/suggestion | [`unsupported.rs`](../../crates/wx-compat/src/unsupported.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
+| Atomic API scoped storage JS bridge、sync/async shape、DID/merchant/skill scope、JSON-safe validation、model-visible 隔离 | [`storage.rs`](../../crates/wx-compat/src/storage.rs)、[`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
 | L3 payment consent 和 audit redaction | [`payment_requires_consent.rs`](../../crates/consent-audit/tests/payment_requires_consent.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) |
 | CLI/demo redaction | [`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 

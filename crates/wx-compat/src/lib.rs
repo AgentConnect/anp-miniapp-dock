@@ -15,7 +15,11 @@ pub use permissions::{Capability, CapabilityProfile, PermissionDecision, WxEnvir
 pub use request::{
     RequestBroker, UnsupportedRequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
 };
-pub use storage::{InMemoryScopedStorage, ScopedStorage, StorageError, StorageScope};
+pub use storage::{
+    InMemoryScopedStorage, ScopedStorage, StorageError, StorageScope,
+    DEFAULT_MAX_STORAGE_KEY_BYTES, DEFAULT_MAX_STORAGE_SCOPE_BYTES,
+    DEFAULT_MAX_STORAGE_VALUE_BYTES,
+};
 pub use unsupported::{
     unsupported_api, unsupported_api_registry, unsupported_api_registry_js_literal, UnsupportedApi,
     UnsupportedApiKind,
