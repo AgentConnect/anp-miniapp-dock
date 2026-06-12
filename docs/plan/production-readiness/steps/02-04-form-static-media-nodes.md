@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 21:54:59 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 22:03:40 +0800 |
+| Commit | `cc7b3b8` |
 | Review evidence | 本文 Review 环节已记录：修复 `maxlength` 等数值 props 初版以字符串输出的问题；确认新增表单节点只是 Render IR 数据，disabled 会抑制 `input` / `change` / tap event，`map-preview` 不透传精确经纬度/markers，`canvas-static` 不开放 script/touch 交互，未绕过 Orchestrator input validation、ConsentGate 或 Host provider。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime node` 7 passed under filter（lib 3 passed、wxml_bindings 4 passed）；`cargo test -p component-runtime` 40 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/dock-core docs/architecture docs/plan` 无输出；敏感词抽样仅命中本步骤精确经纬度/markers 拒绝测试、文档安全说明和既有台账文字，Render IR 不输出这些字段。 |
-| Next action | 创建 focused implementation commit，然后回填 done 状态并进入 Step 02-05 |
+| Next action | 进入 Step 02-05 Dynamic component controls |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -74,7 +74,7 @@ Step index：02-04
 - [x] Host 不支持新增 node kind 时 fallback / warning 可观测，不静默执行未知 action。
 - [x] 组件兼容矩阵和 Render IR 子文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -108,8 +108,8 @@ Step index：02-04
 - Commit 范围：只包含 P1 表单/静态媒体 node、直接 tests 和相关文档。
 - Commit 前状态：`git status --short` 包含本 Step 的 `component-runtime` node kind / compiler / event / tests、组件矩阵、Phase 2 文档、Render IR 子文档、Step 文档和主 Plan in-progress/review 记录，未发现其它 Step 完成工作。
 - 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/events.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/plan/production-readiness/steps/02-04-form-static-media-nodes.md`、`docs/plan/production-readiness-roadmap.md`。
-- Commit 后证据：待 implementation commit 后回填。
-- 遗留未提交变更：待 implementation commit 后回填。
+- Commit 后证据：实现提交 `cc7b3b8 phase2: add form static media nodes`；提交后 `git status --short --branch` = `## main...origin/main [ahead 37]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase2: add form static media nodes`
 
 ## 11. Blocked 处理
