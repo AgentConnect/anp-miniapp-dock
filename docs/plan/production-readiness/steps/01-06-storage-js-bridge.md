@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-06
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 20:22:41 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 20:43:49 +0800 |
+| Commit | `1599294` |
 | Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认 scope 使用 `userDid + merchantDid + skillId` 且不含 `sessionId`，sync/async 语义与 Step 01-01 契约一致，storage 内容不自动进入 model-visible result，未引入生产持久化承诺。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat storage` 8 passed；`cargo test -p js-runtime-quickjs storage` 6 passed；`cargo test -p js-runtime-quickjs wx_` 20 passed；`cargo test -p js-runtime-quickjs` 39 passed；`cargo test -p wx-compat` 16 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/runbook docs/security docs/plan` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过；敏感词抽样仅命中文档规则、测试假值和 redaction 断言。 |
-| Next action | 创建 Step 01-06 focused commit，然后回填 commit hash 与 done 状态 |
+| Next action | 进入 Step 01-07 Device/App Info Atomic API |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：01-06
 - [x] storage value 不自动进入模型可见输出、日志、CLI JSON、Render IR 或 audit export。
 - [x] API 矩阵和安全文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -106,10 +106,10 @@ Step index：01-06
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 storage bridge、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 24]`，包含本 Step storage bridge、直接 tests 和相关文档。
+- 纳入文件：`crates/wx-compat/src/storage.rs`、`crates/wx-compat/src/lib.rs`、`crates/wx-compat/src/unsupported.rs`、`crates/wx-compat/tests/scoped_storage.rs`、`crates/wx-compat/tests/component_permissions.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md`、`docs/plan/production-readiness/phase-1-wx-capability-broker.md`、`docs/plan/production-readiness/steps/01-06-storage-js-bridge.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：实现提交 `1599294 phase1: add storage js bridge`；提交后 `git status --short --branch` = `## main...origin/main [ahead 25]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase1: add storage js bridge`
 
 ## 11. Blocked 处理
