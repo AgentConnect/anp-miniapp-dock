@@ -230,7 +230,7 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 | 安全/敏感信息 Review | 运行敏感词扫描命中预期的测试夹具、redaction 代码、安全文档和 demo-only 文档；未发现真实 secret、真实 DID private key、真实 bearer token 或生产凭据。测试继续覆盖 CLI/demo redaction、JS auth header fail closed、response auth/token header redaction、challenge proof redaction 和 audit redaction。 |
 | 残余风险 | 首批 Step 已完成；production Host RequestBroker transport、registry allowlist、persistent request/audit store、logout/revocation list、全量 unsupported API stub、storage JS bridge、L3/L4 Host provider conformance 仍按 Phase 2/3/4/5 计划推进，不作为本次首批 Step 完成条件。 |
 | 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo run -p dock-cli -- validate examples/coffee-skill` 通过并保持 `compatibilityLevel: demo-only`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 通过。 |
-| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 17]`；本最终 Review 修改文档后将单独验证并提交最终集成 commit。 |
+| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 17]`；最终 Review 文档提交为 `636f1e9 docs: record final production readiness review`；最终台账关闭提交后 `git status --short --branch` = `## main...origin/main [ahead 19]`，且工作区无未提交变更。 |
 
 #### 2.3.9 Codex Goal 提示词
 
