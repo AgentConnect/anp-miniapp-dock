@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 10:41:43 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 10:51:58 +0800 |
+| Commit | `04448a1` |
 | Review evidence | 初审未发现需修复的安全/发布门槛内容问题；确认 planned gate 未被误写成当前已自动化，demo-only/mock 能力仍为 production release blocker |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 7]`；`git diff --check -- docs/security docs/runbook/release-gates.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-04-threat-model-release-gates.md` 无输出；安全红线抽样 `rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allowlist|fail closed" docs/security docs/runbook/release-gates.md` 命中 threat model、release gates 和 redaction 规则；README、threat model、release gates Markdown 相对链接检查无破链；release gate 命令与 `AGENTS.md` 手工核对一致 |
-| Next action | 创建 Step 00-04 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 7]`；`git diff --check -- docs/security docs/runbook/release-gates.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-04-threat-model-release-gates.md` 无输出；安全红线抽样 `rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allowlist|fail closed" docs/security docs/runbook/release-gates.md` 命中 threat model、release gates 和 redaction 规则；README、threat model、release gates Markdown 相对链接检查无破链；release gate 命令与 `AGENTS.md` 手工核对一致；post-commit `git status --short --branch` = `## main...origin/main [ahead 8]` |
+| Next action | 进入 Step 01-01 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -67,7 +67,7 @@ Step index：00-04
 - [x] release gates 包含 `cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow`。
 - [x] release gates 明确 sandbox escape、allowlist deny、redaction、token replay/scope、Render IR snapshot、Markdown link check 的启用阶段或缺口。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -97,8 +97,9 @@ Step index：00-04
 
 - Commit 时机：threat model、release gates、索引、验证、Review 完成后。
 - Commit 范围：只包含 Step 00-04 的安全/发布文档和直接索引变更。
-- Commit 前状态：记录 `git status --short`。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` 显示 `README.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/00-04-threat-model-release-gates.md` 修改，`docs/runbook/release-gates.md` 和 `docs/security/threat-model.md` 新增。
+- 纳入文件：`anp/anp-miniapp-dock/README.md`、`anp/anp-miniapp-dock/docs/security/threat-model.md`、`anp/anp-miniapp-dock/docs/runbook/release-gates.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/00-04-threat-model-release-gates.md`。
+- Commit 后证据：主产物 commit `04448a1 docs: define production security and release gates`；post-commit `git status --short --branch` = `## main...origin/main [ahead 8]`。台账关闭状态由后续小文档提交保存。
 - 建议消息：`docs: define production security and release gates`
 
 ## 11. Blocked 处理
