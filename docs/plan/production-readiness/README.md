@@ -46,6 +46,31 @@
 | 02-04 | [表单与静态媒体节点](steps/02-04-form-static-media-nodes.md) | Phase 2 form、map-preview、canvas-static Render IR nodes |
 | 02-05 | [Dynamic component controls](steps/02-05-dynamic-component-controls.md) | Phase 2 dynamic request、timer、resource cleanup |
 | 02-06 | [Fixture 与 Render IR snapshots](steps/02-06-fixtures-render-ir-snapshots.md) | Phase 2 fixtures 和 Render IR golden snapshots |
+| 03-01 | [Threat Model 与安全分级收敛](steps/03-01-threat-model-security-classification.md) | Phase 3 安全控制矩阵、L0-L4 风险分级 |
+| 03-02 | [QuickJS 沙箱逃逸回归与资源限制](steps/03-02-quickjs-sandbox-resource-limits.md) | Phase 3 API VM / Component VM sandbox gates |
+| 03-03 | [权限策略引擎与 allowlist decision](steps/03-03-permission-policy-engine-allowlist.md) | Phase 3 permission policy、Host override、network allowlist |
+| 03-04 | [DID / Token 生命周期与 Resolver 信任锚](steps/03-04-did-token-lifecycle-resolver.md) | Phase 3 token lifecycle、replay 防护、resolver trust |
+| 03-05 | [Consent Adapter 与持久化 Audit Sink](steps/03-05-consent-adapter-persistent-audit.md) | Phase 3 Host consent adapter、persistent audit |
+| 03-06 | [Skill 包完整性与供应链 Gate](steps/03-06-skill-package-integrity-supply-chain.md) | Phase 3 digest、signature、publisher DID、quarantine |
+| 04-01 | [Runtime API Facade 与版本化](steps/04-01-runtime-api-facade-versioning.md) | Phase 4 public Runtime API、version、stable error |
+| 04-02 | [IPC / SDK 形态与 Host 进程边界](steps/04-02-ipc-sdk-host-process-boundary.md) | Phase 4 IPC/headless JSON/Rust SDK boundary |
+| 04-03 | [Skill Registry / Cache 与版本回滚](steps/04-03-skill-registry-cache-versioning.md) | Phase 4 registry ref、digest cache、version rollback |
+| 04-04 | [持久化、配置与 Secret Store 边界](steps/04-04-persistence-config-secret-store.md) | Phase 4 token/storage/audit/cache persistence |
+| 04-05 | [Host Adapter Contract 与 Action Protocol](steps/04-05-host-adapter-contract-action-protocol.md) | Phase 4 Host renderer/provider/action conformance |
+| 04-06 | [并发、取消、重试与幂等策略](steps/04-06-concurrency-cancellation-idempotency.md) | Phase 4 session manager、cancel、retry、idempotency |
+| 05-01 | [CLI validate 兼容报告增强](steps/05-01-cli-validate-compatibility-report.md) | Phase 5 JSON compatibility report、release blockers |
+| 05-02 | [CLI inspect Skill package](steps/05-02-cli-inspect-skill-package.md) | Phase 5 package/API/component/permission/risk inspect |
+| 05-03 | [CLI test-skill 与 Fixture Runner](steps/05-03-cli-test-skill-fixture-runner.md) | Phase 5 fixture runner、snapshot compare、audit summary |
+| 05-04 | [CLI import-wechat-mcp](steps/05-04-cli-import-wechat-mcp.md) | Phase 5 safe import、dry-run、ANP `_meta` patch 建议 |
+| 05-05 | [CLI doctor 环境诊断](steps/05-05-cli-doctor-environment.md) | Phase 5 toolchain/DID/resolver/storage/provider diagnostics |
+| 05-06 | [示例 Skill 与兼容测试集](steps/05-06-example-skills-compatibility-fixtures.md) | Phase 5 address/media/dynamic/location examples |
+| 05-07 | [开发者文档与迁移指南](steps/05-07-developer-docs-migration-guides.md) | Phase 5 import/API/component/security/Host adapter docs |
+| 06-01 | [结构化观测事件与脱敏日志](steps/06-01-structured-observability-events.md) | Phase 6 structured events、redacted logs |
+| 06-02 | [Metrics / Tracing 与请求链路关联](steps/06-02-metrics-tracing-correlation.md) | Phase 6 metrics registry、trace propagation |
+| 06-03 | [性能基线与 Stress Tests](steps/06-03-performance-baselines-stress.md) | Phase 6 benchmarks、stress tests、baseline artifact |
+| 06-04 | [CI/CD Release Gates 自动化](steps/06-04-ci-cd-release-gates-automation.md) | Phase 6 gate runner、CI workflow、release report |
+| 06-05 | [Canary 发布、版本化与回滚策略](steps/06-05-canary-release-rollback.md) | Phase 6 release notes、canary、rollback/cache purge |
+| 06-06 | [运维 Runbook 与隐私删除流程](steps/06-06-operations-runbook-privacy-deletion.md) | Phase 6 troubleshooting、operations、privacy deletion |
 
 ## 共同 Definition of Done
 
