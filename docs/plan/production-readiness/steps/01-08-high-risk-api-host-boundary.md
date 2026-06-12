@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-08
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 20:55:30 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 21:09:39 +0800 |
+| Commit | `33591f0` |
 | Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认默认 Atomic API runtime 只接入 unavailable provider、dev-only provider 未进入 production 默认路径、ConsentGate 在 provider 前阻断、本地路径和支付密码不会回显。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat provider` 3 passed；`cargo test -p wx-compat high_risk` 2 passed；`cargo test -p js-runtime-quickjs high_risk` 3 passed；`cargo test -p wx-compat unsupported` 4 passed；`cargo test -p consent-audit -p dock-core consent` 8 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/dock-core crates/consent-audit crates/js-runtime-quickjs docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值和 redaction 断言。 |
-| Next action | 创建 Step 01-08 focused commit 后回填 commit hash，并进入 Step 02-01 |
+| Next action | 进入 Step 02-01 Render IR schemaVersion 与 fallback reason enum |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -74,7 +74,7 @@ Step index：01-08
 - [x] audit 只记录脱敏 summary、risk level 和 proof id，不保存隐私原文。
 - [x] API 矩阵、Threat Model、Release Gates 与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -111,8 +111,8 @@ Step index：01-08
 - Commit 范围：只包含高风险 API Host boundary、直接 tests 和相关文档。
 - Commit 前状态：`git status --short` 包含本 Step 高风险 Host boundary、直接 tests 和相关文档，未发现其它 Step 完成工作。
 - 纳入文件：`crates/wx-compat/src/high_risk.rs`、`crates/wx-compat/src/lib.rs`、`crates/wx-compat/src/unsupported.rs`、`crates/wx-compat/tests/high_risk_provider.rs`、`crates/wx-compat/tests/component_permissions.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/steps/01-08-high-risk-api-host-boundary.md`、`docs/plan/production-readiness-roadmap.md`。
-- Commit 后证据：待提交后记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：待提交后记录。
+- Commit 后证据：实现提交 `33591f0 phase1: add high risk api host boundary`；提交后 `git status --short --branch` = `## main...origin/main [ahead 29]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase1: add high risk api host boundary`
 
 ## 11. Blocked 处理
