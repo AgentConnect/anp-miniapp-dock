@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 10:53:13 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 10:59:18 +0800 |
+| Commit | `10db676` |
 | Review evidence | 初审未发现需修复的契约问题；确认 callback/Promise、`wx.request` HTTP status、unsupported shape、JS-provided auth header、sync API 和 redaction 均已有冻结行为 |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 9]`；`git diff --check -- docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md` 无输出；未决行为检查 `rg -n "或 resolve\\?|待确认|TODO|不确定" docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md` 无命中；脱敏检查命中 token/authorization/signature/private/credential/phone/address/fileContent 规则；契约抽样命中 HTTP response、4xx/5xx、Authorization、Signature、Promise reject、success/fail/complete、unsupported、provider_unavailable、consent_required、network_denied、invalid_options、WxApiCall、WxApiOutcome；contract 与矩阵 Markdown 链接检查无破链 |
-| Next action | 创建 Step 01-01 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 9]`；`git diff --check -- docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md` 无输出；未决行为检查 `rg -n "或 resolve\\?|待确认|TODO|不确定" docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md docs/architecture/wx-api-compatibility-matrix.md` 无命中；脱敏检查命中 token/authorization/signature/private/credential/phone/address/fileContent 规则；契约抽样命中 HTTP response、4xx/5xx、Authorization、Signature、Promise reject、success/fail/complete、unsupported、provider_unavailable、consent_required、network_denied、invalid_options、WxApiCall、WxApiOutcome；contract 与矩阵 Markdown 链接检查无破链；post-commit `git status --short --branch` = `## main...origin/main [ahead 10]` |
+| Next action | 进入 Step 01-02 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,7 +65,7 @@ Step index：01-01
 - [x] `WxApiCall` / `WxApiOutcome` 字段与 Phase 1 broker 计划一致。
 - [x] redaction 规则覆盖 token、authorization、signature、secret、private、credential、phone、address、fileContent。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -95,8 +95,9 @@ Step index：01-01
 
 - Commit 时机：contract 冻结、验证、Review 完成后。
 - Commit 范围：只包含 Step 01-01 的契约文档和直接引用更新。
-- Commit 前状态：记录 `git status --short`。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` 显示 `docs/architecture/wx-api-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md`、`docs/plan/production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md` 修改。
+- 纳入文件：`anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/phase-1-wx-api-bridge-contract.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md`。
+- Commit 后证据：主产物 commit `10db676 docs: freeze wx api bridge contract`；post-commit `git status --short --branch` = `## main...origin/main [ahead 10]`。台账关闭状态由后续小文档提交保存。
 - 建议消息：`docs: freeze wx api bridge contract`
 
 ## 11. Blocked 处理
