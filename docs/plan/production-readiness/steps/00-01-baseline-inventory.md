@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 10:05:15 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 10:16:44 +0800 |
+| Commit | `de4c3e2` |
 | Review evidence | 初审未发现需修复问题；重点复核能力未夸大、demo-only/host-boundary 已明确、证据可追踪 |
 | Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 1]`；`cargo metadata --format-version 1 --no-deps` 成功并确认 11 个 crate；`git diff --check -- docs/architecture README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-01-baseline-inventory.md` 无输出；新增基线文档 Markdown 链接手工检查无破链；状态一致性已对照 `README.md`、architecture docs、runbook 和 tests |
-| Next action | 创建 Step 00-01 focused commit 并回填 commit hash |
+| Next action | 进入 Step 00-02 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -68,7 +68,7 @@ Step index：00-01
 - [x] demo-only、host-boundary、planned 能力没有被误标为 production-ready。
 - [x] 基线文档引用的文件路径存在，Markdown 链接可解析。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -99,9 +99,9 @@ Step index：00-01
 
 - Commit 时机：本 Step 文档、基线文档、必要索引、验证和 Review 完成后。
 - Commit 范围：只包含 Step 00-01 的文档基线和索引变更。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录新增/修改文件。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short` 显示 `README.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/00-01-baseline-inventory.md` 修改，`docs/architecture/current-capability-baseline.md` 新增。
+- 纳入文件：`anp/anp-miniapp-dock/README.md`、`anp/anp-miniapp-dock/docs/architecture/current-capability-baseline.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/00-01-baseline-inventory.md`。
+- Commit 后证据：主基线 commit `de4c3e2 docs: freeze production readiness baseline`；post-commit `git status --short --branch` = `## main...origin/main [ahead 2]`。台账关闭状态由后续小文档提交保存。
 - 建议消息：`docs: freeze production readiness baseline`
 
 ## 11. Blocked 处理
