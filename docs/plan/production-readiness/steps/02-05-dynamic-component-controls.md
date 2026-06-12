@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-05
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 22:05:11 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 22:32:24 +0800 |
+| Commit | `7baca29` |
 | Review evidence | 2026-06-12 22:30:25 +0800 commit 前 Review：修复 native request bridge 全局暴露、component `wx.request` callback 语义与 Atomic API bridge 不一致、`setInterval` 退化为一次性 flush、resource-limit 缺少 focused timeout 测试；剩余 Host transport/background scheduler/persistent audit 按 Phase 4 边界记录。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime dynamic` 5 passed；`cargo test -p component-runtime sandbox` 2 passed；`cargo test -p component-runtime` 46 passed；`cargo test -p wx-compat` 22 passed；`cargo test -p anp-adapter request` 2 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/wx-compat crates/js-runtime-quickjs crates/anp-adapter docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词抽样仅命中 redaction 规则、测试假值和安全文档。 |
-| Next action | 创建 `phase2: add dynamic component controls` focused commit，并回填 commit hash / done 状态 |
+| Next action | 进入 Step 02-06 Fixture 与 Render IR snapshots |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -77,7 +77,7 @@ Step index：02-05
 - [x] dynamic audit summary 脱敏，Host background pause 若未实现则记录为 host-boundary 而非 production-ready。
 - [x] 组件兼容矩阵、Threat Model、Release Gates 与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -121,6 +121,7 @@ Commit 前记录：
 - Commit 前状态：`git status --short` 显示 `crates/component-runtime/src/component_vm.rs`、`crates/component-runtime/src/lib.rs`、`crates/component-runtime/tests/component_lifecycle.rs`、`crates/wx-compat/src/permissions.rs`、`crates/wx-compat/tests/component_permissions.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-05-dynamic-component-controls.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
 - 纳入文件：上述文件均属于 Step 02-05 dynamic component controls 的实现、测试、文档和台账。
 - 遗留未提交变更：无与本 Step 无关的已知变更。
+- Commit 后证据：实现 commit `7baca29 phase2: add dynamic component controls`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 39]`，工作区无未提交变更。
 
 ## 11. Blocked 处理
 
