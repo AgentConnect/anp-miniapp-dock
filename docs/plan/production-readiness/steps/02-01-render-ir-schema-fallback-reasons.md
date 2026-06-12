@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 21:11:25 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 21:20:27 +0800 |
+| Commit | `0cfea24` |
 | Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认所有 Component Runtime Render IR 输出带 `schemaVersion`，fallback reason 对外为稳定枚举值，旧自由字符串只在内部 normalize，未向 CLI/Host payload 泄露路径或错误细节。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime render` 5 passed；`cargo test -p component-runtime render_output_serializes_schema_version` 1 passed；`cargo test -p card-spec fallback` 1 passed；`cargo test -p dock-core fallback` 1 passed；`cargo test -p dock-cli preview_card` 2 passed；`cargo test -p card-spec -p dock-core -p component-runtime` 40 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/dock-core crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假路径和文档安全说明。 |
-| Next action | 创建 Step 02-01 focused commit 后回填 commit hash，并进入 Step 02-02 |
+| Next action | 进入 Step 02-02 Component manifest metadata runtime flow |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：02-01
 - [x] Host unknown node/action 的策略保持 fail closed 或 fallback，不静默执行。
 - [x] 组件兼容矩阵和 Phase 2 子文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -107,8 +107,8 @@ Step index：02-01
 - Commit 范围：只包含 Render IR schemaVersion、fallback reason enum、直接 tests 和相关文档。
 - Commit 前状态：`git status --short` 包含本 Step Render IR schemaVersion、fallback reason enum、直接 tests 和相关文档，未发现其它 Step 完成工作。
 - 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/src/lib.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`crates/card-spec/src/fallback.rs`、`crates/card-spec/tests/order_card.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/tests/api_call_flow.rs`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md`、`docs/plan/production-readiness-roadmap.md`。
-- Commit 后证据：待提交后记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：待提交后记录。
+- Commit 后证据：实现提交 `0cfea24 phase2: version render ir fallback reasons`；提交后 `git status --short --branch` = `## main...origin/main [ahead 31]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase2: version render ir fallback reasons`
 
 ## 11. Blocked 处理
