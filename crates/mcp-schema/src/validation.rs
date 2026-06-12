@@ -289,8 +289,8 @@ fn validate_component_permissions(
     if let Some(scope_dynamic) = &permissions.scope_dynamic {
         report.push_production_warning(
             format!("{path}.scope.dynamic"),
-            "dynamic component capability is declared but request/timer runtime support is not production-ready",
-            Some("Keep dynamic components behind explicit Host policy until Phase 2 dynamic gates are implemented."),
+            "dynamic component capability is declared and requires explicit Host production policy",
+            Some("Step 02-05 provides the runtime gate; keep production network transport, background lifecycle, and audit policy behind Host review."),
         );
 
         if !scope_dynamic.is_object() && !scope_dynamic.is_boolean() {

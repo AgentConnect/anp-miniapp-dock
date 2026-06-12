@@ -143,19 +143,21 @@ Step 02-05 已完成最小 dynamic component gate：Component VM 默认仍 deny 
 | Fixture | 覆盖能力 |
 |---|---|
 | coffee | 交易基础、列表、确认、支付、过期 |
-| address-form | input/textarea/picker、chooseAddress、L4 consent |
-| media-review | `format:image/file`、image preview、file handle |
-| dynamic-status | `scope.dynamic`、request/timer、expire cleanup |
-| location-map-preview | location provider、map preview、fallback |
+| address-form | input/textarea/picker、chooseAddress Host boundary、opaque address handle、L4 audit summary |
+| media-review | `format:image/file`、image preview、opaque file/image handle、canvas-static poster |
+| dynamic-status | `scope.dynamic`、RequestBroker request、timer flush、expire cleanup |
+| location-map-preview | location provider fail closed、opaque location token、map preview、fallback |
 
 每个 fixture 包含：
 
 - Skill package；
 - API input cases；
-- expected AtomicApiResult；
 - expected Render IR snapshot；
 - expected actions；
+- expected warnings / metadata / state；
 - expected audit summary。
+
+Step 02-06 已将这些 fixture 放入 `examples/fixtures/`，golden snapshots 放入 `testdata/render-ir/`，并由 `cargo test -p component-runtime snapshot` 与 `cargo test -p dock-cli fixture` 验证。
 
 ## 5. 测试计划
 
@@ -170,9 +172,9 @@ Step 02-05 已完成最小 dynamic component gate：Component VM 默认仍 deny 
 
 ## 6. 阶段完成检查
 
-- [ ] 组件 manifest 元数据进入 runtime。
-- [ ] P1 Component JS/WXML/WXSS 能力有测试。
-- [ ] 动态组件默认关闭，声明后受限开放。
-- [ ] Render IR schema version 已定义。
-- [ ] 至少 3 个 coffee 之外 fixture 有 snapshot。
-- [ ] `component-compatibility-matrix.md` 与实现一致。
+- [x] 组件 manifest 元数据进入 runtime。
+- [x] P1 Component JS/WXML/WXSS 能力有测试。
+- [x] 动态组件默认关闭，声明后受限开放。
+- [x] Render IR schema version 已定义。
+- [x] 至少 3 个 coffee 之外 fixture 有 snapshot。
+- [x] `component-compatibility-matrix.md` 与实现一致。

@@ -35,6 +35,8 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - `crates/demo-server`: coffee merchant Agent demo server.
 - `crates/dock-cli`: developer CLI and coffee E2E harness.
 - `examples/coffee-skill`: mock MiniApp MCP coffee Skill fixture.
+- `examples/fixtures`: mock-only compatibility fixtures for address-form, media-review, dynamic-status, and location-map-preview Render IR snapshots.
+- `testdata/render-ir`: golden Render IR snapshots for fixture regression tests.
 - `examples/coffee-fastapi-server`: Python/FastAPI localhost coffee service used to simulate a remote HTTP merchant.
 - `mac-app/AnpMiniappDockMac`: SwiftUI/Xcode chatbot host that recognizes user intent, calls the local MiniApp container, and renders Skill components.
 
@@ -53,6 +55,8 @@ Focused commands:
 
 ```bash
 cargo test -p dock-cli --test coffee_order_flow
+cargo test -p component-runtime snapshot
+cargo test -p dock-cli fixture
 cargo test -p demo-server
 cargo test -p component-runtime component_vm
 ```

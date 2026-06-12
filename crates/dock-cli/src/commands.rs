@@ -577,7 +577,7 @@ fn validate_permissions(component_reports: &[Value]) -> Value {
 
     json!({
         "dynamicComponents": dynamic_components,
-        "policy": "dynamic request/timer declarations are parsed but remain host-boundary until Phase 2 gates",
+        "policy": "dynamic request/timer declarations require Step 02-05 runtime gate plus explicit Host production policy",
     })
 }
 

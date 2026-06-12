@@ -17,6 +17,10 @@ fn skill_root() -> PathBuf {
     repo_root().join("examples/coffee-skill")
 }
 
+fn fixture_skill_root(name: &str) -> PathBuf {
+    repo_root().join("examples/fixtures").join(name)
+}
+
 async fn spawn_server(fixture: &DidFixture) -> String {
     let auth_config = ServerAuthConfig::for_tests()
         .with_trusted_did_document(fixture.did(), fixture.did_path.clone());
@@ -218,6 +222,145 @@ fn preview_card_falls_back_for_error_result() {
     assert_eq!(card["status"], "ok");
     assert_eq!(card["card"]["status"], "error");
     assert_eq!(card["card"]["fallbackReason"], "api_error");
+}
+
+#[test]
+fn fixture_skills_validate_and_preview_component_snapshots() {
+    for (fixture, api_name, component_path, input) in [
+        (
+            "address-form",
+            "prepareAddressForm",
+            "components/address-form/index",
+            json!({
+                "apiName": "prepareAddressForm",
+                "arguments": { "addressHandle": "addr_handle_demo_001" },
+                "structuredContent": {
+                    "form": {
+                        "recipient": "Demo Recipient",
+                        "note": "Use opaque address handle only",
+                        "slots": ["09:00-10:00", "10:00-11:00"],
+                        "selectedSlot": 1,
+                        "addressHandle": "addr_handle_demo_001"
+                    },
+                    "boundary": {
+                        "provider": "wx.chooseAddress",
+                        "status": "host-boundary",
+                        "consent": "required"
+                    }
+                }
+            }),
+        ),
+        (
+            "media-review",
+            "reviewMedia",
+            "components/media-review/index",
+            json!({
+                "apiName": "reviewMedia",
+                "structuredContent": {
+                    "media": {
+                        "imageHandle": "image_handle_demo_001",
+                        "fileHandle": "file_handle_demo_001",
+                        "previewImage": "https://static.example.invalid/fixtures/media-preview.png",
+                        "poster": "https://static.example.invalid/fixtures/media-poster.png"
+                    },
+                    "boundary": {
+                        "provider": "wx.chooseMedia",
+                        "status": "host-boundary",
+                        "handleType": "opaque"
+                    }
+                }
+            }),
+        ),
+        (
+            "location-map-preview",
+            "prepareLocationMap",
+            "components/location-map-preview/index",
+            json!({
+                "apiName": "prepareLocationMap",
+                "structuredContent": {
+                    "location": {
+                        "region": "mock-region-downtown",
+                        "locationToken": "location_handle_demo_001",
+                        "providerStatus": "fail-closed",
+                        "fallbackReason": "host_location_provider_required"
+                    }
+                }
+            }),
+        ),
+    ] {
+        let skill = fixture_skill_root(fixture).display().to_string();
+        let validate = cli_json(["dock-cli".to_owned(), "validate".to_owned(), skill.clone()]);
+        assert_eq!(validate["status"], "ok");
+        assert!(validate["compatibilityReport"]["apis"]
+            .as_array()
+            .expect("api reports")
+            .iter()
+            .any(|api| api["name"] == api_name && api["registered"] == true));
+        assert!(validate["compatibilityReport"]["components"]
+            .as_array()
+            .expect("component reports")
+            .iter()
+            .any(|component| component["path"] == component_path && component["loaded"] == true));
+
+        let preview = cli_json([
+            "dock-cli".to_owned(),
+            "preview-component".to_owned(),
+            skill,
+            component_path.to_owned(),
+            input.to_string(),
+        ]);
+        assert_eq!(preview["status"], "ok");
+        assert_eq!(preview["render"]["schemaVersion"], "dock.render-ir.v1");
+        assert_eq!(preview["metadata"]["componentPath"], component_path);
+        assert_eq!(preview["render"]["root"]["kind"], "view");
+    }
+
+    let dynamic_skill = fixture_skill_root("dynamic-status").display().to_string();
+    let dynamic_validate = cli_json([
+        "dock-cli".to_owned(),
+        "validate".to_owned(),
+        dynamic_skill.clone(),
+    ]);
+    assert_eq!(dynamic_validate["status"], "ok");
+    assert!(
+        dynamic_validate["compatibilityReport"]["permissions"]["dynamicComponents"]
+            .as_array()
+            .expect("dynamic components")
+            .iter()
+            .any(|component| component == "components/dynamic-status/index")
+    );
+    assert!(
+        dynamic_validate["compatibilityReport"]["permissions"]["policy"]
+            .as_str()
+            .expect("policy string")
+            .contains("Step 02-05")
+    );
+
+    let dynamic_preview = cli_json([
+        "dock-cli".to_owned(),
+        "preview-component".to_owned(),
+        dynamic_skill,
+        "components/dynamic-status/index".to_owned(),
+        json!({
+            "apiName": "refreshDynamicStatus",
+            "structuredContent": {
+                "orderId": "order_demo_001",
+                "status": "pending"
+            }
+        })
+        .to_string(),
+    ]);
+    assert_eq!(dynamic_preview["status"], "ok");
+    assert_eq!(dynamic_preview["metadata"]["dynamic"], true);
+    assert_eq!(
+        dynamic_preview["render"]["root"]["children"][2]["text"],
+        "request-denied"
+    );
+
+    let rendered = dynamic_preview.to_string();
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
+    assert!(!rendered.contains("private key"));
 }
 
 struct DidFixture {

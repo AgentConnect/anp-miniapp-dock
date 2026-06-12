@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-06
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 22:33:56 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 02-05 完成后，启动 fixture 与 Render IR snapshots |
+| Review evidence | 2026-06-12 22:56:36 +0800 commit 前 Review 已记录：修复 dynamic snapshot `brokerCalls` 取值时机和 dynamic policy 过期文案；确认 snapshots 稳定、mock-only、无禁用敏感串 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`cargo test -p mcp-schema` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；严格 fixture/snapshot 敏感串扫描无命中 |
+| Next action | 准备创建 focused implementation commit，然后回填 commit hash 并进入 Step 02-07 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -24,7 +24,7 @@ Step index：02-06
 - 结果：新增 address-form、media-review、dynamic-status、location-map-preview fixture，并建立 Render IR golden snapshots。
 - 用户 / 系统可见行为：Phase 2 P1 组件能力可以通过稳定 fixture 和 snapshot 被 CLI、tests、Host adapter 复用验证。
 - 非目标：不实现真实 Host provider、真实支付、真实文件读取或真实地图交互；fixtures 使用 mock/dev-only provider 时必须明确标识。
-- 完成标准：每个 fixture 有 Skill package、API input cases、expected Render IR snapshot、actions、warnings、audit summary 或明确的 planned gap 记录。
+- 完成标准：每个 fixture 有 Skill package、API input cases、expected Render IR snapshot、actions、warnings、metadata、state、audit summary 或明确的 planned gap 记录。
 
 ## 3. 设计方法
 
@@ -50,15 +50,16 @@ Step index：02-06
 
 | 仓库 / 模块 / 文件 | 计划变更 | 备注 |
 |---|---|---|
-| `anp/anp-miniapp-dock/examples/fixtures` | 新增 address-form、media-review、dynamic-status、location-map-preview fixture | 计划目录；若改用 tests 下目录需记录原因 |
-| `anp/anp-miniapp-dock/testdata/render-ir` | 新增 golden snapshots | 计划目录；若改用 crate-local testdata 需记录原因 |
-| `anp/anp-miniapp-dock/crates/component-runtime/tests` | snapshot runner / Render IR tests | 必须 |
-| `anp/anp-miniapp-dock/crates/dock-cli/tests` | CLI preview / fixture E2E | 视实现结果更新 |
-| `anp/anp-miniapp-dock/crates/dock-core/tests` | action -> Orchestrator -> render loop tests | 视实现结果更新 |
+| `anp/anp-miniapp-dock/examples/fixtures` | 新增 address-form、media-review、dynamic-status、location-map-preview fixture | 已采用共享 fixture 目录 |
+| `anp/anp-miniapp-dock/testdata/render-ir` | 新增 golden snapshots | 已采用共享 snapshot 目录 |
+| `anp/anp-miniapp-dock/crates/component-runtime/tests/render_ir_snapshots.rs` | snapshot runner / Render IR tests | 必须 |
+| `anp/anp-miniapp-dock/crates/dock-cli/tests/coffee_order_flow.rs` | CLI validate / preview fixture tests | 必须 |
+| `anp/anp-miniapp-dock/crates/dock-core/tests` | action -> Orchestrator -> render loop tests | 未新增；本 Step 以 component-runtime snapshot 和 CLI preview 覆盖，Orchestrator 主线已由既有 coffee E2E 覆盖 |
 | `anp/anp-miniapp-dock/docs/architecture/component-compatibility-matrix.md` | 同步 fixture/snapshot 状态 | 必须 |
 | `anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md` | 同步 fixture 覆盖的 high-risk boundary 状态 | 视实现结果更新 |
 | `anp/anp-miniapp-dock/docs/runbook/release-gates.md` | 同步 Render IR golden snapshot gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md` | 同步 fixture 目录和完成状态 | 必须 |
+| `anp/anp-miniapp-dock/README.md` | 同步 fixture / snapshot 命令入口 | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账并指向 Step 02-07 final Review gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/02-06-fixtures-render-ir-snapshots.md` | 回填状态、证据、Review、commit | 必须 |
 
@@ -70,15 +71,15 @@ Step index：02-06
 
 ## 7. 验收标准
 
-- [ ] 至少新增 address-form、media-review、dynamic-status、location-map-preview 四类 fixture，或明确记录不能新增的 blocker。
-- [ ] 每个 fixture 有 Render IR snapshot，包含 schemaVersion、root、actions、warnings 和必要 audit summary。
-- [ ] Snapshot normalization 移除随机 id、时间戳、token、signature、Authorization、private key path、本地路径和隐私原文。
-- [ ] address-form 覆盖表单节点和 address consent/provider boundary。
-- [ ] media-review 覆盖 image/file format、opaque file handle 和 media provider boundary。
-- [ ] dynamic-status 覆盖 dynamic request/timer、resource limit、expire/detach cleanup。
-- [ ] location-map-preview 覆盖 location fail closed、map-preview node 和 fallback。
-- [ ] 兼容矩阵、release gates、Phase 2 文档和 README 索引与 fixture 状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 至少新增 address-form、media-review、dynamic-status、location-map-preview 四类 fixture，或明确记录不能新增的 blocker。
+- [x] 每个 fixture 有 Render IR snapshot，包含 schemaVersion、root、actions、warnings 和必要 audit summary。
+- [x] Snapshot normalization 移除随机 id、时间戳、token、signature、Authorization、private key path、本地路径和隐私原文。
+- [x] address-form 覆盖表单节点和 address consent/provider boundary。
+- [x] media-review 覆盖 image/file format、opaque file handle 和 media provider boundary。
+- [x] dynamic-status 覆盖 dynamic request/timer、resource limit、expire/detach cleanup。
+- [x] location-map-preview 覆盖 location fail closed、map-preview node 和 fallback。
+- [x] 兼容矩阵、release gates、Phase 2 文档和 README 索引与 fixture 状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入 Step 02-07 最终 Review gate 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,6 +95,19 @@ Step index：02-06
 
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
+本次执行证据：
+
+- `cargo fmt --check`：通过。
+- `cargo test -p component-runtime snapshot`：通过，Render IR snapshot runner 和 fixture package tests 通过。
+- `cargo test -p dock-cli fixture`：通过，fixture `validate` / `preview-component` 覆盖 address-form、media-review、location-map-preview 和 dynamic-status。
+- `cargo run -p dock-cli -- validate examples/fixtures/dynamic-status`：通过，输出 `status: ok`、`compatibilityLevel: demo-only`，dynamic component 被识别并保留 production Host policy warning。
+- `rg -n "Authorization|Signature|Signature-Input|fixture-token|private key|phoneNumber|real_address|latitude|longitude|/home/|/Users/" testdata/render-ir examples/fixtures`：无命中。
+- `git diff --check -- examples testdata crates/component-runtime crates/dock-cli crates/dock-core docs/architecture docs/runbook docs/plan README.md`：无输出。
+- `cargo test --workspace`：通过。
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过。
+- `cargo test -p mcp-schema`：13 passed。
+- broad sensitive scan 命中只出现在 mock handles、redaction 规则、安全文档和计划说明；未发现真实 secret、真实 token、真实地址、手机号、精确经纬度或本机路径写入 fixture/snapshot。
+
 ## 9. Review 环节
 
 - Review 时机：fixtures、snapshots、tests、文档同步完成后、commit 前。
@@ -101,11 +115,11 @@ Step index：02-06
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录并修复 | dynamic snapshot 初版在 mount 前计算 `brokerCalls`，会把真实 broker 调用数记录为 `0`；CLI / schema dynamic policy 文案仍暗示 Phase 2 gate 未实现。 |
+| 已修复问题 | 已修复 | dynamic snapshot 改为 mount 后读取 broker 调用并断言 `brokerCalls == 1`；`mcp-schema` 与 `dock-cli` dynamic policy 文案改为 Step 02-05 runtime gate 已存在、production Host policy 仍必需。 |
+| 剩余风险 | 已记录 | 真实 Host provider、Host renderer conformance、production network transport、background scheduler 和 persistent request/audit 仍在 Phase 3/4，不由本 Step 声明 production-ready。 |
+| 新增或缺失测试 | 已补齐本 Step 范围 | 新增 `crates/component-runtime/tests/render_ir_snapshots.rs` 覆盖四类 fixtures、snapshot compare、sensitive string guard、dynamic broker call 和 expire 后拒绝事件；新增 `dock-cli` fixture validate/preview 测试。未新增 `dock-core` orchestrator 专项测试，原因是本 Step 聚焦 Render IR snapshot/CLI fixture，既有 coffee E2E 继续覆盖 action -> render 主线。 |
+| 已更新或缺失文档 | 已同步 | 更新 README、组件兼容矩阵、wx API 兼容矩阵、release gates、Phase 2 子文档、Step 文档和主 Plan 台账。 |
 
 ## 10. Commit 要求
 
@@ -116,6 +130,14 @@ Step index：02-06
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase2: add render ir fixture snapshots`
+
+Commit 前状态：`git status --short` 显示本 Step 范围内的 fixtures、snapshots、snapshot runner、CLI fixture test、dynamic policy 文案和相关文档变更；未发现无关文件。
+
+纳入文件：`examples/fixtures/`、`testdata/render-ir/`、`crates/component-runtime/tests/render_ir_snapshots.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`crates/dock-cli/src/commands.rs`、`crates/mcp-schema/src/validation.rs`、`README.md`、`docs/architecture/component-compatibility-matrix.md`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/02-06-fixtures-render-ir-snapshots.md`。
+
+Commit 后证据：待记录。
+
+遗留未提交变更：待 commit 后确认。
 
 ## 11. Blocked 处理
 

@@ -98,6 +98,22 @@ testdata/render-ir/
 
 如果暂不新增目录，也可先把 fixture 放在 owning crate tests 下，但长期应集中到 `testdata/`，便于不同 crate 共享。
 
+Step 02-06 已按该目录建议新增共享 fixture 与 golden snapshot：
+
+- `examples/fixtures/address-form`：覆盖 `input` / `textarea` / `picker`、opaque address handle 和 `wx.chooseAddress` Host boundary。
+- `examples/fixtures/media-review`：覆盖 `format: image/file`、opaque image/file handle、image preview 和 `canvas-static` poster。
+- `examples/fixtures/dynamic-status`：覆盖 `scope.dynamic`、受限 `wx.request`、timer flush、response header redaction 和 expire 后拒绝事件。
+- `examples/fixtures/location-map-preview`：覆盖 opaque location token、`map-preview` 静态节点和 location provider fail-closed。
+- `testdata/render-ir/*.json`：固定 render、actions、warnings、metadata、state 和 audit summary。
+
+Snapshot 更新必须显式运行：
+
+```bash
+ANP_DOCK_UPDATE_SNAPSHOTS=1 cargo test -p component-runtime snapshot
+```
+
+常规 release gate 使用 `cargo test -p component-runtime snapshot` 比较 golden，不自动更新。
+
 ## 7. Fallback Contract
 
 Fallback 原因枚举已收敛为：
@@ -126,6 +142,6 @@ Component Runtime
 
 - [x] Render IR 有 schema version。
 - [x] Node/action registry 文档与代码枚举一致。
-- [ ] 每个 fixture 有 snapshot。
+- [x] 每个 fixture 有 snapshot。
 - [ ] Host adapter 可以根据 contract 单独实现。
 - [x] fallback reason 可被 CLI 和 CardSpec fallback 观察。

@@ -131,6 +131,8 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 ```bash
 cargo test -p component-runtime
+cargo test -p component-runtime snapshot
+cargo test -p dock-cli fixture
 cargo test -p dock-cli --test coffee_order_flow
 ```
 
@@ -141,13 +143,13 @@ cargo test -p dock-cli --test coffee_order_flow
 - component manifest `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` 进入 redacted runtime metadata / validate report，且不进入 JS state 或 model-visible result。
 - render failure 可以 fallback 到 CardSpec，并输出稳定 fallback reason enum string。
 - dynamic 组件只有声明 `scope.dynamic` 后才注入受限 request/timer；默认 deny、auth header deny、timer limit/clear/expire cleanup 已有 focused tests。
+- address-form、media-review、dynamic-status、location-map-preview fixture packages 可被 `dock-cli validate` / `preview-component` 读取。
+- `testdata/render-ir/*.json` golden snapshots 包含 render、actions、warnings、metadata、state 和 audit summary，且不含真实 token、Authorization、signature、private key path、本机路径、手机号、真实地址、经纬度。
 
 Planned gates：
 
 | Gate | 启用阶段 |
 |---|---|
-| Render IR golden snapshots | Phase 2 |
-| address-form、media-review、dynamic-status、location-map-preview fixtures 和 snapshots | Phase 2 Step 02-06 |
 | Host renderer unknown node/action conformance | Phase 4 |
 
 ## 7. Demo-only 禁止项
