@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 11:00:47 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 11:22:56 +0800 |
+| Commit | `ec46e1f` |
 | Review evidence | 2026-06-12 11:19:23 +0800 commit 前 Review：发现并修复 CLI registration mismatch 报告测试缺口和根级 `format:file` warning path 稳定性问题；未发现阻塞问题 |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 11]`；`cargo fmt` 已运行；`cargo fmt --check` 通过；`cargo test -p mcp-schema` 13 passed；`cargo test -p skill-loader` 7 passed；`cargo test -p dock-cli validate` 2 passed；`cargo run -p dock-cli -- validate examples/coffee-skill` 输出 `status: ok`、`compatibilityLevel: demo-only` 和 `compatibilityReport.apis/components/permissions/risks/fallbacks/releaseBlockers`；`git diff --check -- crates/mcp-schema crates/skill-loader crates/dock-cli docs/architecture docs/runbook docs/plan` 无输出；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过 |
-| Next action | 创建 Step 01-02 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 11]`；`cargo fmt` 已运行；`cargo fmt --check` 通过；`cargo test -p mcp-schema` 13 passed；`cargo test -p skill-loader` 7 passed；`cargo test -p dock-cli validate` 2 passed；`cargo run -p dock-cli -- validate examples/coffee-skill` 输出 `status: ok`、`compatibilityLevel: demo-only` 和 `compatibilityReport.apis/components/permissions/risks/fallbacks/releaseBlockers`；`git diff --check -- crates/mcp-schema crates/skill-loader crates/dock-cli docs/architecture docs/runbook docs/plan` 无输出；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；post-commit `git status --short --branch` = `## main...origin/main [ahead 12]` |
+| Next action | 进入 Step 01-03 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：01-02
 - [x] 路径穿越、跨包 path、非法 componentPath fail closed。
 - [x] `wx-api-compatibility-matrix.md` 和 `component-compatibility-matrix.md` 与实现状态同步。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -110,7 +110,7 @@ Review 补充检查：
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 manifest/validate 对齐相关代码、测试和直接文档更新。
 - Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 11]`，包含 `crates/mcp-schema`、`crates/skill-loader`、`crates/dock-cli`、`docs/architecture`、`docs/runbook`、`docs/plan` 的 Step 01-02 相关改动。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 后证据：`ec46e1f`；`git status --short --branch` = `## main...origin/main [ahead 12]`。
 - 建议消息：`phase1: align skill manifest validation`
 
 ## 11. Blocked 处理
