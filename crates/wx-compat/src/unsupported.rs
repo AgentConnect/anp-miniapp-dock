@@ -28,18 +28,6 @@ const UNSUPPORTED_BY_DESIGN_REASON: &str =
 
 pub const UNSUPPORTED_WX_APIS: &[UnsupportedApi] = &[
     UnsupportedApi {
-        name: "getDeviceInfo",
-        kind: UnsupportedApiKind::Sync,
-        reason: "Atomic API device info provider is not enabled yet.",
-        suggestion: "Use component runtime device info or wait for the Atomic API host snapshot provider.",
-    },
-    UnsupportedApi {
-        name: "getAppBaseInfo",
-        kind: UnsupportedApiKind::Sync,
-        reason: "Atomic API app base info provider is not enabled yet.",
-        suggestion: "Use component runtime app info or wait for the Atomic API runtime snapshot provider.",
-    },
-    UnsupportedApi {
         name: "getAccountInfoSync",
         kind: UnsupportedApiKind::Sync,
         reason: "WeChat account identity is not exposed by this runtime.",

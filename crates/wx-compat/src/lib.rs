@@ -7,9 +7,10 @@ pub mod storage;
 pub mod unsupported;
 
 pub use model_context::{
-    notification_type_js_literal, CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink,
-    ModelContext, RelatedPage, NOTIFICATION_TYPE_EXPIRE, NOTIFICATION_TYPE_INPUT,
-    NOTIFICATION_TYPE_OVERFLOW, NOTIFICATION_TYPE_RESULT,
+    default_app_base_info_js_literal, default_device_info_js_literal, notification_type_js_literal,
+    AppBaseInfo, CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink, ModelContext,
+    RelatedPage, NOTIFICATION_TYPE_EXPIRE, NOTIFICATION_TYPE_INPUT, NOTIFICATION_TYPE_OVERFLOW,
+    NOTIFICATION_TYPE_RESULT,
 };
 pub use permissions::{Capability, CapabilityProfile, PermissionDecision, WxEnvironmentKind};
 pub use request::{

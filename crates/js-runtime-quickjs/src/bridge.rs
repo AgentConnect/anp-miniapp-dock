@@ -386,6 +386,12 @@ const wx = {
   clearStorageSync() {
     __dockSyncStorageOutcome('clearStorageSync', () => __dock.clearStorage());
   },
+  getDeviceInfo() {
+    return Object.freeze(JSON.parse(__dock.getDeviceInfo()));
+  },
+  getAppBaseInfo() {
+    return Object.freeze(JSON.parse(__dock.getAppBaseInfo()));
+  },
   modelContext: Object.freeze({
     NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),
     createSkill: __dockCreateSkill,

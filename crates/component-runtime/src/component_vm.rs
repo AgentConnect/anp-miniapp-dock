@@ -11,7 +11,9 @@ use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-use wx_compat::notification_type_js_literal;
+use wx_compat::{
+    default_app_base_info_js_literal, default_device_info_js_literal, notification_type_js_literal,
+};
 
 const COMPONENT_BOOTSTRAP_TEMPLATE: &str = r#"
 (() => {
@@ -282,10 +284,10 @@ const wx = Object.freeze({
     }
   }),
   getDeviceInfo() {
-    return Object.freeze({ platform: 'anp-miniapp-dock', model: 'component-runtime', language: 'en' });
+    return Object.freeze(__DOCK_DEVICE_INFO__);
   },
   getAppBaseInfo() {
-    return Object.freeze({ SDKVersion: '0.1.0', version: '0.1.0' });
+    return Object.freeze(__DOCK_APP_BASE_INFO__);
   }
 });
 
@@ -322,6 +324,8 @@ Object.defineProperty(globalThis, '__dockExpire', { value: __dockExpire, configu
 fn component_bootstrap() -> String {
     COMPONENT_BOOTSTRAP_TEMPLATE
         .replace("__DOCK_NOTIFICATION_TYPE__", notification_type_js_literal())
+        .replace("__DOCK_DEVICE_INFO__", default_device_info_js_literal())
+        .replace("__DOCK_APP_BASE_INFO__", default_app_base_info_js_literal())
 }
 
 #[derive(Debug, Clone)]

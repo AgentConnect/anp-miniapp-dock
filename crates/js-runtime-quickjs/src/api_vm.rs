@@ -26,8 +26,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use wx_compat::{
-    unsupported_api, CapabilityProfile, InMemoryScopedStorage, RequestBroker, ScopedStorage,
-    StorageError, StorageScope, WxMethod, WxRequest, WxRequestError, WxResponse,
+    unsupported_api, AppBaseInfo, CapabilityProfile, DeviceInfo, InMemoryScopedStorage,
+    RequestBroker, ScopedStorage, StorageError, StorageScope, WxMethod, WxRequest, WxRequestError,
+    WxResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -542,6 +543,16 @@ fn install_host_bridge<'js>(
     dock.set("clearStorage", clear_storage_fn)
         .map_err(to_quickjs_error)?;
 
+    let device_info_bridge = bridge.clone();
+    let device_info_fn = Func::from(move || device_info_bridge.device_info_json());
+    dock.set("getDeviceInfo", device_info_fn)
+        .map_err(to_quickjs_error)?;
+
+    let app_base_info_bridge = bridge.clone();
+    let app_base_info_fn = Func::from(move || app_base_info_bridge.app_base_info_json());
+    dock.set("getAppBaseInfo", app_base_info_fn)
+        .map_err(to_quickjs_error)?;
+
     let unsupported_api_fn =
         Func::from(move |api_name: String| Value::Object(unsupported_api(&api_name)).to_string());
     dock.set("unsupportedApi", unsupported_api_fn)
@@ -889,6 +900,14 @@ impl HostBridgeRuntime {
             merchant_did,
             call.skill_id.clone(),
         ))
+    }
+
+    fn device_info_json(&self) -> String {
+        serde_json::to_string(&DeviceInfo::default()).expect("device info must serialize")
+    }
+
+    fn app_base_info_json(&self) -> String {
+        serde_json::to_string(&AppBaseInfo::default()).expect("app base info must serialize")
     }
 
     fn login_json(&self) -> String {

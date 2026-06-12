@@ -267,6 +267,49 @@ Component({
 }
 
 #[test]
+fn component_vm_device_info_and_app_info_match_shared_defaults() {
+    let root = write_component(
+        "device-info",
+        r#"
+Component({
+  data: { platform: '', model: '', sdk: '', version: '', leaked: false },
+  lifetimes: {
+    created() {
+      const device = wx.getDeviceInfo()
+      const app = wx.getAppBaseInfo()
+      this.setData({
+        platform: device.platform,
+        model: device.model,
+        sdk: app.SDKVersion,
+        version: app.version,
+        leaked: JSON.stringify({ device, app }).includes('deviceId') ||
+          JSON.stringify({ device, app }).includes('localIp') ||
+          JSON.stringify({ device, app }).includes('credential')
+      })
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ platform }}</text><text>{{ model }}</text><text>{{ sdk }}</text><text>{{ version }}</text><text>{{ leaked }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let mut instance = ComponentInstance::new(package).expect("create vm");
+
+    let outcome = instance
+        .mount(ComponentInput::new("searchDrinks"))
+        .expect("mount");
+
+    assert_eq!(
+        outcome.state.get("platform"),
+        Some(&json!("anp-miniapp-dock"))
+    );
+    assert_eq!(outcome.state.get("model"), Some(&json!("host-runtime")));
+    assert_eq!(outcome.state.get("sdk"), Some(&json!("0.1.0")));
+    assert_eq!(outcome.state.get("version"), Some(&json!("0.1.0")));
+    assert_eq!(outcome.state.get("leaked"), Some(&json!(false)));
+}
+
+#[test]
 fn properties_are_available_to_component_instance() {
     let root = write_component(
         "properties",

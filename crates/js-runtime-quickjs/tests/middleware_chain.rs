@@ -1049,6 +1049,147 @@ module.exports = skill
 }
 
 #[test]
+fn wx_device_and_app_info_sync_apis_return_minimized_frozen_snapshots() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('info', () => {
+  const device = wx.getDeviceInfo()
+  const app = wx.getAppBaseInfo()
+  let mutationBlocked = false
+  try {
+    device.deviceId = 'fingerprint'
+  } catch (_error) {
+    mutationBlocked = true
+  }
+  const mutationPersisted = device.deviceId === 'fingerprint'
+  return {
+    content: [{ type: 'text', text: device.platform + '/' + app.version }],
+    structuredContent: {
+      device,
+      app,
+      deviceFrozen: Object.isFrozen(device),
+      appFrozen: Object.isFrozen(app),
+      mutationBlocked,
+      mutationPersisted,
+      leaked: JSON.stringify({ device, app }).includes('fingerprint') ||
+        JSON.stringify({ device, app }).includes('credential') ||
+        JSON.stringify({ device, app }).includes('localIp') ||
+        JSON.stringify({ device, app }).includes('mac')
+    }
+  }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["info"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "info", json!({})))
+        .expect("call info");
+
+    assert_eq!(result.content[0].text, "anp-miniapp-dock/0.1.0");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured
+            .get("device")
+            .and_then(|value| value.get("platform"))
+            .and_then(|value| value.as_str()),
+        Some("anp-miniapp-dock")
+    );
+    assert_eq!(
+        structured
+            .get("device")
+            .and_then(|value| value.get("model"))
+            .and_then(|value| value.as_str()),
+        Some("host-runtime")
+    );
+    assert_eq!(
+        structured
+            .get("app")
+            .and_then(|value| value.get("SDKVersion"))
+            .and_then(|value| value.as_str()),
+        Some("0.1.0")
+    );
+    assert_eq!(
+        structured
+            .get("deviceFrozen")
+            .and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        structured
+            .get("appFrozen")
+            .and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        structured
+            .get("mutationBlocked")
+            .and_then(|value| value.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        structured
+            .get("mutationPersisted")
+            .and_then(|value| value.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+    for forbidden in [
+        "deviceId",
+        "localIp",
+        "mac",
+        "advertisingId",
+        "account",
+        "credentialPath",
+    ] {
+        assert!(
+            structured
+                .get("device")
+                .and_then(|value| value.get(forbidden))
+                .is_none(),
+            "{forbidden} must not be exposed in Atomic API device info"
+        );
+    }
+}
+
+#[test]
+fn wx_device_info_is_not_overwritten_by_unsupported_registry() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('infoType', () => ({
+  content: [{ type: 'text', text: [
+    typeof wx.getDeviceInfo,
+    typeof wx.getAppBaseInfo,
+    wx.getDeviceInfo().model,
+    wx.getAppBaseInfo().version
+  ].join(',') }]
+}))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["infoType"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "infoType", json!({})))
+        .expect("call infoType");
+
+    assert_eq!(
+        result.content[0].text,
+        "function,function,host-runtime,0.1.0"
+    );
+}
+
+#[test]
 fn unsupported_nested_wx_api_is_available() {
     let skill = test_skill(
         r#"

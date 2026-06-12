@@ -1,6 +1,6 @@
 use wx_compat::{
-    unsupported_api, unsupported_api_registry, Capability, CapabilityProfile, CardEvent,
-    InMemoryCardEventSink, ModelContext, RequestBroker, UnsupportedApiKind,
+    unsupported_api, unsupported_api_registry, AppBaseInfo, Capability, CapabilityProfile,
+    CardEvent, DeviceInfo, InMemoryCardEventSink, ModelContext, RequestBroker, UnsupportedApiKind,
     UnsupportedRequestBroker, WxRequest, WxRequestError,
 };
 
@@ -82,6 +82,49 @@ fn model_context_records_card_expiration_events() {
 }
 
 #[test]
+fn device_and_app_info_defaults_are_minimized() {
+    let context = ModelContext::new(
+        "session-1",
+        "coffee",
+        "did:example:alice",
+        "did:example:merchant",
+    );
+
+    assert_eq!(
+        context.get_device_info(),
+        DeviceInfo {
+            platform: "anp-miniapp-dock".to_owned(),
+            model: "host-runtime".to_owned(),
+            language: "en".to_owned(),
+        }
+    );
+    assert_eq!(
+        context.get_app_base_info(),
+        AppBaseInfo {
+            sdk_version: "0.1.0".to_owned(),
+            version: "0.1.0".to_owned(),
+        }
+    );
+
+    let device_json = serde_json::to_value(context.get_device_info()).expect("device json");
+    for forbidden in [
+        "deviceId",
+        "device_id",
+        "mac",
+        "localIp",
+        "local_ip",
+        "advertisingId",
+        "account",
+        "credentialPath",
+    ] {
+        assert!(
+            device_json.get(forbidden).is_none(),
+            "{forbidden} must not be exposed in default device info"
+        );
+    }
+}
+
+#[test]
 fn unsupported_wx_apis_have_explicit_fail_shape() {
     let payment = unsupported_api("requestPayment");
 
@@ -116,6 +159,8 @@ fn unsupported_registry_marks_sync_and_async_apis() {
     assert!(registry
         .iter()
         .any(|api| api.name == "wx.cloud.callFunction"));
+    assert!(!registry.iter().any(|api| api.name == "getDeviceInfo"));
+    assert!(!registry.iter().any(|api| api.name == "getAppBaseInfo"));
 }
 
 #[test]

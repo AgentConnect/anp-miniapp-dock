@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-07
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 20:45:17 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 01-06 完成后，启动 device/app info Atomic API；若 Step 01-06 blocked，可按主 Plan Blocked 规则串行跳转到本 Step |
+| Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认 Atomic API 与 Component VM 使用 `wx-compat` shared defaults，字段最小化，不返回真实设备指纹或 Host credential 信息，sync API 不返回 Promise。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs info` 2 passed；`cargo test -p wx-compat device` 1 passed；`cargo test -p component-runtime` 26 passed；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/component-runtime docs/architecture docs/plan docs/runbook` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过；敏感字段抽样仅命中文档红线、测试假值、禁用字段断言和既有 redaction 代码。 |
+| Next action | 创建 Step 01-07 focused commit，然后回填 commit hash 与 done 状态 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：01-07
 
 ## 7. 验收标准
 
-- [ ] Atomic API VM 支持 `wx.getDeviceInfo()` 和 `wx.getAppBaseInfo()` 同步调用。
-- [ ] 返回字段最小化且 deterministic，缺省 headless 环境不返回真实设备指纹。
-- [ ] Atomic API 与 Component VM 的 runtime/app info 字段不漂移，已有测试或共用 helper。
-- [ ] 不返回 local IP、MAC、device id、广告标识、Host 账号、credential path 或私钥路径。
-- [ ] API 矩阵与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Atomic API VM 支持 `wx.getDeviceInfo()` 和 `wx.getAppBaseInfo()` 同步调用。
+- [x] 返回字段最小化且 deterministic，缺省 headless 环境不返回真实设备指纹。
+- [x] Atomic API 与 Component VM 的 runtime/app info 字段不漂移，已有测试或共用 helper。
+- [x] 不返回 local IP、MAC、device id、广告标识、Host 账号、credential path 或私钥路径。
+- [x] API 矩阵与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -77,11 +77,13 @@ Step index：01-07
 | 检查项 | 命令 / 方法 | 预期证据 |
 |---|---|---|
 | 格式 | `cd anp/anp-miniapp-dock && cargo fmt --check` | 通过 |
-| Focused VM tests | `cd anp/anp-miniapp-dock && cargo test -p js-runtime-quickjs info` | Atomic API device/app info tests 通过；若 filter 不匹配，记录实际命令 |
-| Compat tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat device` | helper / redaction tests 通过 |
-| Component 回归 | `cd anp/anp-miniapp-dock && cargo test -p component-runtime` | Component VM 现有 device/app info 不回归 |
-| 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/component-runtime docs/architecture docs/plan` | 无空白错误 |
-| 敏感字段抽样 | 手工检查返回 JSON 和测试 fixture | 不含真实设备指纹或 Host credential 信息 |
+| Focused VM tests | `cd anp/anp-miniapp-dock && cargo test -p js-runtime-quickjs info` | 2 passed，覆盖 Atomic API device/app info 同步返回、冻结对象和 unsupported registry 不覆盖 |
+| Compat tests | `cd anp/anp-miniapp-dock && cargo test -p wx-compat device` | 1 passed，覆盖 shared defaults 最小字段和 forbidden field 缺失 |
+| Component 回归 | `cd anp/anp-miniapp-dock && cargo test -p component-runtime` | 26 passed，包含组件 VM 与 shared defaults 防漂移测试 |
+| 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/component-runtime docs/architecture docs/plan docs/runbook` | 无输出 |
+| 敏感字段抽样 | 手工检查返回 JSON 和测试 fixture | 敏感字段扫描仅命中文档红线、测试假值、禁用字段断言和既有 redaction 代码 |
+
+补充验证：`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
@@ -92,11 +94,11 @@ Step index：01-07
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 未发现阻塞问题 | Review 覆盖字段最小化、指纹风险、Atomic/Component 防漂移和 sync API 行为。 |
+| 已修复问题 | 修复组件 VM 与 Atomic API 默认 `model` 字段漂移；移除 `getDeviceInfo` / `getAppBaseInfo` 的 unsupported registry 条目；测试中改为验证冻结对象写入不生效而非依赖非 strict assignment 抛异常。 | focused tests 已覆盖。 |
+| 剩余风险 | 真实 Host 可覆盖字段、provider policy 和 conformance tests 仍在 Phase 4；本 Step 仅提供 deterministic headless/runtime default snapshot。 | API 矩阵已记录 Phase 4 边界。 |
+| 新增或缺失测试 | 新增 `wx-compat` shared defaults test、Atomic VM info tests 和 component-runtime 防漂移测试；未新增真实 Host provider test。 | Host provider 不属于 01-07。 |
+| 已更新或缺失文档 | 已更新 API 兼容矩阵、release gates、本 Step 和主 Plan 台账。 | 未更新 Host adapter 文档，留到 Phase 4。 |
 
 ## 10. Commit 要求
 
