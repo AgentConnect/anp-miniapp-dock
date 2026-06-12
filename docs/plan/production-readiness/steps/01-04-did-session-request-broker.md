@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 11:47:39 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 12:23:36 +0800 |
+| Commit | `e9cbdbe` |
 | Review evidence | commit 前 Review 已完成：发现并修复 `wx.*` callback exception 会改变原始 Promise outcome、跳过 `complete` 的契约问题；确认 token 只在 Host/runtime 边界，JS auth header fail closed，response auth/token headers 已脱敏；production Host RequestBroker transport 和 persistent audit 按 Phase 4 残余风险记录 |
 | Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 15]`；`cargo fmt --check` 通过；`cargo test -p anp-adapter session` 8 passed；`cargo test -p js-runtime-quickjs wx_login` 3 passed；`cargo test -p js-runtime-quickjs check_session` 2 passed；`cargo test -p js-runtime-quickjs wx_request` 3 passed；`cargo test -p js-runtime-quickjs wx_callback_exception` 1 passed；`cargo test -p js-runtime-quickjs model_context_expire_all_cards` 4 passed；`cargo test -p js-runtime-quickjs` 28 passed；`cargo test -p anp-adapter` 41 passed；`cargo test -p wx-compat` 9 passed；`cargo test -p demo-server token` 4 passed under filter；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/js-runtime-quickjs crates/wx-compat crates/dock-core crates/demo-server crates/dock-cli examples/coffee-fastapi-server docs/architecture docs/runbook docs/security docs/plan` 无输出 |
-| Next action | 创建 Step 01-04 focused commit，并回填 commit hash 与 done 状态 |
+| Next action | 返回主 Plan 检查是否触发最终全局 Review |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -80,7 +80,7 @@ Step index：01-04
 - [x] CLI/log/audit/JS result 不含 capability token、Authorization、HTTP signature、private key path。
 - [x] API 矩阵、release gates/runbook 与实现状态同步。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -132,7 +132,7 @@ Step index：01-04
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 DID session/request broker 收敛相关代码、tests 和直接文档更新。
 - Commit 前状态：`git status --short` 包含 `crates/anp-adapter/src/lib.rs`、`crates/anp-adapter/src/session.rs`、`crates/anp-adapter/src/signed_request.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`crates/wx-compat/src/request.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-1-did-request-session-manager.md`、`docs/plan/production-readiness/steps/01-04-did-session-request-broker.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
-- Commit 后证据：待记录 commit hash 和 `git status --short --branch`。
+- Commit 后证据：`e9cbdbe`；`git status --short --branch` = `## main...origin/main [ahead 16]`。
 - 建议消息：`phase1: add did session request broker`
 
 ## 11. Blocked 处理
