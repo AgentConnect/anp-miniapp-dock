@@ -1,6 +1,6 @@
 # wx API 兼容矩阵
 
-> 状态：Phase 0 API 矩阵初版
+> 状态：Phase 1 API 矩阵，已记录 Step 01-05 deterministic unsupported stub 覆盖
 > 日期：2026-06-12
 > 范围：基于小程序 MCP 本地参考和当前能力基线，标注 `wx.modelContext` 与关键 `wx.*` API 的当前状态、目标阶段、运行时映射、安全边界和验证证据。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 00-02。
@@ -64,7 +64,7 @@
 | 网络状态 | `wx.getNetworkType` | 原子接口 | `planned-p2` | Phase 1.5/2 | Host snapshot provider，headless 可返回 deterministic fallback。 | L1 | `wx-compat`、Host adapter | Phase 1 冻结 | 待新增 | 不应暴露过多设备隐私。 |
 | 网络状态 | `wx.onNetworkStatusChange` / `wx.offNetworkStatusChange` | 原子接口 | `planned-p2` | Phase 2/4 | Host listener；无 Host 时 deterministic unsupported。 | L1 | Host adapter | callback listener | 待新增 | headless 环境可 no-op fail closed。 |
 | 网络状态 | `wx.onNetworkWeakChange` / `wx.offNetworkWeakChange` | 原子接口 | `planned-p2` | Phase 2/4 | Host listener；仅作为提示，不影响业务正确性。 | L1 | Host adapter | callback listener | 待新增 | 可后置。 |
-| 网络状态 | `wx.getLocalIPAddress` | 原子接口 | `unsupported-by-design` | 无 | 本地 IP 属于设备/网络隐私，Agentic MiniApp Container 默认不暴露。 | L4 | `wx-compat` unsupported stub | fail callback + rejected Promise | 待 unsupported matrix test | 如业务需要，应由 Host provider 返回最小化网络状态，不返回 IP。 |
+| 网络状态 | `wx.getLocalIPAddress` | 原子接口 | `unsupported-by-design` | 无 | 本地 IP 属于设备/网络隐私，Agentic MiniApp Container 默认不暴露；Step 01-05 已注入 deterministic unsupported stub。 | L4 | `wx-compat` unsupported stub | fail callback + rejected Promise | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) | 如业务需要，应由 Host provider 返回最小化网络状态，不返回 IP。 |
 | Storage | `wx.getStorage` / `wx.setStorage` / `wx.removeStorage` / `wx.clearStorage` | 原子接口、组件 | `host-boundary` | Phase 1 | Scoped storage，scope = `userDid + merchantDid + skillId`；JS bridge 待注入。 | L2 | `wx-compat`、`js-runtime-quickjs` | async callback/Promise | [`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs) | 当前 Rust in-memory storage 无 JS API；`clearStorage` 还需 trait 扩展。 |
 | Storage sync | `wx.getStorageSync` / `wx.setStorageSync` / `wx.removeStorageSync` / `wx.clearStorageSync` | 原子接口、组件 | `planned-p1` | Phase 1 | 同上，提供同步 JS wrapper；错误语义需 Step 01-01 冻结。 | L2 | `wx-compat`、`js-runtime-quickjs` | sync | [`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs) | 协议参考列出 `getStorageSync` / `setStorageSync`，remove/clear sync 按微信常见语义纳入。 |
 | Storage info/batch | `wx.getStorageInfo` / `wx.batchGetStorage` / `wx.batchSetStorage` | 原子接口、组件 | `planned-p2` | Phase 1.5/2 | Storage broker 批量查询；必须做 key/value size limit。 | L2 | `wx-compat` | callback/Promise | 待新增 | 不进入 P1 最小闭环。 |
@@ -86,10 +86,10 @@
 | 上传/下载 | `wx.uploadFile` / `wx.downloadFile` | 原子接口；`downloadFile` 组件协议支持 | `planned-p2` | Phase 2/4 | File broker + RequestBroker + opaque file handle；不暴露路径。 | L4 | `wx-compat`、`anp-adapter`、Host file provider | callback/Promise | 待新增 | 比 `wx.request` 晚一阶段实现。 |
 | 文件 | `wx.openDocument` | 原子接口、组件 | `host-boundary` | Phase 2/4 | Host document viewer，输入必须是 opaque handle 或 trusted URL。 | L4 | Host adapter | callback/Promise | 待新增 | 禁止本地任意文件路径。 |
 | 图片 | `wx.getImageInfo` | 原子接口 | `planned-p2` | Phase 2/4 | Host/media broker 读取 image handle 元数据。 | L4 | Host media provider | callback/Promise | 待新增 | 不读取任意 URL/路径。 |
-| 图片 | `wx.saveImageToPhotosAlbum` | 原子接口 | `unsupported-by-design` | 无 | 写入用户相册属于强宿主 UI 能力，默认不由容器执行。 | L4 | unsupported stub | fail callback + rejected Promise | 待 unsupported test | 生产 Host 可另行提供显式用户操作。 |
-| 支付 | `wx.requestPayment` | 原子接口 | `planned-p1` | Phase 1/3 | Payment Intent + ConsentGate + merchant API；不复刻微信收银台。 | L3 | `consent-audit`、`dock-core`、merchant adapter | callback/Promise | [`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) 覆盖 consent；需新增 wx API test | coffee `payOrder` 是 mock business API，不是 `wx.requestPayment`。 |
+| 图片 | `wx.saveImageToPhotosAlbum` | 原子接口 | `unsupported-by-design` | 无 | 写入用户相册属于强宿主 UI 能力，默认不由容器执行；Step 01-05 已注入 deterministic unsupported stub。 | L4 | unsupported stub | fail callback + rejected Promise | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) registry 覆盖 | 生产 Host 可另行提供显式用户操作。 |
+| 支付 | `wx.requestPayment` | 原子接口 | `planned-p1` | Phase 1/3 | Payment Intent + ConsentGate + merchant API；不复刻微信收银台；Step 01-05 之前未配置 provider 时先 fail closed 为 deterministic unsupported stub，真实 Host boundary 留到 Step 01-08。 | L3 | `consent-audit`、`dock-core`、merchant adapter；`wx-compat` unsupported stub | callback/Promise | [`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) 覆盖 consent；[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) 覆盖当前 unsupported stub | coffee `payOrder` 是 mock business API，不是 `wx.requestPayment`。 |
 | 支付 | `wx.requestVirtualPayment` / `wx.requestJointPayment` | 原子接口 | `planned-p2` | Phase 3/4 | Payment Intent 子类型；必须接入 provider 和 audit。 | L3 | payment provider、`consent-audit` | callback/Promise | 待新增 | 先完成 `requestPayment`。 |
-| 支付 | `wx.verifyPaymentPassword` | 原子接口 | `unsupported-by-design` | 无 | 不接触用户支付密码；由真实支付 provider/Host 处理。 | L4 | unsupported stub | fail callback + rejected Promise | 待 unsupported test | 不允许容器采集密码。 |
+| 支付 | `wx.verifyPaymentPassword` | 原子接口 | `unsupported-by-design` | 无 | 不接触用户支付密码；由真实支付 provider/Host 处理；Step 01-05 已注入 deterministic unsupported stub。 | L4 | unsupported stub | fail callback + rejected Promise | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) registry 覆盖 | 不允许容器采集密码。 |
 | 支付业务视图 | `wx.openPublicServicePayment` / `wx.openBusinessView` payment variants | 原子接口 | `unsupported-by-design` | 无 | 微信特定业务视图不复刻；应映射为 merchant Agent API 或 Host native flow。 | L3/L4 | unsupported stub | fail callback + rejected Promise | 待 unsupported test | 包括 public service payment、trafficInvestList、wxpayPapayIndex、wxpayScore。 |
 | 订阅消息 | `wx.requestSubscribeMessage` | 原子接口 | `planned-p2` | Phase 4 | Host notification permission provider + consent/audit。 | L4 | Host adapter、`consent-audit` | callback/Promise | 待新增 | 不阻塞交易闭环。 |
 | 分享 | `wx.shareAppMessage` | 原子接口、组件 tap 回调 | `host-boundary` | Phase 4/5 | Host share sheet provider；组件必须来自用户点击。 | L3 | Host adapter | callback/Promise | 待新增 | headless 默认 unsupported。 |
@@ -97,12 +97,12 @@
 | 设备 | `wx.scanCode` | 原子接口 | `planned-p1` | Phase 1/4 | Host scan provider + consent/audit；返回最小化结果。 | L4 | Host adapter、`consent-audit` | callback/Promise | 待新增 | headless fail closed。 |
 | 界面 | `wx.showToast` / `wx.hideToast` | 原子组件 | `host-boundary` | Phase 2/4 | Host renderer UI affordance；headless no-op 或 unsupported。 | L0 | Host renderer | callback/Promise | 待新增 | 不应影响业务状态。 |
 | 加密 | `wx.getUserCryptoManager` | 原子接口 | `planned-p2` | Phase 3/4 | 可映射为 ANP/Host crypto provider，但不暴露私钥。 | L4 | `anp-adapter`、Host crypto provider | sync/object | 待新增 | 需 threat model 后再实现。 |
-| 人脸核身 | `wx.startFacialRecognitionVerify` / `wx.startFacialRecognitionVerifyAndUploadVideo` | 原子接口 | `unsupported-by-design` | 无 | 生物识别与视频上传超出容器边界；只能由合规 Host/provider 单独实现。 | L4 | unsupported stub | fail callback + rejected Promise | 待 unsupported test | 不在默认产品范围。 |
-| 城市服务/发票/微信运动 | `wx.openBusinessView businessType=wxCityWxpayAuth` / `wx.chooseInvoiceTitle` / `wx.chooseInvoice` / `wx.getWeRunData` | 原子接口 | `unsupported-by-design` | 无 | 微信生态专属能力，不复刻。 | L4 | unsupported stub | fail callback + rejected Promise | 待 unsupported test | 业务应改为 merchant Agent API 或 Host capability。 |
+| 人脸核身 | `wx.startFacialRecognitionVerify` / `wx.startFacialRecognitionVerifyAndUploadVideo` | 原子接口 | `unsupported-by-design` | 无 | 生物识别与视频上传超出容器边界；只能由合规 Host/provider 单独实现；Step 01-05 已注入 deterministic unsupported stub。 | L4 | unsupported stub | fail callback + rejected Promise | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) registry 覆盖 | 不在默认产品范围。 |
+| 城市服务/发票/微信运动 | `wx.openBusinessView businessType=wxCityWxpayAuth` / `wx.chooseInvoiceTitle` / `wx.chooseInvoice` / `wx.getWeRunData` | 原子接口 | `unsupported-by-design` | 无 | 微信生态专属能力，不复刻；Step 01-05 已为列入 registry 的发票/运动 API 注入 deterministic unsupported stub。 | L4 | unsupported stub | fail callback + rejected Promise | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) registry 覆盖 | 业务应改为 merchant Agent API 或 Host capability。 |
 
 ## 5. 大类 unsupported / deferred 覆盖
 
-协议参考中的下列长尾 API 不进入 P1，必须提供 deterministic unsupported stub 或清晰 Host boundary。后续若要支持，必须先更新本矩阵、threat model 和 Step 文档。
+协议参考中的下列长尾 API 不进入 P1，必须提供 deterministic unsupported stub 或清晰 Host boundary。Step 01-05 已把 P1 deferred、unsupported-by-design 和代表性长尾 API 纳入 `wx-compat` registry，并由 Atomic API VM 注入 async/sync stub；真实 provider 状态仍按上表保持 `planned-*`、`host-boundary` 或 `unsupported-by-design`。后续若要支持，必须先更新本矩阵、threat model 和 Step 文档。
 
 | category | protocol APIs | status | reason / suggestion |
 |---|---|---|---|
@@ -123,6 +123,7 @@
 ```json
 {
   "errMsg": "wx.cloud.callFunction:fail unsupported",
+  "code": "unsupported",
   "reason": "wx.cloud.* is unsupported by anp-miniapp-dock production runtime",
   "suggestion": "Expose this capability as a merchant Agent API and call it through wx.request"
 }
@@ -133,7 +134,7 @@
 | owner | 证据 |
 |---|---|
 | `js-runtime-quickjs` | [`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs)、[`register_api.rs`](../../crates/js-runtime-quickjs/tests/register_api.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
-| `wx-compat` | [`permissions.rs`](../../crates/wx-compat/src/permissions.rs)、[`request.rs`](../../crates/wx-compat/src/request.rs)、[`storage.rs`](../../crates/wx-compat/src/storage.rs)、[`model_context.rs`](../../crates/wx-compat/src/model_context.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs) |
+| `wx-compat` | [`permissions.rs`](../../crates/wx-compat/src/permissions.rs)、[`request.rs`](../../crates/wx-compat/src/request.rs)、[`unsupported.rs`](../../crates/wx-compat/src/unsupported.rs)、[`storage.rs`](../../crates/wx-compat/src/storage.rs)、[`model_context.rs`](../../crates/wx-compat/src/model_context.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`scoped_storage.rs`](../../crates/wx-compat/tests/scoped_storage.rs) |
 | `anp-adapter` | [`challenge.rs`](../../crates/anp-adapter/src/challenge.rs)、[`token.rs`](../../crates/anp-adapter/src/token.rs)、[`signed_request.rs`](../../crates/anp-adapter/src/signed_request.rs)、[`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | `dock-core` / `consent-audit` | [`orchestrator.rs`](../../crates/dock-core/src/orchestrator.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs)、[`consent.rs`](../../crates/consent-audit/src/consent.rs)、[`payment_requires_consent.rs`](../../crates/consent-audit/tests/payment_requires_consent.rs) |
 | `component-runtime` | [`component_vm.rs`](../../crates/component-runtime/src/component_vm.rs)、[`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`wxml_bindings.rs`](../../crates/component-runtime/tests/wxml_bindings.rs) |

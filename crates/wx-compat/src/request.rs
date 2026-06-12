@@ -1,6 +1,6 @@
 use crate::permissions::{Capability, CapabilityProfile, PermissionDecision};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -90,17 +90,4 @@ impl RequestBroker for UnsupportedRequestBroker {
             PermissionDecision::Deny { reason, .. } => Err(WxRequestError::Denied(reason)),
         }
     }
-}
-
-pub fn unsupported_api(name: &str) -> Map<String, Value> {
-    let mut value = Map::new();
-    value.insert(
-        "errMsg".to_owned(),
-        Value::String(format!("{name}:unsupported")),
-    );
-    value.insert(
-        "reason".to_owned(),
-        Value::String("mapped to ANP runtime or later integration step".to_owned()),
-    );
-    value
 }

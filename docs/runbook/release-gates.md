@@ -78,6 +78,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | token scope isolation、HTTP Signature fallback、401 retry | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | DID auth session cache 隔离、过期 refresh、clear/revoke 语义 | [`session.rs`](../../crates/anp-adapter/src/session.rs) |
 | Atomic API `wx.login` receipt、`wx.checkSession`、JS auth header fail closed、response header redaction | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
+| deterministic unsupported API stub、sync throw、nested `wx.cloud.*`、unknown root fallback、safe reason/suggestion | [`unsupported.rs`](../../crates/wx-compat/src/unsupported.rs)、[`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
 | L3 payment consent 和 audit redaction | [`payment_requires_consent.rs`](../../crates/consent-audit/tests/payment_requires_consent.rs)、[`api_call_flow.rs`](../../crates/dock-core/tests/api_call_flow.rs) |
 | CLI/demo redaction | [`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 
@@ -95,7 +96,6 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 | Gate | 启用阶段 | 当前处理 |
 |---|---|---|
-| deterministic unsupported API stub 覆盖所有未实现 `wx.*` | Step 01-01 / Phase 1 | API 矩阵记录为 planned |
 | production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；demo-only localhost transport 仍不得 production release |
 | sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | Phase 3 | 当前由分散测试覆盖基础项 |
 | token refresh/revoke/logout、jti replay、DID resolver trust anchor | Phase 3/4 | 当前 only TTL/scope/challenge proof |

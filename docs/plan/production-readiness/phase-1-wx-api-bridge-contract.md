@@ -291,9 +291,9 @@ callback 入参和 Promise settlement value 必须是同一个脱敏 result obje
 
 - [x] Step 01-04 覆盖的 `wx.login` / `wx.checkSession` / `wx.request` / `modelContext.expireAllCards` 已从统一 async wrapper 入口进入 Rust；后续新增 API 仍必须沿用本契约。
 - [x] Step 01-04 覆盖的 async API callback 与 Promise 有测试。
-- [ ] unsupported API 不抛 JS TypeError，而是稳定 fail。
-- [x] Step 01-04 覆盖的 login/request/session 错误输出通过 redaction test；全量 provider 和 unsupported stub 的 redaction 仍以后续 Step 补齐。
+- [x] Step 01-05 覆盖的 unsupported API 不抛 JS TypeError，而是稳定 fail；包括 async callback/Promise reject、sync throw、nested `wx.cloud.*` 和 unknown root fallback。
+- [x] Step 01-04 覆盖的 login/request/session 错误输出通过 redaction test；Step 01-05 覆盖的 unsupported stub 不回显 options、token-like 字段或 Host 私有数据；真实 L3/L4 provider 结果 redaction 仍随后续 Step 补齐。
 - [x] 兼容矩阵记录 Step 01-03 / 01-04 覆盖 API 的 callback/Promise 行为。
 - [x] `wx.request` HTTP response resolve，broker/local failure reject；非 2xx/401 重试的生产 Host transport 语义仍需 Phase 4 扩展验证。
 - [x] JS-provided `Authorization` / `Signature` / `Signature-Input` / `Cookie` header 被拒绝且不出站。
-- [ ] L3/L4 API 未配置 provider 或未通过 consent 时 fail closed。
+- [ ] L3/L4 API 未配置 provider 或未通过 consent 时 fail closed；Step 01-05 已为未配置 provider 的 P1/P2 高风险 `wx.*` 调用提供 deterministic unsupported stub，真实 provider + consent/audit 仍按 Step 01-08 和 Phase 3 推进。

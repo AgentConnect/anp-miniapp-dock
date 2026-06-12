@@ -494,6 +494,264 @@ module.exports = skill
 }
 
 #[test]
+fn unsupported_async_wx_api_rejects_with_callbacks_and_safe_shape() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('pay', async () => {
+  const events = []
+  try {
+    await wx.requestPayment({
+      timeStamp: 'secret-time',
+      fail(error) {
+        events.push('fail:' + error.errMsg)
+        throw new Error('callback exception should not change outcome')
+      },
+      complete(error) {
+        events.push('complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        suggestion: error.suggestion,
+        events,
+        leaked: JSON.stringify(error).includes('secret-time')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["pay"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "pay", json!({})))
+        .expect("call pay");
+
+    assert_eq!(result.content[0].text, "requestPayment:fail unsupported");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    assert!(structured
+        .get("reason")
+        .and_then(|value| value.as_str())
+        .is_some_and(|reason| reason.contains("Host provider")));
+    assert_eq!(
+        structured
+            .get("events")
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("fail:requestPayment:fail unsupported"),
+            json!("complete:requestPayment:fail unsupported"),
+        ])
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn unsupported_sync_wx_api_throws_redacted_error() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('storage', () => {
+  try {
+    wx.getStorageSync({ key: 'private-key' })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        suggestion: error.suggestion,
+        leaked: JSON.stringify(error).includes('private-key')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["storage"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "storage", json!({})))
+        .expect("call storage");
+
+    assert_eq!(result.content[0].text, "getStorageSync:fail unsupported");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn unsupported_nested_wx_api_is_available() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('cloud', async () => {
+  try {
+    await wx.cloud.callFunction({ name: 'secretFunction' })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        cloudType: typeof wx.cloud,
+        leaked: JSON.stringify(error).includes('secretFunction')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["cloud"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "cloud", json!({})))
+        .expect("call cloud");
+
+    assert_eq!(
+        result.content[0].text,
+        "wx.cloud.callFunction:fail unsupported"
+    );
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    assert_eq!(
+        structured.get("cloudType").and_then(|value| value.as_str()),
+        Some("object")
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn unsupported_unknown_root_wx_api_fails_deterministically() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('unknown', async () => {
+  const events = []
+  try {
+    await wx.unlistedApi({
+      Authorization: 'Bearer secret-token',
+      fail(error) {
+        events.push('fail:' + error.errMsg)
+      },
+      complete(error) {
+        events.push('complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        events,
+        leaked: JSON.stringify(error).includes('secret-token') ||
+          JSON.stringify(error).includes('unlistedApi')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["unknown"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "unknown", json!({})))
+        .expect("call unknown");
+
+    assert_eq!(result.content[0].text, "unknownWxApi:fail unsupported");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    assert_eq!(
+        structured
+            .get("events")
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("fail:unknownWxApi:fail unsupported"),
+            json!("complete:unknownWxApi:fail unsupported"),
+        ])
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn supported_wx_request_is_not_overwritten_by_unsupported_registry() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('types', () => ({
+  content: [{ type: 'text', text: [
+    typeof wx.request,
+    typeof wx.login,
+    typeof wx.requestPayment,
+    typeof wx.getDeviceInfo
+  ].join(',') }]
+}))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["types"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "types", json!({})))
+        .expect("call types");
+
+    assert_eq!(
+        result.content[0].text,
+        "function,function,function,function"
+    );
+}
+
+#[test]
 fn model_context_get_session_id_is_available_to_atomic_api_code() {
     let skill = test_skill(
         r#"
@@ -845,6 +1103,7 @@ skill.registerAPI('globals', () => ({
     typeof fetch,
     typeof eval,
     typeof Function,
+    typeof Proxy,
     typeof (() => {}).constructor,
     typeof (async function() {}).constructor,
     typeof (function* () {}).constructor,
@@ -864,7 +1123,7 @@ module.exports = skill
 
     assert_eq!(
         result.content[0].text,
-        "undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined"
+        "undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined"
     );
 }
 

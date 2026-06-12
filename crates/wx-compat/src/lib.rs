@@ -4,6 +4,7 @@ pub mod model_context;
 pub mod permissions;
 pub mod request;
 pub mod storage;
+pub mod unsupported;
 
 pub use model_context::{
     notification_type_js_literal, CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink,
@@ -12,7 +13,10 @@ pub use model_context::{
 };
 pub use permissions::{Capability, CapabilityProfile, PermissionDecision, WxEnvironmentKind};
 pub use request::{
-    unsupported_api, RequestBroker, UnsupportedRequestBroker, WxMethod, WxRequest, WxRequestError,
-    WxResponse,
+    RequestBroker, UnsupportedRequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
 };
 pub use storage::{InMemoryScopedStorage, ScopedStorage, StorageError, StorageScope};
+pub use unsupported::{
+    unsupported_api, unsupported_api_registry, unsupported_api_registry_js_literal, UnsupportedApi,
+    UnsupportedApiKind,
+};

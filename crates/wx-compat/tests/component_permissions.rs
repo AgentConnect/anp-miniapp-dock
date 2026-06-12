@@ -1,6 +1,7 @@
 use wx_compat::{
-    unsupported_api, Capability, CapabilityProfile, CardEvent, InMemoryCardEventSink, ModelContext,
-    RequestBroker, UnsupportedRequestBroker, WxRequest, WxRequestError,
+    unsupported_api, unsupported_api_registry, Capability, CapabilityProfile, CardEvent,
+    InMemoryCardEventSink, ModelContext, RequestBroker, UnsupportedApiKind,
+    UnsupportedRequestBroker, WxRequest, WxRequestError,
 };
 
 #[test]
@@ -81,11 +82,54 @@ fn model_context_records_card_expiration_events() {
 }
 
 #[test]
-fn unsupported_wx_apis_have_explicit_mock_shape() {
+fn unsupported_wx_apis_have_explicit_fail_shape() {
     let payment = unsupported_api("requestPayment");
 
     assert_eq!(
         payment.get("errMsg").and_then(|value| value.as_str()),
-        Some("requestPayment:unsupported")
+        Some("requestPayment:fail unsupported")
     );
+    assert_eq!(
+        payment.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    assert!(payment
+        .get("reason")
+        .and_then(|value| value.as_str())
+        .is_some_and(|reason| !reason.contains("4111111111111111")));
+    assert!(payment
+        .get("suggestion")
+        .and_then(|value| value.as_str())
+        .is_some_and(|suggestion| suggestion.contains("ConsentGate")));
+}
+
+#[test]
+fn unsupported_registry_marks_sync_and_async_apis() {
+    let registry = unsupported_api_registry();
+
+    assert!(registry.iter().any(|api| {
+        api.name == "requestPayment" && matches!(api.kind, UnsupportedApiKind::Async)
+    }));
+    assert!(registry
+        .iter()
+        .any(|api| api.name == "getStorageSync" && matches!(api.kind, UnsupportedApiKind::Sync)));
+    assert!(registry
+        .iter()
+        .any(|api| api.name == "wx.cloud.callFunction"));
+}
+
+#[test]
+fn unknown_unsupported_api_uses_safe_fallback_shape() {
+    let result = unsupported_api("../../../Authorization: Bearer secret-token");
+
+    assert_eq!(
+        result.get("errMsg").and_then(|value| value.as_str()),
+        Some("unknownWxApi:fail unsupported")
+    );
+    assert_eq!(
+        result.get("code").and_then(|value| value.as_str()),
+        Some("unsupported")
+    );
+    let result_json = serde_json::Value::Object(result).to_string();
+    assert!(!result_json.contains("secret-token"));
 }

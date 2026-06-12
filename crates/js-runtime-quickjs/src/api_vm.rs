@@ -26,7 +26,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use wx_compat::{
-    CapabilityProfile, RequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
+    unsupported_api, CapabilityProfile, RequestBroker, WxMethod, WxRequest, WxRequestError,
+    WxResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -460,6 +461,7 @@ fn with_runtime<R>(
         .with::<rquickjs::context::intrinsic::Eval>()
         .with::<rquickjs::context::intrinsic::Promise>()
         .with::<rquickjs::context::intrinsic::Json>()
+        .with::<rquickjs::context::intrinsic::Proxy>()
         .build(&runtime)
         .map_err(to_quickjs_error)?;
     let console = Rc::new(RefCell::new(Vec::new()));
@@ -511,6 +513,11 @@ fn install_host_bridge<'js>(
     let request_fn =
         Func::from(move |options_json: String| request_bridge.request_json(options_json));
     dock.set("request", request_fn).map_err(to_quickjs_error)?;
+
+    let unsupported_api_fn =
+        Func::from(move |api_name: String| Value::Object(unsupported_api(&api_name)).to_string());
+    dock.set("unsupportedApi", unsupported_api_fn)
+        .map_err(to_quickjs_error)?;
 
     let session_bridge = bridge.clone();
     let get_session_id_fn = Func::from(move || session_bridge.session_id());

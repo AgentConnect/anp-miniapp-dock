@@ -1,5 +1,5 @@
 use crate::middleware::MIDDLEWARE_BOOTSTRAP;
-use wx_compat::notification_type_js_literal;
+use wx_compat::{notification_type_js_literal, unsupported_api_registry_js_literal};
 
 pub const BRIDGE_BOOTSTRAP_TEMPLATE: &str = r#"
 (() => {
@@ -158,7 +158,7 @@ function __dockAsyncOutcome(apiName, options, hostCall) {
   const callbacks = __dockCallbackOptions(options);
   return Promise.resolve().then(() => {
     const payload = JSON.parse(hostCall());
-    const ok = typeof payload.errMsg !== 'string' || !payload.errMsg.startsWith(apiName + ':fail');
+    const ok = typeof payload.errMsg !== 'string' || payload.errMsg.indexOf(':fail') === -1;
     if (ok && typeof callbacks.success === 'function') {
       __dockInvokeCallback(callbacks.success, payload);
     }
@@ -175,7 +175,55 @@ function __dockAsyncOutcome(apiName, options, hostCall) {
   });
 }
 
-const wx = Object.freeze({
+function __dockUnsupportedAsync(apiName, options) {
+  return __dockAsyncOutcome(apiName, options, () => __dock.unsupportedApi(apiName));
+}
+
+function __dockUnsupportedSync(apiName) {
+  const payload = JSON.parse(__dock.unsupportedApi(apiName));
+  const error = new Error(payload.errMsg);
+  error.errMsg = payload.errMsg;
+  error.code = payload.code;
+  error.reason = payload.reason;
+  error.suggestion = payload.suggestion;
+  throw error;
+}
+
+function __dockInstallUnsupportedWxApi(apiDef) {
+  const parts = apiDef.name.split('.');
+  let index = parts[0] === 'wx' ? 1 : 0;
+  let target = wx;
+  while (index < parts.length - 1) {
+    const part = parts[index];
+    if (!Object.prototype.hasOwnProperty.call(target, part)) {
+      target[part] = {};
+    }
+    target = target[part];
+    index += 1;
+  }
+  const leaf = parts[index];
+  if (Object.prototype.hasOwnProperty.call(target, leaf)) {
+    return;
+  }
+  if (apiDef.kind === 'sync') {
+    target[leaf] = () => __dockUnsupportedSync(apiDef.name);
+  } else {
+    target[leaf] = (options) => __dockUnsupportedAsync(apiDef.name, options);
+  }
+}
+
+function __dockFreezeObjectTree(value, seen) {
+  if (!value || typeof value !== 'object' || seen.indexOf(value) !== -1) {
+    return value;
+  }
+  seen.push(value);
+  for (const key of Object.keys(value)) {
+    __dockFreezeObjectTree(value[key], seen);
+  }
+  return Object.freeze(value);
+}
+
+const wx = {
   login(options) {
     return __dockAsyncOutcome('login', options, () => __dock.login());
   },
@@ -195,6 +243,32 @@ const wx = Object.freeze({
       return __dockAsyncOutcome('modelContext.expireAllCards', options, () => __dock.modelContextExpireAllCards(__dockSafeJson(options || {})));
     }
   })
+};
+
+const __dockUnsupportedWxApis = Object.freeze(__DOCK_UNSUPPORTED_WX_APIS__);
+for (const apiDef of __dockUnsupportedWxApis) {
+  __dockInstallUnsupportedWxApi(apiDef);
+}
+const __dockWxRoot = __dockFreezeObjectTree(wx, []);
+const __dockWxProxy = new Proxy(__dockWxRoot, {
+  get(target, property, receiver) {
+    if (typeof property === 'symbol' || Reflect.has(target, property)) {
+      return Reflect.get(target, property, receiver);
+    }
+    if (typeof property === 'string') {
+      return (options) => __dockUnsupportedAsync(property, options);
+    }
+    return undefined;
+  },
+  set() {
+    return false;
+  },
+  defineProperty() {
+    return false;
+  },
+  deleteProperty() {
+    return false;
+  }
 });
 
 Object.defineProperty(__dockModuleFactory.prototype, 'constructor', { value: undefined, configurable: false, writable: false });
@@ -202,13 +276,14 @@ Object.defineProperty(__dockAsyncFunctionPrototype, 'constructor', { value: unde
 Object.defineProperty(__dockGeneratorFunctionPrototype, 'constructor', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(__dockAsyncGeneratorFunctionPrototype, 'constructor', { value: undefined, configurable: false, writable: false });
 
-Object.defineProperty(globalThis, 'wx', { value: wx, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'wx', { value: __dockWxProxy, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'console', { value: console, configurable: false, writable: false });
 Object.defineProperty(globalThis, '__dirname', { value: '', configurable: false, writable: false });
 Object.defineProperty(globalThis, '__filename', { value: 'index', configurable: false, writable: false });
 Object.defineProperty(globalThis, 'require', { value: (specifier) => __dockRequire('index', specifier), configurable: false, writable: false });
 Object.defineProperty(globalThis, 'eval', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'Function', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'Proxy', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'process', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'fetch', { value: undefined, configurable: false, writable: false });
 
@@ -239,7 +314,11 @@ Object.defineProperty(globalThis, '__dockCallApi', { value: __dockCallApi, confi
 
 pub fn runtime_bootstrap() -> String {
     let bridge = BRIDGE_BOOTSTRAP_TEMPLATE
-        .replace("__DOCK_NOTIFICATION_TYPE__", notification_type_js_literal());
+        .replace("__DOCK_NOTIFICATION_TYPE__", notification_type_js_literal())
+        .replace(
+            "__DOCK_UNSUPPORTED_WX_APIS__",
+            &unsupported_api_registry_js_literal(),
+        );
     format!("{MIDDLEWARE_BOOTSTRAP}\n{bridge}")
 }
 
@@ -254,6 +333,7 @@ mod tests {
         assert!(bootstrap.contains("globalThis, 'fetch'"));
         assert!(bootstrap.contains("globalThis, 'eval'"));
         assert!(bootstrap.contains("globalThis, 'Function'"));
+        assert!(bootstrap.contains("globalThis, 'Proxy'"));
     }
 
     #[test]

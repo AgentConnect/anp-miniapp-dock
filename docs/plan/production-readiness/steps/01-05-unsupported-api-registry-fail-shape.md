@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-05
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 20:02:26 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 启动 Step 01-05，先冻结 unsupported registry 覆盖口径和统一失败 shape |
+| Review evidence | 2026-06-12 20:20:16 +0800 Review：修复 focused `unsupported` filter 未覆盖 unknown root fallback 的测试命名；确认 registry 覆盖 P1 deferred/unsupported-by-design 代表 API，已支持 `wx.login` / `wx.checkSession` / `wx.request` 未被覆盖，Proxy intrinsic 仅供内部 fallback 且 `globalThis.Proxy` 被隐藏；真实 storage/device/payment provider 状态未误标为 supported。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs unsupported` 5 passed；`cargo test -p wx-compat unsupported` 4 passed；`cargo test -p js-runtime-quickjs wx_` 13 passed；`cargo test -p js-runtime-quickjs` 33 passed；`cargo test -p wx-compat` 11 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs docs/architecture docs/runbook docs/plan` 无输出；敏感词抽样仅命中安全文档说明、测试夹具假值和 redaction 断言，unsupported result 不回显 options、token-like 字段或 Host 私有数据。 |
+| Next action | 准备创建 Step 01-05 focused commit，然后回填 commit hash 并进入 01-06 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,14 +63,14 @@ Step index：01-05
 
 ## 7. 验收标准
 
-- [ ] 矩阵中明确 unsupported / deferred 的 API 在 Atomic API VM 中都有 deterministic stub 或明确 registry fallback。
-- [ ] 未支持 API 调用不会出现 `undefined is not a function`、静默成功或 no-op 成功。
-- [ ] async unsupported API 调用 `fail` -> `complete`，Promise reject，callback 与 Promise value 使用同一脱敏 result shape。
-- [ ] sync unsupported API 抛出带脱敏 `errMsg` / `code` 的 `Error`，不接受 callback。
-- [ ] `reason` / `suggestion` 为 safe 文案，不回显敏感参数或 Host 私有数据。
-- [ ] 已支持 API 的行为和 tests 不回归。
-- [ ] `wx-api-compatibility-matrix.md` 和 release gate 记录与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 矩阵中明确 unsupported / deferred 的 API 在 Atomic API VM 中都有 deterministic stub 或明确 registry fallback。
+- [x] 未支持 API 调用不会出现 `undefined is not a function`、静默成功或 no-op 成功。
+- [x] async unsupported API 调用 `fail` -> `complete`，Promise reject，callback 与 Promise value 使用同一脱敏 result shape。
+- [x] sync unsupported API 抛出带脱敏 `errMsg` / `code` 的 `Error`，不接受 callback。
+- [x] `reason` / `suggestion` 为 safe 文案，不回显敏感参数或 Host 私有数据。
+- [x] 已支持 API 的行为和 tests 不回归。
+- [x] `wx-api-compatibility-matrix.md` 和 release gate 记录与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -93,11 +93,11 @@ Step index：01-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复一个测试覆盖表达问题 | `cargo test -p js-runtime-quickjs unsupported` 起初未命中 unknown root fallback 测试，因为测试名不含 `unsupported`。 |
+| 已修复问题 | 已修复 | 将测试改名为 `unsupported_unknown_root_wx_api_fails_deterministically`，重新运行 focused 命令后 5 passed；同时确认 `Proxy` intrinsic 只供内部 `wx` fallback 使用，`globalThis.Proxy` 已隐藏并有 sandbox globals 测试。 |
+| 剩余风险 | 已记录 | registry 覆盖代表性 P1 deferred、planned-p2 和 unsupported-by-design API；真实 storage/device/payment/privacy/location/media provider 仍按 Step 01-06、01-07、01-08 和后续 Phase 推进，不在本 Step 误标 supported。 |
+| 新增或缺失测试 | 已新增 | 新增 `wx-compat` registry / fail shape / unknown safe fallback tests；新增 Atomic API VM tests 覆盖 async unsupported callback/Promise、sync throw、nested `wx.cloud.*`、unknown root fallback、已支持 API 不被覆盖和 Proxy 隐藏。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `wx-api-compatibility-matrix.md`、`release-gates.md`、`phase-1-wx-api-bridge-contract.md`、`phase-1-wx-capability-broker.md`；未新增开发者文档，原因是本 Step 是 runtime fail-closed 能力，外部迁移文档留到 Phase 5。 |
 
 ## 10. Commit 要求
 
