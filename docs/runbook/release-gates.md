@@ -27,6 +27,7 @@ cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo test -p dock-cli --test coffee_order_flow
+cargo run -p dock-cli -- validate examples/coffee-skill
 ```
 
 通过标准：
@@ -36,6 +37,7 @@ cargo test -p dock-cli --test coffee_order_flow
 - `cargo clippy` 无 warning。
 - `cargo test --workspace` 全部通过。
 - coffee CLI E2E 通过，并继续断言 capability token、Authorization、Signature、Signature-Input、private key path/material 不出现在 JSON 输出。
+- `dock-cli validate` 输出 JSON，包含 `compatibilityLevel` 和 `compatibilityReport.apis/components/permissions/risks/fallbacks/releaseBlockers`；当前 coffee Skill 仍应因 demo-only localhost DID/request metadata 被标为 `demo-only`，不得误标 `supported`。
 
 如果环境无法运行全量命令，必须记录原因、失败命令、影响范围和替代检查；不能把未运行命令写成通过。
 
@@ -54,6 +56,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Markdown 链接 | 新增或修改文档的相对链接必须指向存在文件 | Phase 5 引入自动 link checker |
 | 兼容矩阵状态 | `supported`、`host-boundary`、`planned-p1`、`planned-p2`、`demo-only`、`unsupported-by-design` 不得混用或写成未知 | Phase 5 引入矩阵 schema checker |
 | Step 台账 | 每个 Step 有 status、Review evidence、verification evidence、commit hash | Codex Goal 长跑每步必填 |
+| Validate 报告 | `dock-cli validate examples/coffee-skill` 的 `compatibilityReport` 包含 API 注册、组件加载、权限、风险、fallback 和 release blocker 字段 | Phase 5 引入报告 schema checker |
 | Plan 变更 | 改范围、顺序、验收、安全边界或验证策略前先更新 Plan 变更记录 | Phase 6 可纳入 PR checklist |
 | README 索引 | 新增架构、安全、runbook 文档必须有入口链接 | 当前手工检查 |
 
@@ -66,6 +69,8 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Gate | 证据 |
 |---|---|
 | Skill package path escape / absolute path deny | [`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs) |
+| Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
+| `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs) |
 | Component sandbox、default no network/timer、expire 后事件失败 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) |
 | Component profile 默认 deny request/timer，dynamic 才可表达 request boundary | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |

@@ -1,4 +1,4 @@
-use crate::manifest::SkillManifest;
+use crate::manifest::{ApiDeclaration, ComponentPermissions, SkillManifest};
 use crate::result::AtomicApiResult;
 use jsonschema::{Draft, JSONSchema};
 use serde::{Deserialize, Serialize};
@@ -26,16 +26,44 @@ impl ValidationReport {
     pub fn push_error(&mut self, path: impl Into<String>, message: impl Into<String>) {
         self.errors.push(ValidationIssue {
             level: ValidationIssueLevel::Error,
+            category: ValidationIssueCategory::Spec,
             path: path.into(),
             message: message.into(),
+            suggestion: None,
         });
     }
 
     pub fn push_warning(&mut self, path: impl Into<String>, message: impl Into<String>) {
+        self.push_compatibility_warning(path, message, None::<String>);
+    }
+
+    pub fn push_compatibility_warning(
+        &mut self,
+        path: impl Into<String>,
+        message: impl Into<String>,
+        suggestion: Option<impl Into<String>>,
+    ) {
         self.warnings.push(ValidationIssue {
             level: ValidationIssueLevel::Warning,
+            category: ValidationIssueCategory::Compatibility,
             path: path.into(),
             message: message.into(),
+            suggestion: suggestion.map(Into::into),
+        });
+    }
+
+    pub fn push_production_warning(
+        &mut self,
+        path: impl Into<String>,
+        message: impl Into<String>,
+        suggestion: Option<impl Into<String>>,
+    ) {
+        self.warnings.push(ValidationIssue {
+            level: ValidationIssueLevel::Warning,
+            category: ValidationIssueCategory::Production,
+            path: path.into(),
+            message: message.into(),
+            suggestion: suggestion.map(Into::into),
         });
     }
 }
@@ -43,8 +71,11 @@ impl ValidationReport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationIssue {
     pub level: ValidationIssueLevel,
+    pub category: ValidationIssueCategory,
     pub path: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +83,14 @@ pub struct ValidationIssue {
 pub enum ValidationIssueLevel {
     Error,
     Warning,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ValidationIssueCategory {
+    Spec,
+    Compatibility,
+    Production,
 }
 
 pub fn validate_manifest(manifest: &SkillManifest) -> ValidationReport {
@@ -73,12 +112,51 @@ pub fn validate_manifest_with_component_paths<'a>(
     component_paths.extend(additional_component_paths.into_iter().map(str::to_owned));
 
     for (index, component) in manifest.components.iter().enumerate() {
+        let component_path = format!("components[{index}]");
         if component.path.trim().is_empty() {
             report.push_error(
-                format!("components[{index}].path"),
+                format!("{component_path}.path"),
                 "component path is required",
             );
         }
+
+        if component.path.contains('\0') {
+            report.push_error(
+                format!("{component_path}.path"),
+                "component path must not contain NUL bytes",
+            );
+        }
+
+        if let Some(related_page) = &component.related_page {
+            validate_related_page(
+                &mut report,
+                &format!("{component_path}.relatedPage"),
+                related_page,
+            );
+        }
+
+        if let Some(expired_text) = &component.expired_text {
+            if expired_text.trim().is_empty() {
+                report.push_compatibility_warning(
+                    format!("{component_path}.expiredText"),
+                    "expiredText is empty and will not help Host fallback UX",
+                    Some("Provide a short user-facing expired card message."),
+                );
+            }
+            if expired_text.chars().count() > 120 {
+                report.push_compatibility_warning(
+                    format!("{component_path}.expiredText"),
+                    "expiredText is longer than the recommended 120 characters",
+                    Some("Keep expiredText concise so Hosts can render it inside compact cards."),
+                );
+            }
+        }
+
+        validate_component_permissions(
+            &mut report,
+            &format!("{component_path}.permissions"),
+            component.permissions.as_ref(),
+        );
     }
 
     for (index, api) in manifest.apis.iter().enumerate() {
@@ -114,6 +192,22 @@ pub fn validate_manifest_with_component_paths<'a>(
             report.push_error(format!("{api_path}.inputSchema"), message);
         }
 
+        for field in api.input_formats() {
+            let field_path = if field.path.is_empty() {
+                format!("{api_path}.inputSchema")
+            } else {
+                format!("{api_path}.inputSchema.{}", field.path)
+            };
+            report.push_compatibility_warning(
+                field_path,
+                format!(
+                    "input field uses format `{}` which requires a Host file/media provider",
+                    field.format
+                ),
+                Some("Treat this field as an opaque Host handle until Phase 1/3 media providers are implemented."),
+            );
+        }
+
         if let Some(output_schema) = &api.output_schema {
             if let Err(message) = compile_schema(output_schema) {
                 report.push_warning(format!("{api_path}.outputSchema"), message);
@@ -127,10 +221,98 @@ pub fn validate_manifest_with_component_paths<'a>(
                     format!("componentPath `{component_path}` does not match components[]"),
                 );
             }
+            if component_path.contains('\0') {
+                report.push_error(
+                    format!("{api_path}._meta.ui.componentPath"),
+                    "componentPath must not contain NUL bytes",
+                );
+            }
+        }
+
+        if is_demo_only_api(api) {
+            report.push_production_warning(
+                format!("{api_path}._meta"),
+                "API metadata uses demo-only localhost DID/request compatibility fields",
+                Some("Keep this Skill in demo/dev profiles until Step 01-04 replaces localhost wx.login/wx.request paths."),
+            );
         }
     }
 
     report
+}
+
+fn validate_related_page(report: &mut ValidationReport, path: &str, related_page: &Value) {
+    let Some(object) = related_page.as_object() else {
+        report.push_compatibility_warning(
+            path,
+            "relatedPage should be an object with a safe relative path and optional query",
+            Some("Use {\"path\":\"pages/detail/index\",\"query\":{...}} or remove relatedPage."),
+        );
+        return;
+    };
+
+    let Some(page_path) = object.get("path").and_then(Value::as_str) else {
+        report.push_compatibility_warning(
+            format!("{path}.path"),
+            "relatedPage.path is missing",
+            Some("Declare a relative Host detail page path or omit relatedPage."),
+        );
+        return;
+    };
+
+    if page_path.trim().is_empty() || page_path.starts_with('/') || page_path.contains("..") {
+        report.push_compatibility_warning(
+            format!("{path}.path"),
+            "relatedPage.path should be a non-empty relative path inside the Skill/Host boundary",
+            Some("Use a relative page path without leading slash or parent segments."),
+        );
+    }
+
+    if object.get("query").is_some_and(|query| !query.is_object()) {
+        report.push_compatibility_warning(
+            format!("{path}.query"),
+            "relatedPage.query should be an object when present",
+            Some("Use key/value query data so Hosts can redact and serialize it consistently."),
+        );
+    }
+}
+
+fn validate_component_permissions(
+    report: &mut ValidationReport,
+    path: &str,
+    permissions: Option<&ComponentPermissions>,
+) {
+    let Some(permissions) = permissions else {
+        return;
+    };
+
+    if let Some(scope_dynamic) = &permissions.scope_dynamic {
+        report.push_production_warning(
+            format!("{path}.scope.dynamic"),
+            "dynamic component capability is declared but request/timer runtime support is not production-ready",
+            Some("Keep dynamic components behind explicit Host policy until Phase 2 dynamic gates are implemented."),
+        );
+
+        if !scope_dynamic.is_object() && !scope_dynamic.is_boolean() {
+            report.push_compatibility_warning(
+                format!("{path}.scope.dynamic"),
+                "scope.dynamic should be an object or boolean",
+                Some("Use an object with desc/reason fields so review tools can explain the dynamic capability."),
+            );
+        }
+    }
+}
+
+fn is_demo_only_api(api: &ApiDeclaration) -> bool {
+    api.meta.as_ref().is_some_and(|meta| {
+        meta.extra.contains_key("remoteLogin")
+            || meta.extra.contains_key("compatLoginEndpoint")
+            || meta
+                .extra
+                .get("requestAuthMode")
+                .and_then(Value::as_str)
+                .is_some_and(|mode| mode == "host-managed-bearer")
+    })
 }
 
 pub fn validate_api_result(result: &AtomicApiResult) -> ValidationReport {

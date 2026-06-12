@@ -56,6 +56,34 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
 
     let validate = cli_json(["dock-cli".to_owned(), "validate".to_owned(), skill.clone()]);
     assert_eq!(validate["status"], "ok");
+    assert_eq!(validate["compatibilityLevel"], "demo-only");
+    assert_eq!(
+        validate["compatibilityReport"]["status"], "ok",
+        "validate should expose a machine-readable compatibility report"
+    );
+    assert!(validate["compatibilityReport"]["apis"]
+        .as_array()
+        .expect("api reports")
+        .iter()
+        .any(|api| api["name"] == "payOrder" && api["registered"] == true));
+    assert!(validate["compatibilityReport"]["components"]
+        .as_array()
+        .expect("component reports")
+        .iter()
+        .any(
+            |component| component["path"] == "components/payment-result/index"
+                && component["loaded"] == true
+        ));
+    assert!(validate["compatibilityReport"]["risks"]
+        .as_array()
+        .expect("risk reports")
+        .iter()
+        .any(|risk| risk["api"] == "payOrder" && risk["consentRequired"] == true));
+    assert!(validate["compatibilityReport"]["releaseBlockers"]
+        .as_array()
+        .expect("release blockers")
+        .iter()
+        .any(|blocker| blocker["code"] == "production_warning"));
     assert!(validate["apis"]
         .as_array()
         .expect("apis array")

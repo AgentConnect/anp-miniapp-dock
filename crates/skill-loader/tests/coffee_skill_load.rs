@@ -89,6 +89,29 @@ fn invalid_component_path_fails_manifest_validation() {
 }
 
 #[test]
+fn component_path_traversal_fails_closed() {
+    let temp = TestSkillDir::new("component-traversal");
+    temp.write("SKILL.md", "# Test Skill");
+    temp.write("index.js", "module.exports = {}");
+    temp.write(
+        "mcp.json",
+        r#"{
+          "apis": [],
+          "components": [
+            { "path": "../outside" }
+          ]
+        }"#,
+    );
+
+    let error = load_skill(temp.path()).expect_err("component traversal should fail");
+
+    assert!(matches!(
+        error,
+        SkillPackageError::PathEscapesSkillRoot { .. }
+    ));
+}
+
+#[test]
 fn resolver_rejects_path_traversal() {
     let root = coffee_skill_root();
     let error =

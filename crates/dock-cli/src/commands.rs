@@ -17,7 +17,9 @@ use dock_core::{
     RuntimeHost,
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
-use mcp_schema::{AtomicApiResult, ValidationReport};
+use mcp_schema::{
+    AtomicApiResult, ComponentDeclaration, ValidationIssueCategory, ValidationReport,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use skill_loader::{load_skill, resolve_component_path, LoadedSkill};
@@ -461,14 +463,203 @@ fn did_from_document_path(path: &Path) -> Result<String, DidCredentialError> {
 
 fn validate(skill_path: &Path) -> Result<Value, CliError> {
     let skill = load_skill(skill_path)?;
+    let registration = validate_api_registration(&skill);
+    let api_reports = validate_api_reports(&skill, registration.as_ref());
+    let component_reports = validate_component_reports(&skill);
+    let permissions = validate_permissions(&component_reports);
+    let risks = validate_risks(&skill);
+    let fallbacks = validate_fallbacks(&skill, &component_reports);
+    let release_blockers = validate_release_blockers(&skill, registration.as_ref());
+    let compatibility_level = compatibility_level(&skill.validation, &release_blockers);
+
     Ok(json!({
         "status": "ok",
+        "compatibilityLevel": compatibility_level,
         "skillRoot": skill.root,
         "skillId": skill_id(&skill),
         "apis": skill.manifest.apis.iter().map(|api| api.name.as_str()).collect::<Vec<_>>(),
         "components": skill.components.keys().collect::<Vec<_>>(),
+        "compatibilityReport": {
+            "status": "ok",
+            "compatibilityLevel": compatibility_level,
+            "apis": api_reports,
+            "components": component_reports,
+            "permissions": permissions,
+            "risks": risks,
+            "fallbacks": fallbacks,
+            "releaseBlockers": release_blockers,
+        },
         "validation": validation_summary(&skill.validation)
     }))
+}
+
+fn validate_api_registration(skill: &LoadedSkill) -> Result<Vec<String>, String> {
+    ApiVm::load_skill(skill.clone())
+        .map(|vm| {
+            vm.registered_apis()
+                .iter()
+                .map(|api| api.name.clone())
+                .collect()
+        })
+        .map_err(|error| redact_text(&error.to_string()))
+}
+
+fn validate_api_reports(
+    skill: &LoadedSkill,
+    registration: Result<&Vec<String>, &String>,
+) -> Vec<Value> {
+    skill
+        .manifest
+        .apis
+        .iter()
+        .map(|api| {
+            let input_formats = api
+                .input_formats()
+                .into_iter()
+                .map(|field| json!({ "path": field.path, "format": field.format }))
+                .collect::<Vec<_>>();
+            let registered = registration
+                .as_ref()
+                .is_ok_and(|registered| registered.iter().any(|name| name == &api.name));
+            json!({
+                "name": api.name,
+                "registered": registered,
+                "componentPath": api.component_path(),
+                "inputFormats": input_formats,
+                "hasOutputSchema": api.output_schema.is_some(),
+                "risk": api.meta.as_ref().and_then(|meta| meta.anp.as_ref()).and_then(|anp| anp.get("risk")).cloned(),
+                "status": if registered { "declared-and-registered" } else { "registration-unverified" },
+            })
+        })
+        .collect()
+}
+
+fn validate_component_reports(skill: &LoadedSkill) -> Vec<Value> {
+    skill
+        .manifest
+        .components
+        .iter()
+        .map(|component| component_report(component, skill))
+        .collect()
+}
+
+fn component_report(component: &ComponentDeclaration, skill: &LoadedSkill) -> Value {
+    let loaded = skill.components.contains_key(&component.path);
+    json!({
+        "path": component.path,
+        "loaded": loaded,
+        "relatedPage": component.related_page.clone(),
+        "permissions": {
+            "dynamic": component.dynamic_permission().is_some(),
+            "scopeDynamic": component.dynamic_permission()
+        },
+        "expirable": component.expirable.unwrap_or(false),
+        "expiredText": component.expired_text.clone(),
+        "fallback": if loaded { Value::Null } else { json!("component_load_failed") },
+    })
+}
+
+fn validate_permissions(component_reports: &[Value]) -> Value {
+    let dynamic_components = component_reports
+        .iter()
+        .filter_map(|component| {
+            component
+                .get("permissions")
+                .and_then(|permissions| permissions.get("dynamic"))
+                .and_then(Value::as_bool)
+                .filter(|dynamic| *dynamic)
+                .and_then(|_| component.get("path"))
+                .and_then(Value::as_str)
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "dynamicComponents": dynamic_components,
+        "policy": "dynamic request/timer declarations are parsed but remain host-boundary until Phase 2 gates",
+    })
+}
+
+fn validate_risks(skill: &LoadedSkill) -> Vec<Value> {
+    skill
+        .manifest
+        .apis
+        .iter()
+        .filter_map(|api| {
+            api.meta
+                .as_ref()
+                .and_then(|meta| meta.anp.as_ref())
+                .and_then(|anp| anp.get("risk"))
+                .map(|risk| {
+                    json!({
+                        "api": api.name,
+                        "risk": risk,
+                        "consentRequired": matches!(risk.as_str(), Some("order" | "payment" | "high" | "l3" | "l4")),
+                    })
+                })
+        })
+        .collect()
+}
+
+fn validate_fallbacks(skill: &LoadedSkill, component_reports: &[Value]) -> Vec<Value> {
+    let mut fallbacks = Vec::new();
+    for api in &skill.manifest.apis {
+        if api.component_path().is_none() {
+            fallbacks.push(json!({
+                "api": api.name,
+                "fallback": "card-spec",
+                "reason": "no_component_path",
+            }));
+        }
+    }
+    for component in component_reports {
+        if component.get("loaded").and_then(Value::as_bool) == Some(false) {
+            fallbacks.push(json!({
+                "componentPath": component.get("path"),
+                "fallback": "card-spec",
+                "reason": "component_load_failed",
+            }));
+        }
+    }
+    fallbacks
+}
+
+fn validate_release_blockers(
+    skill: &LoadedSkill,
+    registration: Result<&Vec<String>, &String>,
+) -> Vec<Value> {
+    let mut blockers = Vec::new();
+    if let Err(error) = registration {
+        blockers.push(json!({
+            "code": "api_registration_mismatch",
+            "message": error,
+            "suggestion": "Keep apis[].name aligned with index.js registerAPI calls before production validation.",
+        }));
+    }
+
+    for warning in &skill.validation.warnings {
+        if warning.category == ValidationIssueCategory::Production {
+            blockers.push(json!({
+                "code": "production_warning",
+                "path": warning.path.clone(),
+                "message": warning.message.clone(),
+                "suggestion": warning.suggestion.clone(),
+            }));
+        }
+    }
+
+    blockers
+}
+
+fn compatibility_level(report: &ValidationReport, release_blockers: &[Value]) -> &'static str {
+    if !report.is_valid() {
+        "invalid"
+    } else if !release_blockers.is_empty() {
+        "demo-only"
+    } else if report.warnings.is_empty() {
+        "supported"
+    } else {
+        "compatible-with-warnings"
+    }
 }
 
 fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value, CliError> {
@@ -1411,6 +1602,34 @@ mod tests {
     }
 
     #[test]
+    fn validate_reports_api_registration_mismatch_as_release_blocker() {
+        let fixture = SkillFixture::new();
+        let output = validate(&fixture.root).expect("validate reports compatibility");
+
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["compatibilityLevel"], "demo-only");
+        assert!(output["compatibilityReport"]["apis"]
+            .as_array()
+            .expect("api reports")
+            .iter()
+            .any(|api| {
+                api["name"] == "missing"
+                    && api["registered"] == false
+                    && api["status"] == "registration-unverified"
+            }));
+        assert!(output["compatibilityReport"]["releaseBlockers"]
+            .as_array()
+            .expect("release blockers")
+            .iter()
+            .any(|blocker| {
+                blocker["code"] == "api_registration_mismatch"
+                    && blocker["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains("declared but not registered"))
+            }));
+    }
+
+    #[test]
     fn finds_nested_tap_event() {
         let mut binding =
             component_runtime::RenderEventBinding::new(RenderEventKind::Tap, "confirmDrink");
@@ -1591,6 +1810,47 @@ mod tests {
                 did_path,
                 key_path,
             }
+        }
+    }
+
+    struct SkillFixture {
+        _dir: TempDir,
+        root: PathBuf,
+    }
+
+    impl SkillFixture {
+        fn new() -> Self {
+            let dir = TempDir::new("dock-cli-skill-fixture").expect("temp dir");
+            let root = dir.path().to_path_buf();
+            fs::write(root.join("SKILL.md"), "# Test Skill").expect("write SKILL.md");
+            fs::write(
+                root.join("index.js"),
+                "const skill = wx.modelContext.createSkill(__dirname)\n\
+                 skill.registerAPI('declared', async () => ({ content: [{ type: 'text', text: 'ok' }] }))\n\
+                 module.exports = skill\n",
+            )
+            .expect("write index.js");
+            fs::write(
+                root.join("mcp.json"),
+                r#"{
+                  "apis": [
+                    {
+                      "name": "declared",
+                      "description": "registered API",
+                      "inputSchema": {}
+                    },
+                    {
+                      "name": "missing",
+                      "description": "declared but not registered API",
+                      "inputSchema": {}
+                    }
+                  ],
+                  "components": []
+                }"#,
+            )
+            .expect("write mcp.json");
+
+            Self { _dir: dir, root }
         }
     }
 
