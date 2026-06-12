@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-01
-状态：draft
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
-| Branch | 待执行时记录 |
-| Started | 待记录 |
+| Status | review |
+| Branch | `main` |
+| Started | 2026-06-12 10:05:15 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 阅读主 Plan、Phase 0 文档和当前代码/测试，建立能力清单 |
+| Review evidence | 初审未发现需修复问题；重点复核能力未夸大、demo-only/host-boundary 已明确、证据可追踪 |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 1]`；`cargo metadata --format-version 1 --no-deps` 成功并确认 11 个 crate；`git diff --check -- docs/architecture README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-01-baseline-inventory.md` 无输出；新增基线文档 Markdown 链接手工检查无破链；状态一致性已对照 `README.md`、architecture docs、runbook 和 tests |
+| Next action | 创建 Step 00-01 focused commit 并回填 commit hash |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,11 +63,11 @@ Step index：00-01
 
 ## 7. 验收标准
 
-- [ ] 基线文档覆盖 `mcp-schema`、`skill-loader`、`js-runtime-quickjs`、`component-runtime`、`wx-compat`、`anp-adapter`、`consent-audit`、`card-spec`、`dock-core`、`dock-cli`、`demo-server`、`examples/coffee-skill`。
-- [ ] 每项能力都有 owner crate、状态、证据和限制说明。
-- [ ] demo-only、host-boundary、planned 能力没有被误标为 production-ready。
-- [ ] 基线文档引用的文件路径存在，Markdown 链接可解析。
-- [ ] Review 发现已修复或明确记录。
+- [x] 基线文档覆盖 `mcp-schema`、`skill-loader`、`js-runtime-quickjs`、`component-runtime`、`wx-compat`、`anp-adapter`、`consent-audit`、`card-spec`、`dock-core`、`dock-cli`、`demo-server`、`examples/coffee-skill`。
+- [x] 每项能力都有 owner crate、状态、证据和限制说明。
+- [x] demo-only、host-boundary、planned 能力没有被误标为 production-ready。
+- [x] 基线文档引用的文件路径存在，Markdown 链接可解析。
+- [x] Review 发现已修复或明确记录。
 - [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -89,11 +89,11 @@ Step index：00-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 文档 Step 通常不新增测试，但需说明 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 无阻塞问题 | 初审检查能力表未把 `wx.login` / `wx.request` localhost bridge、mock consent、mock payment、FastAPI 和 Mac host 写成 production-ready。 |
+| 已修复问题 | 无 | 验证前发现一次链接检查命令写法错误，已用更简单命令重跑；未作为通过证据记录。 |
+| 剩余风险 | 可接受 | 基线是代码/文档现状快照；后续 Step 00-02/00-03 需要继续按 API 和组件全量矩阵细化覆盖。 |
+| 新增或缺失测试 | 未新增自动化测试 | 本 Step 为文档基线冻结；验证使用 `cargo metadata`、Markdown 链接检查、diff whitespace 检查和状态一致性人工复核。 |
+| 已更新或缺失文档 | 已更新 | 新增 `anp/anp-miniapp-dock/docs/architecture/current-capability-baseline.md`，并在 `anp/anp-miniapp-dock/README.md` 增加入口链接。 |
 
 ## 10. Commit 要求
 

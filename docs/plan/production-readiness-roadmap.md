@@ -106,7 +106,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 | Step | 标题 | 依赖 | 主要产出 | 小 Plan 文档 | Commit gate | 状态 |
 |---|---|---|---|---|---|---|
-| 00-01 | 当前能力盘点与基线固化 | 无 | 当前能力清单、证据表、demo-only 标注 | [production-readiness/steps/00-01-baseline-inventory.md](production-readiness/steps/00-01-baseline-inventory.md) | 必须 | pending |
+| 00-01 | 当前能力盘点与基线固化 | 无 | 当前能力清单、证据表、demo-only 标注 | [production-readiness/steps/00-01-baseline-inventory.md](production-readiness/steps/00-01-baseline-inventory.md) | 必须 | review |
 | 00-02 | wx API 兼容矩阵 | 00-01 | `docs/architecture/wx-api-compatibility-matrix.md` | [production-readiness/steps/00-02-wx-api-compatibility-matrix.md](production-readiness/steps/00-02-wx-api-compatibility-matrix.md) | 必须 | pending |
 | 00-03 | 组件兼容矩阵 | 00-01 | `docs/architecture/component-compatibility-matrix.md` | [production-readiness/steps/00-03-component-compatibility-matrix.md](production-readiness/steps/00-03-component-compatibility-matrix.md) | 必须 | pending |
 | 00-04 | Threat model 与 release gates 初版 | 00-01, 00-02, 00-03 | `docs/security/threat-model.md`、`docs/runbook/release-gates.md` | [production-readiness/steps/00-04-threat-model-release-gates.md](production-readiness/steps/00-04-threat-model-release-gates.md) | 必须 | pending |
@@ -121,7 +121,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 | Step | 状态 | 分支 | 开始时间 | 完成时间 | Commit | Review 证据 | 验证证据 | 下一步 |
 |---|---|---|---|---|---|---|---|---|
-| 00-01 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 启动当前能力盘点 |
+| 00-01 | review | `main` | 2026-06-12 10:05:15 +0800 | 待记录 | 待记录 | Step 文档 Review 环节已记录初审结论，等待 commit 前最终确认 | `cargo metadata --format-version 1 --no-deps` 成功；`git diff --check -- docs/architecture README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-01-baseline-inventory.md` 无输出；新增基线文档 Markdown 链接手工检查无破链 | 创建 Step 00-01 focused commit |
 | 00-02 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 |
 | 00-03 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 |
 | 00-04 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 至 00-03 |
