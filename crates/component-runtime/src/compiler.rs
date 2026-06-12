@@ -286,6 +286,13 @@ fn compile_element(
         "image" => RenderNodeKind::Image,
         "button" => RenderNodeKind::Button,
         "scroll-view" => RenderNodeKind::ScrollView,
+        "input" => RenderNodeKind::Input,
+        "textarea" => RenderNodeKind::Textarea,
+        "radio" => RenderNodeKind::Radio,
+        "checkbox" => RenderNodeKind::Checkbox,
+        "picker" => RenderNodeKind::Picker,
+        "map" => RenderNodeKind::MapPreview,
+        "canvas" => RenderNodeKind::CanvasStatic,
         other => {
             warnings.push(format!("unsupported WXML tag `{other}`"));
             RenderNodeKind::View
@@ -356,9 +363,9 @@ fn apply_attrs(
         merge_styles(&mut node.style, &style);
     }
 
-    let button_disabled =
-        element.tag == "button" && disabled_attr_value(element, context, warnings);
-    if button_disabled {
+    let disabled =
+        supports_disabled(&element.tag) && disabled_attr_value(element, context, warnings);
+    if disabled {
         node.props.insert("disabled".to_owned(), Value::Bool(true));
     }
 
@@ -370,17 +377,23 @@ fn apply_attrs(
                 node.props
                     .insert("id".to_owned(), Value::String(value.clone()));
             }
-            "disabled" if element.tag == "button" => {}
+            "disabled" if supports_disabled(&element.tag) => {}
             "data-render-key" => {
                 node.props
                     .insert("key".to_owned(), Value::String(value.clone()));
             }
-            "bindtap" if !button_disabled => node
+            "bindtap" if !disabled => node
                 .events
                 .push(RenderEventBinding::new(RenderEventKind::Tap, value)),
-            "catchtap" if !button_disabled => node
+            "catchtap" if !disabled => node
                 .events
                 .push(RenderEventBinding::new(RenderEventKind::CatchTap, value)),
+            "bindinput" if supports_input_event(&element.tag) && !disabled => node
+                .events
+                .push(RenderEventBinding::new(RenderEventKind::Input, value)),
+            "bindchange" if supports_change_event(&element.tag) && !disabled => node
+                .events
+                .push(RenderEventBinding::new(RenderEventKind::Change, value)),
             "bindload" if element.tag == "image" => node
                 .events
                 .push(RenderEventBinding::new(RenderEventKind::ImageLoad, value)),
@@ -401,6 +414,8 @@ fn apply_attrs(
                 node.props
                     .insert("scrollY".to_owned(), Value::Bool(value != "false"));
             }
+            attr if set_safe_form_prop(node, element, attr, value, context, warnings) => {}
+            attr if set_safe_static_media_prop(node, element, attr, value, context, warnings) => {}
             attr if attr.starts_with("data-") => {
                 let key = attr.trim_start_matches("data-").to_owned();
                 for event in &mut node.events {
@@ -409,8 +424,187 @@ fn apply_attrs(
                         .insert(key.clone(), interpolate_value(value, context, warnings));
                 }
             }
+            attr if should_warn_unsupported_attr(&element.tag, attr) => {
+                warnings.push(format!(
+                    "unsupported `{}` attribute `{attr}`",
+                    public_component_tag(&element.tag)
+                ));
+            }
             _ => {}
         }
+    }
+}
+
+fn supports_disabled(tag: &str) -> bool {
+    matches!(
+        tag,
+        "button" | "input" | "textarea" | "radio" | "checkbox" | "picker"
+    )
+}
+
+fn supports_input_event(tag: &str) -> bool {
+    matches!(tag, "input" | "textarea")
+}
+
+fn supports_change_event(tag: &str) -> bool {
+    matches!(tag, "input" | "textarea" | "radio" | "checkbox" | "picker")
+}
+
+fn set_safe_form_prop(
+    node: &mut RenderNode,
+    element: &WxmlElement,
+    attr: &str,
+    value: &str,
+    context: &BindingContext,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let prop = match element.tag.as_str() {
+        "input" | "textarea" => match attr {
+            "name" => Some("name"),
+            "value" => Some("value"),
+            "placeholder" => Some("placeholder"),
+            "type" => Some("inputType"),
+            "maxlength" => Some("maxLength"),
+            "confirm-type" => Some("confirmType"),
+            _ => None,
+        },
+        "radio" | "checkbox" => match attr {
+            "name" => Some("name"),
+            "value" => Some("value"),
+            "checked" => Some("checked"),
+            _ => None,
+        },
+        "picker" => match attr {
+            "name" => Some("name"),
+            "value" => Some("value"),
+            "range" => Some("options"),
+            "range-key" => Some("rangeKey"),
+            "mode" => Some("mode"),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(prop) = prop else {
+        return false;
+    };
+
+    let value = match prop {
+        "checked" if value.trim().is_empty() => Value::Bool(true),
+        "checked" => Value::Bool(evaluate_condition(value, context, warnings, "checked")),
+        "maxLength" => normalize_numeric_prop(interpolate_value(value, context, warnings)),
+        "options" => normalize_picker_options(interpolate_value(value, context, warnings)),
+        _ => interpolate_value(value, context, warnings),
+    };
+    node.props.insert(prop.to_owned(), value);
+    true
+}
+
+fn set_safe_static_media_prop(
+    node: &mut RenderNode,
+    element: &WxmlElement,
+    attr: &str,
+    value: &str,
+    context: &BindingContext,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let prop = match element.tag.as_str() {
+        "map" => match attr {
+            "id" => Some("id"),
+            "region" => Some("region"),
+            "location-token" => Some("locationToken"),
+            "scale" => Some("scale"),
+            "title" => Some("title"),
+            "description" => Some("description"),
+            "latitude" | "longitude" | "markers" | "polyline" | "controls" => {
+                warnings.push(format!("unsupported `map-preview` attribute `{attr}`"));
+                return true;
+            }
+            _ => None,
+        },
+        "canvas" => match attr {
+            "id" => Some("id"),
+            "canvas-id" => Some("canvasId"),
+            "poster" => Some("poster"),
+            "description" => Some("description"),
+            "width" => Some("width"),
+            "height" => Some("height"),
+            "script" | "draw" | "bindtouchstart" | "bindtouchmove" | "bindtouchend" => {
+                warnings.push(format!("unsupported `canvas-static` attribute `{attr}`"));
+                return true;
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(prop) = prop else {
+        return false;
+    };
+
+    let value = match prop {
+        "scale" | "width" | "height" => {
+            normalize_numeric_prop(interpolate_value(value, context, warnings))
+        }
+        _ => interpolate_value(value, context, warnings),
+    };
+    node.props.insert(prop.to_owned(), value);
+    true
+}
+
+fn normalize_numeric_prop(value: Value) -> Value {
+    match value {
+        Value::String(value) => {
+            if let Ok(number) = value.parse::<i64>() {
+                return Value::from(number);
+            }
+            if let Ok(number) = value.parse::<f64>() {
+                if let Some(number) = serde_json::Number::from_f64(number) {
+                    return Value::Number(number);
+                }
+            }
+            Value::String(value)
+        }
+        value => value,
+    }
+}
+
+fn normalize_picker_options(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| match item {
+                    Value::String(_) | Value::Number(_) | Value::Bool(_) | Value::Object(_) => item,
+                    Value::Null => Value::String(String::new()),
+                    other => Value::String(other.to_string()),
+                })
+                .collect(),
+        ),
+        Value::String(value) => Value::Array(
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(|item| Value::String(item.to_owned()))
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
+fn should_warn_unsupported_attr(tag: &str, attr: &str) -> bool {
+    matches!(
+        tag,
+        "input" | "textarea" | "radio" | "checkbox" | "picker" | "map" | "canvas"
+    ) && !attr.starts_with("data-")
+        && !attr.starts_with("wx:")
+        && !matches!(attr, "bindtap" | "catchtap" | "bindinput" | "bindchange")
+}
+
+fn public_component_tag(tag: &str) -> &str {
+    match tag {
+        "map" => "map-preview",
+        "canvas" => "canvas-static",
+        tag => tag,
     }
 }
 

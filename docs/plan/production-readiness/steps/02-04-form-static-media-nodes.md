@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-04
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 21:54:59 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 02-03 完成后，启动表单与静态媒体节点 |
+| Review evidence | 本文 Review 环节已记录：修复 `maxlength` 等数值 props 初版以字符串输出的问题；确认新增表单节点只是 Render IR 数据，disabled 会抑制 `input` / `change` / tap event，`map-preview` 不透传精确经纬度/markers，`canvas-static` 不开放 script/touch 交互，未绕过 Orchestrator input validation、ConsentGate 或 Host provider。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime node` 7 passed under filter（lib 3 passed、wxml_bindings 4 passed）；`cargo test -p component-runtime` 40 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/dock-core docs/architecture docs/plan` 无输出；敏感词抽样仅命中本步骤精确经纬度/markers 拒绝测试、文档安全说明和既有台账文字，Render IR 不输出这些字段。 |
+| Next action | 创建 focused implementation commit，然后回填 done 状态并进入 Step 02-05 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -67,13 +67,13 @@ Step index：02-04
 
 ## 7. 验收标准
 
-- [ ] Render IR 支持 `input`、`textarea`、`radio`、`checkbox`、`picker` node kind 和最小 props。
-- [ ] Render IR 支持 `map-preview`、`canvas-static` 静态节点，不开放 MapContext/canvas script。
-- [ ] disabled 表单或按钮节点不会产生可执行 action。
-- [ ] 表单值进入后续 API 前仍需 Orchestrator input validation、permission、ConsentGate 和 audit。
-- [ ] Host 不支持新增 node kind 时 fallback / warning 可观测，不静默执行未知 action。
-- [ ] 组件兼容矩阵和 Render IR 子文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Render IR 支持 `input`、`textarea`、`radio`、`checkbox`、`picker` node kind 和最小 props。
+- [x] Render IR 支持 `map-preview`、`canvas-static` 静态节点，不开放 MapContext/canvas script。
+- [x] disabled 表单或按钮节点不会产生可执行 action。
+- [x] 表单值进入后续 API 前仍需 Orchestrator input validation、permission、ConsentGate 和 audit。
+- [x] Host 不支持新增 node kind 时 fallback / warning 可观测，不静默执行未知 action。
+- [x] 组件兼容矩阵和 Render IR 子文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -96,20 +96,20 @@ Step index：02-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 初版 `maxlength` 等数值 props 以字符串输出，不利于 Host renderer 稳定消费；需确认 map/canvas 不透传交互或精确位置字段。 | Review 前已修复数值属性归一化，并通过 tests 验证静态媒体边界。 |
+| 已修复问题 | `maxlength`、`scale`、`width`、`height` 现在可归一为 JSON number；`map-preview` 对 `latitude` / `longitude` / `markers` / `polyline` / `controls` warning 且不透传；`canvas-static` 对 script / draw / touch event warning 且不生成事件。 | focused tests 已覆盖。 |
+| 剩余风险 | 真实 Host 输入控件、表单提交路径、位置/media provider、Host fallback renderer 和 golden snapshots 仍未实现。 | 按计划留到 Step 02-06 和 Phase 4；本 Step 只定义 Render IR 数据边界。 |
+| 新增或缺失测试 | 新增 node kind registry、表单 props/event、disabled 抑制、map/canvas 静态边界 tests；未新增真实 Host renderer E2E 或 golden snapshot。 | Host E2E / snapshots 不属于 02-04 范围。 |
+| 已更新或缺失文档 | 已更新组件兼容矩阵、Phase 2 component runtime alignment、Render IR 子文档、本 Step 和主 Plan 台账。 | 未更新 Host adapter contract，留到 Phase 4。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 P1 表单/静态媒体 node、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` 包含本 Step 的 `component-runtime` node kind / compiler / event / tests、组件矩阵、Phase 2 文档、Render IR 子文档、Step 文档和主 Plan in-progress/review 记录，未发现其它 Step 完成工作。
+- 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/events.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/plan/production-readiness/steps/02-04-form-static-media-nodes.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：待 implementation commit 后回填。
+- 遗留未提交变更：待 implementation commit 后回填。
 - 建议消息：`phase2: add form static media nodes`
 
 ## 11. Blocked 处理

@@ -72,6 +72,8 @@ P2 规划：
 
 Step 02-03 已完成其中的 WXML P1 语法子集：`wx:if` / `wx:elif` / `wx:else` 条件链、`catchtap` Render IR event、disabled button 事件抑制，以及 `!flag`、`===`、`!==`、literal、boolean、null 和 path 的受限 expression evaluator。function call、mutation、复杂运算和 arbitrary JS 仍 fail closed 并产生 warning。
 
+Step 02-04 已完成表单与静态媒体节点的 Render IR 子集：`input`、`textarea`、`radio`、`checkbox`、`picker` 输出安全 props、`input` / `change` 受控事件和 disabled 状态；`map` / `canvas` 分别编译为 `map-preview` / `canvas-static` 静态节点。真实 Host 输入控件、表单提交路径、位置 provider、media provider、MapContext 和 canvas script 仍不在本 Step 开放。
+
 仍不支持：
 
 - template/import/include；

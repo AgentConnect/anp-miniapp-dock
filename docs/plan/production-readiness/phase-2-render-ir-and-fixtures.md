@@ -43,6 +43,8 @@ P1 建议新增：
 - `map-preview`
 - `canvas-static`
 
+Step 02-04 已将上述 P1 node kind 加入 `RenderNodeKind`：表单节点输出安全 props、`input` / `change` 受控事件和 disabled 状态；`map-preview` / `canvas-static` 只表达静态预览，不开放 `MapContext.*`、精确经纬度透传、markers、canvas script 或 touch 交互。真实 Host renderer、表单提交路径、位置/media provider 和 golden snapshots 仍由 Step 02-06 与 Phase 4 承接。
+
 Host 处理规则：
 
 - unknown node kind：渲染 fallback placeholder 或整卡 fallback；
@@ -123,7 +125,7 @@ Component Runtime
 ## 8. 完成标准
 
 - [x] Render IR 有 schema version。
-- [ ] Node/action registry 文档与代码枚举一致。
+- [x] Node/action registry 文档与代码枚举一致。
 - [ ] 每个 fixture 有 snapshot。
 - [ ] Host adapter 可以根据 contract 单独实现。
 - [x] fallback reason 可被 CLI 和 CardSpec fallback 观察。

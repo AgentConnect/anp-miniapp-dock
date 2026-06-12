@@ -12,6 +12,13 @@ pub enum RenderNodeKind {
     Image,
     Button,
     ScrollView,
+    Input,
+    Textarea,
+    Radio,
+    Checkbox,
+    Picker,
+    MapPreview,
+    CanvasStatic,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -154,6 +161,8 @@ impl RenderStyle {
 pub enum RenderEventKind {
     Tap,
     CatchTap,
+    Input,
+    Change,
     ImageLoad,
     ImageError,
 }
@@ -230,5 +239,31 @@ mod tests {
         ];
 
         assert_eq!(kinds.len(), 5);
+    }
+
+    #[test]
+    fn supports_p1_node_kinds() {
+        let kinds = [
+            RenderNodeKind::Input,
+            RenderNodeKind::Textarea,
+            RenderNodeKind::Radio,
+            RenderNodeKind::Checkbox,
+            RenderNodeKind::Picker,
+            RenderNodeKind::MapPreview,
+            RenderNodeKind::CanvasStatic,
+        ];
+
+        assert_eq!(
+            serde_json::to_value(kinds).unwrap(),
+            json!([
+                "input",
+                "textarea",
+                "radio",
+                "checkbox",
+                "picker",
+                "map-preview",
+                "canvas-static"
+            ])
+        );
     }
 }

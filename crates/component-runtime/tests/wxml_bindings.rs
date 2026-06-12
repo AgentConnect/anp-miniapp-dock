@@ -293,6 +293,153 @@ fn wxss_unsupported_complex_selector_is_warning() {
 }
 
 #[test]
+fn node_form_controls_compile_to_p1_render_nodes_and_safe_props() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <input name="recipient" value="{{ form.name }}" placeholder="Name" type="text" maxlength="32" bindinput="onName" />
+          <textarea name="note" value="{{ form.note }}" placeholder="Note" bindinput="onNote"></textarea>
+          <radio name="size" value="small" checked="{{ selected === 'small' }}" bindchange="onSize">Small</radio>
+          <checkbox name="extras" value="milk" checked bindchange="onExtra">Milk</checkbox>
+          <picker name="time" range="{{ slots }}" value="{{ selectedIndex }}" bindchange="onTime"></picker>
+        </view>
+        "#,
+        "",
+        &json!({
+            "form": {"name": "Ada", "note": "Leave at desk"},
+            "selected": "small",
+            "slots": ["09:00", "10:00"],
+            "selectedIndex": 1
+        }),
+    )
+    .expect("component compiles");
+
+    let input = &output.root.children[0];
+    assert_eq!(input.kind, RenderNodeKind::Input);
+    assert_eq!(input.props.get("name"), Some(&json!("recipient")));
+    assert_eq!(input.props.get("value"), Some(&json!("Ada")));
+    assert_eq!(input.props.get("placeholder"), Some(&json!("Name")));
+    assert_eq!(input.props.get("inputType"), Some(&json!("text")));
+    assert_eq!(input.props.get("maxLength"), Some(&json!(32)));
+    assert_eq!(input.events[0].event, RenderEventKind::Input);
+
+    let textarea = &output.root.children[1];
+    assert_eq!(textarea.kind, RenderNodeKind::Textarea);
+    assert_eq!(textarea.props.get("value"), Some(&json!("Leave at desk")));
+    assert_eq!(textarea.events[0].event, RenderEventKind::Input);
+
+    let radio = &output.root.children[2];
+    assert_eq!(radio.kind, RenderNodeKind::Radio);
+    assert_eq!(radio.props.get("checked"), Some(&json!(true)));
+    assert_eq!(radio.events[0].event, RenderEventKind::Change);
+
+    let checkbox = &output.root.children[3];
+    assert_eq!(checkbox.kind, RenderNodeKind::Checkbox);
+    assert_eq!(checkbox.props.get("checked"), Some(&json!(true)));
+    assert_eq!(checkbox.events[0].event, RenderEventKind::Change);
+
+    let picker = &output.root.children[4];
+    assert_eq!(picker.kind, RenderNodeKind::Picker);
+    assert_eq!(
+        picker.props.get("options"),
+        Some(&json!(["09:00", "10:00"]))
+    );
+    assert_eq!(picker.props.get("value"), Some(&json!(1)));
+    assert_eq!(picker.events[0].event, RenderEventKind::Change);
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn node_disabled_form_controls_suppress_events() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <input disabled="{{ locked }}" bindinput="onInput" bindchange="onChange" />
+          <picker disabled bindchange="onPick"></picker>
+        </view>
+        "#,
+        "",
+        &json!({"locked": true}),
+    )
+    .expect("component compiles");
+
+    let input = &output.root.children[0];
+    assert_eq!(input.kind, RenderNodeKind::Input);
+    assert_eq!(input.props.get("disabled"), Some(&json!(true)));
+    assert!(input.events.is_empty());
+
+    let picker = &output.root.children[1];
+    assert_eq!(picker.kind, RenderNodeKind::Picker);
+    assert_eq!(picker.props.get("disabled"), Some(&json!(true)));
+    assert!(picker.events.is_empty());
+}
+
+#[test]
+fn node_static_map_and_canvas_compile_without_interactive_apis() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <map id="store-map" region="{{ region }}" location-token="{{ locationToken }}" latitude="31.2" longitude="121.4" markers="{{ markers }}" />
+          <canvas canvas-id="receipt" poster="{{ poster }}" script="drawSensitive()" bindtouchstart="onTouch" />
+        </view>
+        "#,
+        "",
+        &json!({
+            "region": "mock-region-shanghai",
+            "locationToken": "opaque-location-demo",
+            "markers": [{"latitude": 31.2, "longitude": 121.4}],
+            "poster": "https://img.example/receipt.png"
+        }),
+    )
+    .expect("component compiles with warnings");
+
+    let map = &output.root.children[0];
+    assert_eq!(map.kind, RenderNodeKind::MapPreview);
+    assert_eq!(map.props.get("id"), Some(&json!("store-map")));
+    assert_eq!(
+        map.props.get("region"),
+        Some(&json!("mock-region-shanghai"))
+    );
+    assert_eq!(
+        map.props.get("locationToken"),
+        Some(&json!("opaque-location-demo"))
+    );
+    assert!(!map.props.contains_key("latitude"));
+    assert!(!map.props.contains_key("longitude"));
+    assert!(!map.props.contains_key("markers"));
+
+    let canvas = &output.root.children[1];
+    assert_eq!(canvas.kind, RenderNodeKind::CanvasStatic);
+    assert_eq!(canvas.props.get("canvasId"), Some(&json!("receipt")));
+    assert_eq!(
+        canvas.props.get("poster"),
+        Some(&json!("https://img.example/receipt.png"))
+    );
+    assert!(canvas.events.is_empty());
+
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported `map-preview` attribute `latitude`")));
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported `map-preview` attribute `longitude`")));
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported `map-preview` attribute `markers`")));
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported `canvas-static` attribute `script`")));
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported `canvas-static` attribute `bindtouchstart`")));
+}
+
+#[test]
 fn unsupported_expression_generates_warning() {
     let output = compile_wxml_to_render_ir(
         "<view><text>{{ price + tax }}</text></view>",
