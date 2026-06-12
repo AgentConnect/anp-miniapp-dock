@@ -247,11 +247,10 @@ where
 
         match self.renderer.render(context, &input) {
             Ok(render) => Some(render),
-            Err(error) => Some(self.renderer.fallback(
-                context,
-                result,
-                &format!("render_failed: {error}"),
-            )),
+            Err(_error) => Some(
+                self.renderer
+                    .fallback(context, result, "component_vm_failed"),
+            ),
         }
     }
 

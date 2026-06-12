@@ -136,16 +136,14 @@ cargo test -p dock-cli --test coffee_order_flow
 当前通过标准：
 
 - coffee 三组件能 mount、render、dispatch tap、触发 `api/call` 和 expire。
-- `preview-component` 输出 Render IR JSON。
-- render failure 可以 fallback 到 CardSpec。
+- `preview-component` 和 `call-api` render payload 输出 `schemaVersion: "dock.render-ir.v1"`。
+- render failure 可以 fallback 到 CardSpec，并输出稳定 fallback reason enum string。
 
 Planned gates：
 
 | Gate | 启用阶段 |
 |---|---|
-| Render IR `schemaVersion` | Phase 2 |
 | Render IR golden snapshots | Phase 2 |
-| fallback reason enum | Phase 2 |
 | address-form、media-review、dynamic-status、location-map-preview fixtures | Phase 2 |
 | Host renderer unknown node/action conformance | Phase 4 |
 

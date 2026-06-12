@@ -103,6 +103,10 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
         "latte"
     );
     assert_eq!(call["render"]["renderer"], "component-runtime");
+    assert_eq!(
+        call["render"]["payload"]["render"]["schemaVersion"],
+        "dock.render-ir.v1"
+    );
     assert!(call["modelVisible"].get("_meta").is_none());
 
     let component = cli_json([
@@ -121,6 +125,7 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
         .to_string(),
     ]);
     assert_eq!(component["status"], "ok");
+    assert_eq!(component["render"]["schemaVersion"], "dock.render-ir.v1");
     assert_eq!(component["render"]["root"]["kind"], "view");
 
     let card = cli_json([

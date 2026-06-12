@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-01
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 21:11:25 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 01-08 完成后，启动 Render IR contract 稳定化 |
+| Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认所有 Component Runtime Render IR 输出带 `schemaVersion`，fallback reason 对外为稳定枚举值，旧自由字符串只在内部 normalize，未向 CLI/Host payload 泄露路径或错误细节。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime render` 5 passed；`cargo test -p component-runtime render_output_serializes_schema_version` 1 passed；`cargo test -p card-spec fallback` 1 passed；`cargo test -p dock-core fallback` 1 passed；`cargo test -p dock-cli preview_card` 2 passed；`cargo test -p card-spec -p dock-core -p component-runtime` 40 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/dock-core crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假路径和文档安全说明。 |
+| Next action | 创建 Step 02-01 focused commit 后回填 commit hash，并进入 Step 02-02 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,12 +66,12 @@ Step index：02-01
 
 ## 7. 验收标准
 
-- [ ] 所有正常 Render IR 输出包含 `schemaVersion: "dock.render-ir.v1"`。
-- [ ] fallback reason 有稳定枚举，至少覆盖 `no_component_path`、`component_missing`、`component_load_failed`、`component_vm_failed`、`wxml_parse_failed`、`wxss_parse_warning_threshold`、`unsupported_node_kind`、`host_renderer_unavailable`、`api_error`、`empty_structured_content`。
-- [ ] CLI / tests 可以观察 fallback reason，且不会泄露本地绝对路径或敏感数据。
-- [ ] Host unknown node/action 的策略保持 fail closed 或 fallback，不静默执行。
-- [ ] 组件兼容矩阵和 Phase 2 子文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 所有正常 Render IR 输出包含 `schemaVersion: "dock.render-ir.v1"`。
+- [x] fallback reason 有稳定枚举，至少覆盖 `no_component_path`、`component_missing`、`component_load_failed`、`component_vm_failed`、`wxml_parse_failed`、`wxss_parse_warning_threshold`、`unsupported_node_kind`、`host_renderer_unavailable`、`api_error`、`empty_structured_content`。
+- [x] CLI / tests 可以观察 fallback reason，且不会泄露本地绝对路径或敏感数据。
+- [x] Host unknown node/action 的策略保持 fail closed 或 fallback，不静默执行。
+- [x] 组件兼容矩阵和 Phase 2 子文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -84,6 +84,8 @@ Step index：02-01
 | 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/component-runtime crates/dock-core crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/plan` | 无空白错误 |
 | 脱敏抽样 | 手工检查 fallback reason、debug、CLI JSON | 不含 token、Authorization、signature、private key path、本地绝对路径或隐私原文 |
 
+补充验证：`cargo test -p component-runtime render_output_serializes_schema_version` 1 passed；`cargo test -p card-spec -p dock-core -p component-runtime` 40 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
+
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
 ## 9. Review 环节
@@ -93,20 +95,20 @@ Step index：02-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 未发现阻塞问题 | Review 覆盖 Render IR schemaVersion 全路径、fallback reason 稳定枚举、CLI/Host payload、敏感错误信息脱敏和文档同步。 |
+| 已修复问题 | 将 `ComponentRenderOutput` 变为可序列化 camelCase contract 并默认输出 `dock.render-ir.v1`；将旧 `component_render_failed` / `renderer_unavailable` 等自由字符串收敛到 Step 要求的稳定枚举；dock-core render failure 对外输出 `component_vm_failed`。 | focused tests、相关包测试和 coffee E2E 已通过。 |
+| 剩余风险 | Render IR golden snapshots、集中 fixture 目录、Host renderer unknown node/action conformance 仍在 Step 02-06 / Phase 4；本 Step 只稳定版本与 fallback reason contract。 | 组件矩阵和 release gates 已保留 planned 项。 |
+| 新增或缺失测试 | 新增 Render IR schemaVersion 直接序列化测试、fixture schemaVersion 断言、CLI schemaVersion 断言、fallback reason enum 覆盖测试和 render failure stable reason 断言；未新增 golden snapshot。 | golden snapshots 属于 Step 02-06。 |
+| 已更新或缺失文档 | 已更新组件兼容矩阵、Phase 2 Render IR 子文档、release gates、本 Step 和主 Plan 台账。 | 未更新 Host adapter contract，留到 Phase 4。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 Render IR schemaVersion、fallback reason enum、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` 包含本 Step Render IR schemaVersion、fallback reason enum、直接 tests 和相关文档，未发现其它 Step 完成工作。
+- 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/src/lib.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`crates/card-spec/src/fallback.rs`、`crates/card-spec/tests/order_card.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/tests/api_call_flow.rs`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：待提交后记录 commit hash 和 commit 后 `git status --short --branch`。
+- 遗留未提交变更：待提交后记录。
 - 建议消息：`phase2: version render ir fallback reasons`
 
 ## 11. Blocked 处理

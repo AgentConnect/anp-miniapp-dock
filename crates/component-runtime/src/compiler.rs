@@ -1,7 +1,10 @@
 use crate::loader::ComponentPackage;
-use crate::render_ir::{RenderEventBinding, RenderEventKind, RenderNode, RenderNodeKind};
+use crate::render_ir::{
+    RenderEventBinding, RenderEventKind, RenderNode, RenderNodeKind, RENDER_IR_SCHEMA_VERSION,
+};
 use crate::wxml::{parse_wxml, WxmlElement, WxmlNode, WxmlParseError};
 use crate::wxss::{merge_styles, parse_inline_style, WxssStyleSheet};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,10 +67,22 @@ impl BindingContext {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComponentRenderOutput {
+    pub schema_version: String,
     pub root: RenderNode,
     pub warnings: Vec<String>,
+}
+
+impl ComponentRenderOutput {
+    pub fn new(root: RenderNode, warnings: Vec<String>) -> Self {
+        Self {
+            schema_version: RENDER_IR_SCHEMA_VERSION.to_owned(),
+            root,
+            warnings,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -114,7 +129,7 @@ pub fn compile_wxml_to_render_ir(
     else {
         return Err(ComponentCompileError::MissingRoot);
     };
-    Ok(ComponentRenderOutput { root, warnings })
+    Ok(ComponentRenderOutput::new(root, warnings))
 }
 
 fn compile_node(
@@ -404,7 +419,31 @@ mod tests {
         )
         .expect("compile succeeds");
 
+        assert_eq!(output.schema_version, RENDER_IR_SCHEMA_VERSION);
         assert_eq!(output.root.children[0].text.as_deref(), Some("Ada"));
+    }
+
+    #[test]
+    fn render_output_serializes_schema_version() {
+        let output = compile_wxml_to_render_ir("<view><text>Ready</text></view>", "", &json!({}))
+            .expect("compile succeeds");
+
+        assert_eq!(
+            serde_json::to_value(output).unwrap(),
+            json!({
+                "schemaVersion": "dock.render-ir.v1",
+                "root": {
+                    "id": "view-0",
+                    "kind": "view",
+                    "children": [{
+                        "id": "text-1",
+                        "kind": "text",
+                        "text": "Ready"
+                    }]
+                },
+                "warnings": []
+            })
+        );
     }
 
     #[test]

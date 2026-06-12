@@ -182,11 +182,10 @@ fn render_failure_uses_fallback() {
 
     let render = outcome.render.expect("fallback render exists");
     assert_eq!(render.renderer, "fallback");
-    assert!(render
-        .fallback_reason
-        .as_deref()
-        .unwrap_or_default()
-        .contains("render_failed"));
+    assert_eq!(
+        render.fallback_reason.as_deref(),
+        Some("component_vm_failed")
+    );
 }
 
 #[test]

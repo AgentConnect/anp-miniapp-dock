@@ -6,7 +6,7 @@ Render IR 是容器与 Host renderer 的稳定边界。本文定义 Render IR �
 
 ## 2. Render IR Contract
 
-每个 Render IR 输出建议包含：
+Step 02-01 后，每个 Component Runtime Render IR 输出必须包含：
 
 ```json
 {
@@ -21,7 +21,7 @@ Render IR 是容器与 Host renderer 的稳定边界。本文定义 Render IR �
 }
 ```
 
-`debug` 只允许在 dev/headless 输出，且必须 redacted。
+当前代码路径输出 `schemaVersion`、`root` 和 `warnings`；`componentPath`、`actions`、`trace`、`state` 由 CLI/runtime envelope 承载。`debug` 只允许在 dev/headless 输出，且必须 redacted。
 
 ## 3. Node Kind Registry
 
@@ -98,7 +98,7 @@ testdata/render-ir/
 
 ## 7. Fallback Contract
 
-Fallback 原因枚举建议：
+Fallback 原因枚举已收敛为：
 
 - `no_component_path`
 - `component_missing`
@@ -122,8 +122,8 @@ Component Runtime
 
 ## 8. 完成标准
 
-- [ ] Render IR 有 schema version。
+- [x] Render IR 有 schema version。
 - [ ] Node/action registry 文档与代码枚举一致。
 - [ ] 每个 fixture 有 snapshot。
 - [ ] Host adapter 可以根据 contract 单独实现。
-- [ ] fallback reason 可被 CLI 和 audit 观察。
+- [x] fallback reason 可被 CLI 和 CardSpec fallback 观察。

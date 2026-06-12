@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+pub const RENDER_IR_SCHEMA_VERSION: &str = "dock.render-ir.v1";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RenderNodeKind {

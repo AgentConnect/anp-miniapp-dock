@@ -1,6 +1,6 @@
 use component_runtime::{
     compile_component_to_render_ir, compile_wxml_to_render_ir, ComponentCompileError,
-    ComponentPackage, RenderEventKind, RenderNodeKind,
+    ComponentPackage, RenderEventKind, RenderNodeKind, RENDER_IR_SCHEMA_VERSION,
 };
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -35,6 +35,7 @@ fn compiles_drink_list_fixture_with_for_image_button_and_scroll_view() {
     )
     .expect("component compiles");
 
+    assert_eq!(output.schema_version, RENDER_IR_SCHEMA_VERSION);
     assert_eq!(output.root.kind, RenderNodeKind::View);
     assert_eq!(output.root.style.padding.as_deref(), Some("12px"));
     assert_eq!(

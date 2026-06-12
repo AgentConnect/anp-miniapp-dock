@@ -727,7 +727,7 @@ fn preview_card(result_json: &str) -> Result<Value, CliError> {
     {
         FallbackReason::EmptyStructuredContent
     } else {
-        FallbackReason::RendererUnavailable
+        FallbackReason::HostRendererUnavailable
     };
     let card = fallback_from_result(&result, reason);
     Ok(json!({
@@ -1004,11 +1004,12 @@ impl RenderRouter for ComponentRenderRouter {
         reason: &str,
     ) -> RenderOutcome {
         let fallback_reason = fallback_reason_from_str(reason);
+        let stable_reason = fallback_reason.as_str().to_owned();
         RenderOutcome {
             renderer: "card-spec".to_owned(),
             component_path: None,
             payload: json!(fallback_from_result(result, fallback_reason)),
-            fallback_reason: Some(reason.to_owned()),
+            fallback_reason: Some(stable_reason),
         }
     }
 }
@@ -1501,15 +1502,7 @@ fn skill_id(skill: &LoadedSkill) -> String {
 }
 
 fn fallback_reason_from_str(reason: &str) -> FallbackReason {
-    if reason.contains("component_load") {
-        FallbackReason::ComponentLoadFailed
-    } else if reason.contains("render_failed") {
-        FallbackReason::ComponentRenderFailed
-    } else if reason.contains("no_component_path") {
-        FallbackReason::NoComponentPath
-    } else {
-        FallbackReason::RendererUnavailable
-    }
+    FallbackReason::normalize(reason)
 }
 
 fn render_outcome_json(render: Option<&RenderOutcome>) -> Value {
@@ -1548,6 +1541,7 @@ fn audit_events_json(events: &[AuditEvent]) -> Value {
 
 fn component_render_json(render: &ComponentRenderOutput) -> Value {
     json!({
+        "schemaVersion": render.schema_version,
         "root": render.root,
         "warnings": render.warnings
     })
@@ -1593,6 +1587,10 @@ mod tests {
 
         assert_eq!(output["status"], "ok");
         assert_eq!(output["card"]["version"], "card-spec/v0");
+        assert_eq!(
+            output["card"]["fallbackReason"],
+            "host_renderer_unavailable"
+        );
     }
 
     #[test]
