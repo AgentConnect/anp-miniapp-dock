@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-06
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 22:33:56 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 22:59:08 +0800 |
+| Commit | `f778a14` |
 | Review evidence | 2026-06-12 22:56:36 +0800 commit 前 Review 已记录：修复 dynamic snapshot `brokerCalls` 取值时机和 dynamic policy 过期文案；确认 snapshots 稳定、mock-only、无禁用敏感串 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`cargo test -p mcp-schema` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；严格 fixture/snapshot 敏感串扫描无命中 |
-| Next action | 准备创建 focused implementation commit，然后回填 commit hash 并进入 Step 02-07 |
+| Next action | 进入 Step 02-07 批次最终 Review 与整体验证 gate，不得直接进入 Phase 3 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -80,7 +80,7 @@ Step index：02-06
 - [x] location-map-preview 覆盖 location fail closed、map-preview node 和 fallback。
 - [x] 兼容矩阵、release gates、Phase 2 文档和 README 索引与 fixture 状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入 Step 02-07 最终 Review gate 之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入 Step 02-07 最终 Review gate 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -135,9 +135,9 @@ Commit 前状态：`git status --short` 显示本 Step 范围内的 fixtures、s
 
 纳入文件：`examples/fixtures/`、`testdata/render-ir/`、`crates/component-runtime/tests/render_ir_snapshots.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`crates/dock-cli/src/commands.rs`、`crates/mcp-schema/src/validation.rs`、`README.md`、`docs/architecture/component-compatibility-matrix.md`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/02-06-fixtures-render-ir-snapshots.md`。
 
-Commit 后证据：待记录。
+Commit 后证据：implementation commit `f778a14 phase2: add render ir fixture snapshots`；post-commit `git status --short --branch` = `## main...origin/main [ahead 41]`，工作区无未提交实现变更。
 
-遗留未提交变更：待 commit 后确认。
+遗留未提交变更：仅本 Step 文档和主 Plan 的 commit hash / done 状态回填，准备单独创建 docs closure commit。
 
 ## 11. Blocked 处理
 
