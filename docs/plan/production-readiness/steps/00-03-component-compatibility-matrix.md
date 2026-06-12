@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 10:33:02 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 10:40:11 +0800 |
+| Commit | `fea9d35` |
 | Review evidence | 初审未发现需修复的组件矩阵内容问题；确认 Runtime/Host 责任分离，未把 Host renderer、dynamic request/timer、完整页面/半屏能力误标为 production-ready |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 5]`；`git diff --check -- docs/architecture/component-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-03-component-compatibility-matrix.md` 无输出；覆盖抽样 `rg "Component|WXML|WXSS|Render IR|sendFollowUpMessage|api/call|expireAllCards|dynamic" docs/architecture/component-compatibility-matrix.md docs/architecture/miniapp-mcp-component-runtime.md docs/plan/production-readiness/phase-2-component-runtime-alignment.md` 命中矩阵、架构和 Phase 2 计划；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；安全边界抽样确认 `api/call`、dynamic、L3/L4、token/redaction、Host unknown action 均有约束；Host 边界抽样确认 renderer/provider/card manager 均未写成容器已生产支持 |
-| Next action | 创建 Step 00-03 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 5]`；`git diff --check -- docs/architecture/component-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-03-component-compatibility-matrix.md` 无输出；覆盖抽样 `rg "Component|WXML|WXSS|Render IR|sendFollowUpMessage|api/call|expireAllCards|dynamic" docs/architecture/component-compatibility-matrix.md docs/architecture/miniapp-mcp-component-runtime.md docs/plan/production-readiness/phase-2-component-runtime-alignment.md` 命中矩阵、架构和 Phase 2 计划；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；安全边界抽样确认 `api/call`、dynamic、L3/L4、token/redaction、Host unknown action 均有约束；Host 边界抽样确认 renderer/provider/card manager 均未写成容器已生产支持；post-commit `git status --short --branch` = `## main...origin/main [ahead 6]` |
+| Next action | 进入 Step 00-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -67,7 +67,7 @@ Step index：00-03
 - [x] 每项能力有 owner crate、target phase、fixture/snapshot 需求或不需要的原因。
 - [x] 高风险 action 不能通过 Render IR 直接执行，必须回 Orchestrator/Host provider consent。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -97,8 +97,9 @@ Step index：00-03
 
 - Commit 时机：矩阵、索引、验证、Review 完成后。
 - Commit 范围：只包含 Step 00-03 的组件矩阵和直接索引变更。
-- Commit 前状态：记录 `git status --short`。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` 显示 `README.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/00-03-component-compatibility-matrix.md` 修改，`docs/architecture/component-compatibility-matrix.md` 新增。
+- 纳入文件：`anp/anp-miniapp-dock/README.md`、`anp/anp-miniapp-dock/docs/architecture/component-compatibility-matrix.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/00-03-component-compatibility-matrix.md`。
+- Commit 后证据：主矩阵 commit `fea9d35 docs: add component compatibility matrix`；post-commit `git status --short --branch` = `## main...origin/main [ahead 6]`。台账关闭状态由后续小文档提交保存。
 - 建议消息：`docs: add component compatibility matrix`
 
 ## 11. Blocked 处理
