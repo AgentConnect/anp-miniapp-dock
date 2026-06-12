@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 10:18:26 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 10:31:32 +0800 |
+| Commit | `22e7f25` |
 | Review evidence | 初审未发现需修复的矩阵内容问题；确认状态未过度承诺，`wx.login` / `wx.request` 仍标记为 `demo-only`，高风险 API 均要求 ConsentGate/audit 或明确 unsupported |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 3]`；`git diff --check -- docs/architecture/wx-api-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 无输出；协议覆盖抽样 `rg 'wx\.login|wx\.request|wx\.requestPayment|wx\.getPhoneNumber|wx\.chooseAddress|wx\.modelContext' docs/weichat-miniapp-mcp-protocol docs/architecture/wx-api-compatibility-matrix.md` 命中协议参考和矩阵；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；L3/L4 与敏感字段抽样确认有 ConsentGate/audit/fail closed/opaque handle/redaction 说明 |
-| Next action | 创建 Step 00-02 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 3]`；`git diff --check -- docs/architecture/wx-api-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 无输出；协议覆盖抽样 `rg 'wx\.login|wx\.request|wx\.requestPayment|wx\.getPhoneNumber|wx\.chooseAddress|wx\.modelContext' docs/weichat-miniapp-mcp-protocol docs/architecture/wx-api-compatibility-matrix.md` 命中协议参考和矩阵；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；L3/L4 与敏感字段抽样确认有 ConsentGate/audit/fail closed/opaque handle/redaction 说明；post-commit `git status --short --branch` = `## main...origin/main [ahead 4]` |
+| Next action | 进入 Step 00-03 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -67,7 +67,7 @@ Step index：00-02
 - [x] `wx.login`、`wx.checkSession`、`wx.request`、storage、`wx.requestPayment`、`wx.getPhoneNumber`、`wx.chooseAddress` 有明确 ANP DID / Host provider / consent 映射。
 - [x] callback/Promise 不确定项明确标为 Phase 1 contract 决策点。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -97,8 +97,9 @@ Step index：00-02
 
 - Commit 时机：矩阵、索引、验证、Review 完成后。
 - Commit 范围：只包含 Step 00-02 的 API 矩阵和直接索引变更。
-- Commit 前状态：记录 `git status --short`。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` 显示 `README.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 修改，`docs/architecture/wx-api-compatibility-matrix.md` 新增。
+- 纳入文件：`anp/anp-miniapp-dock/README.md`、`anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`、`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md`。
+- Commit 后证据：主矩阵 commit `22e7f25 docs: add wx api compatibility matrix`；post-commit `git status --short --branch` = `## main...origin/main [ahead 4]`。台账关闭状态由后续小文档提交保存。
 - 建议消息：`docs: add wx api compatibility matrix`
 
 ## 11. Blocked 处理

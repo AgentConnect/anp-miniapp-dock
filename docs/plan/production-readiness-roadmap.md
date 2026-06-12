@@ -107,7 +107,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 | Step | 标题 | 依赖 | 主要产出 | 小 Plan 文档 | Commit gate | 状态 |
 |---|---|---|---|---|---|---|
 | 00-01 | 当前能力盘点与基线固化 | 无 | 当前能力清单、证据表、demo-only 标注 | [production-readiness/steps/00-01-baseline-inventory.md](production-readiness/steps/00-01-baseline-inventory.md) | 必须 | done |
-| 00-02 | wx API 兼容矩阵 | 00-01 | `docs/architecture/wx-api-compatibility-matrix.md` | [production-readiness/steps/00-02-wx-api-compatibility-matrix.md](production-readiness/steps/00-02-wx-api-compatibility-matrix.md) | 必须 | review |
+| 00-02 | wx API 兼容矩阵 | 00-01 | `docs/architecture/wx-api-compatibility-matrix.md` | [production-readiness/steps/00-02-wx-api-compatibility-matrix.md](production-readiness/steps/00-02-wx-api-compatibility-matrix.md) | 必须 | done |
 | 00-03 | 组件兼容矩阵 | 00-01 | `docs/architecture/component-compatibility-matrix.md` | [production-readiness/steps/00-03-component-compatibility-matrix.md](production-readiness/steps/00-03-component-compatibility-matrix.md) | 必须 | pending |
 | 00-04 | Threat model 与 release gates 初版 | 00-01, 00-02, 00-03 | `docs/security/threat-model.md`、`docs/runbook/release-gates.md` | [production-readiness/steps/00-04-threat-model-release-gates.md](production-readiness/steps/00-04-threat-model-release-gates.md) | 必须 | pending |
 | 01-01 | wx API Bridge Contract 冻结 | 00-02 | bridge 契约、错误语义、callback/Promise 决策 | [production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md](production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md) | 必须 | pending |
@@ -122,7 +122,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 | Step | 状态 | 分支 | 开始时间 | 完成时间 | Commit | Review 证据 | 验证证据 | 下一步 |
 |---|---|---|---|---|---|---|---|---|
 | 00-01 | done | `main` | 2026-06-12 10:05:15 +0800 | 2026-06-12 10:16:44 +0800 | `de4c3e2` | Step 文档 Review 环节已记录：未发现需修复问题，demo-only/host-boundary 未被误标为 production-ready | `cargo metadata --format-version 1 --no-deps` 成功；`git diff --check -- docs/architecture README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-01-baseline-inventory.md` 无输出；新增基线文档 Markdown 链接手工检查无破链；post-commit `git status --short --branch` = `## main...origin/main [ahead 2]` | 进入 00-02 |
-| 00-02 | review | `main` | 2026-06-12 10:18:26 +0800 | 待记录 | 待记录 | Step 文档 Review 环节已记录：未发现阻塞问题，`demo-only`/`host-boundary` 未被误标为 production-ready，高风险 API 均要求 ConsentGate/audit 或 fail closed | `git diff --check -- docs/architecture/wx-api-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 无输出；协议覆盖抽样命中协议参考和矩阵；status 列结构化检查无非法枚举；矩阵 Markdown 链接检查无破链；L3/L4 与敏感字段抽样通过 | 创建 Step 00-02 focused commit |
+| 00-02 | done | `main` | 2026-06-12 10:18:26 +0800 | 2026-06-12 10:31:32 +0800 | `22e7f25` | Step 文档 Review 环节已记录：未发现阻塞问题，`demo-only`/`host-boundary` 未被误标为 production-ready，高风险 API 均要求 ConsentGate/audit 或 fail closed | `git diff --check -- docs/architecture/wx-api-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 无输出；协议覆盖抽样命中协议参考和矩阵；status 列结构化检查无非法枚举；矩阵 Markdown 链接检查无破链；L3/L4 与敏感字段抽样通过；post-commit `git status --short --branch` = `## main...origin/main [ahead 4]` | 进入 00-03 |
 | 00-03 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 |
 | 00-04 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 至 00-03 |
 | 01-01 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-02 |
