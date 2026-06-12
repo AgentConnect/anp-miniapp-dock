@@ -36,7 +36,7 @@ Step index：06-06
 
 ## 4. 实现方法
 
-1. 阅读 Phase 6 runbook 计划、Release Gates、doctor、metrics/tracing、persistence scope cleanup 和 rollback runbook。
+1. 阅读 Phase 6 runbook 计划、Release Gates、doctor、metrics/tracing、runtime config、scoped storage cleanup、audit retention/export、Skill cache cleanup 和 rollback runbook。
 2. 新增或更新 runbook：operations、troubleshooting、privacy deletion、cache purge。
 3. 为每类故障写明：症状、相关 event/metric、检查命令、常见原因、处理步骤、升级路径、回滚条件。
 4. 定义 privacy deletion：user DID、merchant DID、Skill id、session、storage、audit retention、cache。
@@ -60,7 +60,7 @@ Step index：06-06
 
 ## 6. 依赖
 
-- 前置步骤：Step 04-04、Step 05-05、Step 06-01、Step 06-02、Step 06-04、Step 06-05。
+- 前置步骤：Step 04-04、Step 04-06、Step 04-07、Step 04-08、Step 05-05、Step 06-01、Step 06-02、Step 06-04、Step 06-05。
 - 外部文档或决策：Release Gates、doctor、metrics/tracing、rollback strategy、Threat Model。
 - 环境前提：文档为主；真实 deploy 平台命令可标注为 Host-specific。
 
@@ -119,6 +119,7 @@ Step index：06-06
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 06-06 小 Plan | 将运维 Runbook 与隐私删除流程拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 更新持久化/清理依赖 | 按 Review 发现，原 04-04 已拆分，隐私删除 runbook 需依赖 storage、audit、cache cleanup 切片 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

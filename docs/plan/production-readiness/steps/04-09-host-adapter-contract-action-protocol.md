@@ -1,7 +1,7 @@
-# Step 04-05：Host Adapter Contract 与 Action Protocol
+# Step 04-09：Host Adapter Contract 与 Action Protocol
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
-Step index：04-05
+Step index：04-09
 状态：pending
 
 ## 1. 执行状态
@@ -15,7 +15,7 @@ Step index：04-05
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 04-04 完成后，启动 Host adapter contract |
+| Next action | 等待 04-08 完成后，启动 Host adapter contract |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -55,7 +55,7 @@ Step index：04-05
 | `anp/anp-miniapp-dock/docs/runbook/release-gates.md` | Host conformance gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-4-runtime-host-integration.md` | 同步 Host adapter contract | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账 | 必须 |
-| `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/04-05-host-adapter-contract-action-protocol.md` | 回填状态、证据、Review、commit | 必须 |
+| `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/04-09-host-adapter-contract-action-protocol.md` | 回填状态、证据、Review、commit | 必须 |
 
 ## 6. 依赖
 
@@ -120,7 +120,8 @@ Step index：04-05
 
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
-| 2026-06-12 | 创建 Step 04-05 小 Plan | 将 Host Adapter Contract 与 Action Protocol 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 创建 Host adapter 初版小 Plan | 将 Host Adapter Contract 与 Action Protocol 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 顺延为 Step 04-09 | 为拆分原 04-04 持久化大 Step，保留 Host adapter 独立 Step 并顺延编号 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

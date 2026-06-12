@@ -58,7 +58,7 @@ Step index：06-05
 
 ## 6. 依赖
 
-- 前置步骤：Step 04-03、Step 04-05、Step 06-02、Step 06-03、Step 06-04。
+- 前置步骤：Step 04-03、Step 04-09、Step 06-02、Step 06-03、Step 06-04。
 - 外部文档或决策：Runtime/Render IR/token/package/Host adapter versions、Release Gates。
 - 环境前提：真实 production release 平台可后置；runbook/checklist 先可执行。
 
@@ -117,6 +117,7 @@ Step index：06-05
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 06-05 小 Plan | 将 Canary 发布、版本化与回滚策略拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 更新 Host adapter Step 依赖编号 | 原 04-05 Host adapter Step 顺延为 04-09，canary/rollback 依赖随之更新 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

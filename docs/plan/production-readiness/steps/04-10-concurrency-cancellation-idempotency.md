@@ -1,7 +1,7 @@
-# Step 04-06：并发、取消、重试与幂等策略
+# Step 04-10：并发、取消、重试与幂等策略
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
-Step index：04-06
+Step index：04-10
 状态：pending
 
 ## 1. 执行状态
@@ -15,7 +15,7 @@ Step index：04-06
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 04-05 完成后，启动并发/取消/幂等策略 |
+| Next action | 等待 04-09 完成后，启动并发/取消/幂等策略 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -56,11 +56,11 @@ Step index：04-06
 | `anp/anp-miniapp-dock/docs/runbook/release-gates.md` | concurrency/idempotency gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-4-runtime-host-integration.md` | 同步并发策略 | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账 | 必须 |
-| `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/04-06-concurrency-cancellation-idempotency.md` | 回填状态、证据、Review、commit | 必须 |
+| `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/04-10-concurrency-cancellation-idempotency.md` | 回填状态、证据、Review、commit | 必须 |
 
 ## 6. 依赖
 
-- 前置步骤：Step 02-05、Step 03-03、Step 03-05、Step 04-01、Step 04-05。
+- 前置步骤：Step 02-05、Step 03-03、Step 03-05、Step 04-01、Step 04-05、Step 04-06、Step 04-07、Step 04-09。
 - 外部文档或决策：Runtime API facade、RequestBroker contract、Threat Model。
 - 环境前提：Rust toolchain 1.88.0；无需真实 distributed lock。
 
@@ -121,7 +121,8 @@ Step index：04-06
 
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
-| 2026-06-12 | 创建 Step 04-06 小 Plan | 将并发、取消、重试与幂等策略拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 创建并发控制初版小 Plan | 将并发、取消、重试与幂等策略拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 顺延为 Step 04-10 | 为拆分原 04-04 持久化大 Step，保留并发/取消/幂等独立 Step 并顺延编号 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

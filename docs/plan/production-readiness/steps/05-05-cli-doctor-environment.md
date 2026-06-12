@@ -36,7 +36,7 @@ Step index：05-05
 
 ## 4. 实现方法
 
-1. 阅读 Release Gates、local demo runbook、Runtime config/persistence plan。
+1. 阅读 Release Gates、local demo runbook、Runtime config plan、token cache persistence、scoped storage persistence 和 persistent audit sink plan。
 2. 定义 doctor check registry：toolchain、workspace、DID document、private key permissions、resolver、allowlist、storage/audit path、Host providers、sandbox tests、server health。
 3. 实现 redacted diagnostic report 和 exit code 策略。
 4. 增加 tests：missing toolchain/config、bad key permissions、missing allowlist、unavailable provider、skip reason、redaction。
@@ -59,7 +59,7 @@ Step index：05-05
 
 ## 6. 依赖
 
-- 前置步骤：Step 03-04、Step 04-04、Step 05-01。
+- 前置步骤：Step 03-04、Step 04-04、Step 04-05、Step 04-06、Step 04-07、Step 05-01。
 - 外部文档或决策：Release Gates、local demo runbook、Runtime config。
 - 环境前提：Rust toolchain 1.88.0；外部 server health checks 可 skip 并记录原因。
 
@@ -119,6 +119,7 @@ Step index：05-05
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 05-05 小 Plan | 将 CLI doctor 环境诊断拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 更新 Phase 4 持久化依赖 | 按 Review 发现，原 04-04 已拆为 config/token/storage/audit focused Steps，doctor 需依赖对应诊断面 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

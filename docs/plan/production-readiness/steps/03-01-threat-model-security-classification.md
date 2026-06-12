@@ -15,7 +15,7 @@ Step index：03-01
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 02-06 和当前批次最终 Review 完成后，启动 Phase 3 安全分级收敛 |
+| Next action | 等待 Step 02-07 批次最终 Review 与整体验证完成后，启动 Phase 3 安全分级收敛 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -58,7 +58,7 @@ Step index：03-01
 
 ## 6. 依赖
 
-- 前置步骤：Step 00-04、Step 01-08、Step 02-06。
+- 前置步骤：Step 00-04、Step 01-08、Step 02-07。
 - 外部文档或决策：API/组件兼容矩阵、Release Gates、Phase 3 安全计划。
 - 环境前提：文档为主；无需外部 Host provider。
 
@@ -116,6 +116,7 @@ Step index：03-01
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 03-01 小 Plan | 将 Phase 3 threat model 与安全分级收敛拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 将 02-07 设为 Phase 3 前置 gate | 按 Review 发现，Phase 3 不能只依赖 02-06 的 free-form 下一步文字，必须依赖可追踪 final Review Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

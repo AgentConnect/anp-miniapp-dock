@@ -44,7 +44,7 @@ Step index：02-06
 6. 创建 location-map-preview fixture，覆盖 location provider fail closed、map-preview node 和 fallback。
 7. 增加 snapshot runner 或 focused tests，完成 normalization 和 golden comparison。
 8. 更新组件/API 兼容矩阵、release gates、Phase 2 子文档和 README 索引。
-9. 回填本 Step 和主 Plan 执行台账；完成后触发下一批 final global Review。
+9. 回填本 Step 和主 Plan 执行台账；完成后进入 Step 02-07 批次最终 Review 与整体验证 gate，不得直接进入 Phase 3。
 
 ## 5. 路径
 
@@ -59,7 +59,7 @@ Step index：02-06
 | `anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md` | 同步 fixture 覆盖的 high-risk boundary 状态 | 视实现结果更新 |
 | `anp/anp-miniapp-dock/docs/runbook/release-gates.md` | 同步 Render IR golden snapshot gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-2-render-ir-and-fixtures.md` | 同步 fixture 目录和完成状态 | 必须 |
-| `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账和触发最终全局 Review | 必须 |
+| `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账并指向 Step 02-07 final Review gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/02-06-fixtures-render-ir-snapshots.md` | 回填状态、证据、Review、commit | 必须 |
 
 ## 6. 依赖
@@ -79,7 +79,7 @@ Step index：02-06
 - [ ] location-map-preview 覆盖 location fail closed、map-preview node 和 fallback。
 - [ ] 兼容矩阵、release gates、Phase 2 文档和 README 索引与 fixture 状态同步。
 - [ ] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入最终全局 Review 之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [ ] 本步骤在进入 Step 02-07 最终 Review gate 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -128,9 +128,10 @@ Step index：02-06
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 02-06 小 Plan | 将 Phase 2 fixture 与 Render IR snapshots 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 接入 Step 02-07 final Review gate | 按 Review 发现，批次最终 Review 必须是可追踪 Step，不能只作为 free-form 下一步文字 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 
 - 风险：golden snapshot 太早冻结可能放大后续合理迭代成本；snapshot 含隐私数据会变成长期泄露面。
 - 回滚 / 回退：snapshot breaking change 必须说明 schemaVersion / migration；敏感数据命中立即阻塞并清理。
-- 后续文档：本 Step 完成后触发 01-05 至 02-06 的最终全局 Review 和整体验证，并为 Phase 3/4 计划提供基线证据。
+- 后续文档：本 Step 完成后进入 Step 02-07，执行 01-05 至 02-06 的最终全局 Review 和整体验证，并为 Phase 3/4 计划提供基线证据。

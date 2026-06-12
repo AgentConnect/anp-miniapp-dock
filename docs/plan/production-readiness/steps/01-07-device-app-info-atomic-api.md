@@ -15,7 +15,7 @@ Step index：01-07
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 Step 01-06 完成后，启动 device/app info Atomic API |
+| Next action | 等待 Step 01-06 完成后，启动 device/app info Atomic API；若 Step 01-06 blocked，可按主 Plan Blocked 规则串行跳转到本 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -60,6 +60,7 @@ Step index：01-07
 - 前置步骤：Step 01-01。
 - 外部文档或决策：wx API Bridge Contract、wx API 兼容矩阵、Threat Model。
 - 环境前提：Rust toolchain 1.88.0；无需外部 Host provider。
+- 独立性说明：本 Step 不依赖 Step 01-06 storage bridge 的实现。若 Step 01-06 被标记为 `blocked`，执行者可以在主 Plan Blocked 记录中说明原因、确认无未提交完成工作后，串行转入本 Step；这不授权并行执行。
 
 ## 7. 验收标准
 
@@ -118,6 +119,7 @@ Step index：01-07
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 01-07 小 Plan | 将 Phase 1 device/app info Atomic API 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 标注 01-07 独立性 | 按 Review 发现，避免 storage blocked 时错误阻塞独立 device/app info work | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

@@ -21,7 +21,7 @@ Step index：03-02
 
 ## 2. 目标
 
-- 结果：把 Atomic API VM 和 Component VM 的 sandbox escape regression 与资源限制升级为 CI/release gate。
+- 结果：在 Step 02-05 已完成 dynamic component 最小安全 gate 的基础上，把 Atomic API VM 和 Component VM 的完整 sandbox escape regression 与资源限制升级为 Phase 3 CI/release gate。
 - 用户 / 系统可见行为：恶意 Skill 无法通过 constructor/eval/Function/process/fetch/WebSocket/timer/require 逃逸，超限行为返回稳定失败并可审计。
 - 非目标：不开放新的 dynamic 能力；不替换 QuickJS-NG 引擎。
 - 完成标准：沙箱策略、逃逸回归测试、memory/stack/CPU/Promise/log/result size 限制和 release gate 证据齐备。
@@ -29,7 +29,7 @@ Step index：03-02
 ## 3. 设计方法
 
 - 设计边界：Skill JS 默认不可信，任何 API 或组件能力都只能由 broker/profile 显式开放。
-- 核心决策：Atomic API VM 与 Component VM 共用安全红线，但可有不同能力 profile；dynamic timer/request 只在 Step 02-05 声明后受控开放。
+- 核心决策：Atomic API VM 与 Component VM 共用安全红线，但可有不同能力 profile；dynamic timer/request 的最小开放安全 gate 已由 Step 02-05 承担，本 Step 补齐全量 VM gate、release gate 和残余风险收敛。
 - 契约 / API / 数据流：Skill JS -> QuickJS context -> sandbox policy -> broker/profile -> outcome/audit；limit hit -> stable error + redacted diagnostic。
 - 兼容性：保持 coffee demo 和已支持 API 行为；只把逃逸入口和超限路径稳定化。
 - 风险控制：console/result/debug 输出必须截断并脱敏；timeout 后不得继续执行高风险 callback/action。
@@ -37,7 +37,7 @@ Step index：03-02
 ## 4. 实现方法
 
 1. 阅读 `js-runtime-quickjs`、`component-runtime` 当前 sandbox 初始化、timeout 和 tests。
-2. 增加或收敛 sandbox policy 配置：禁用 `eval`、`Function`、async/generator constructor、prototype constructor、`process`、`fetch`、`WebSocket`、未授权 timer、remote require。
+2. 增加或收敛 sandbox policy 配置：禁用 `eval`、`Function`、async/generator constructor、prototype constructor、`process`、`fetch`、`WebSocket`、未授权 timer、remote require；复核 Step 02-05 dynamic gate 是否已覆盖开放前的 Component VM 最小安全集。
 3. 增加资源限制：memory、stack、CPU/interrupt timeout、Promise job drain、console size、result size。
 4. 为 Atomic API VM 和 Component VM 增加 focused escape tests 与 limit tests。
 5. 将 sandbox gate 写入 `docs/runbook/release-gates.md` 和 threat model 控制矩阵。
@@ -66,7 +66,7 @@ Step index：03-02
 - [ ] Atomic API VM 和 Component VM 都有 constructor/eval/Function/process/fetch/WebSocket/require escape regression tests。
 - [ ] memory、stack、CPU timeout、Promise job drain、console size、result size 至少有 focused test 或明确 skip 原因。
 - [ ] limit hit 返回稳定脱敏错误，不泄露 JS 源码中的敏感值或 Host private data。
-- [ ] Component expire/detach 后不能继续触发事件、timer 或高风险 action。
+- [ ] 复核 Step 02-05 的 dynamic component gate 仍通过，且 Component expire/detach 后不能继续触发事件、timer 或高风险 action。
 - [ ] Release Gates 将 sandbox escape regression 列为 required。
 - [ ] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
@@ -118,6 +118,7 @@ Step index：03-02
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 03-02 小 Plan | 将 QuickJS sandbox 加固拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 调整 dynamic sandbox sequencing | 按 Review 发现，dynamic component 的最小 escape/resource-limit gate 前置到 Step 02-05；本 Step 保留 Phase 3 全量 release gate | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

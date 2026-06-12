@@ -59,7 +59,7 @@ Step index：06-03
 
 ## 6. 依赖
 
-- 前置步骤：Step 04-06、Step 06-02。
+- 前置步骤：Step 04-10、Step 06-02。
 - 外部文档或决策：Runtime API、metrics recorder、Release Gates。
 - 环境前提：Rust toolchain 1.88.0；benchmark 结果受硬件影响，release notes 必须记录环境。
 
@@ -120,6 +120,7 @@ Step index：06-03
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 06-03 小 Plan | 将性能基线与 Stress Tests 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-12 | 更新并发 Step 依赖编号 | 原 04-06 并发 Step 顺延为 04-10，性能压测依赖随之更新 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

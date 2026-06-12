@@ -46,6 +46,7 @@
 | 02-04 | [表单与静态媒体节点](steps/02-04-form-static-media-nodes.md) | Phase 2 form、map-preview、canvas-static Render IR nodes |
 | 02-05 | [Dynamic component controls](steps/02-05-dynamic-component-controls.md) | Phase 2 dynamic request、timer、resource cleanup |
 | 02-06 | [Fixture 与 Render IR snapshots](steps/02-06-fixtures-render-ir-snapshots.md) | Phase 2 fixtures 和 Render IR golden snapshots |
+| 02-07 | [01-05 至 02-06 批次最终 Review 与整体验证](steps/02-07-batch-final-review-verification.md) | Phase 1/2 批次 final Review gate |
 | 03-01 | [Threat Model 与安全分级收敛](steps/03-01-threat-model-security-classification.md) | Phase 3 安全控制矩阵、L0-L4 风险分级 |
 | 03-02 | [QuickJS 沙箱逃逸回归与资源限制](steps/03-02-quickjs-sandbox-resource-limits.md) | Phase 3 API VM / Component VM sandbox gates |
 | 03-03 | [权限策略引擎与 allowlist decision](steps/03-03-permission-policy-engine-allowlist.md) | Phase 3 permission policy、Host override、network allowlist |
@@ -55,9 +56,13 @@
 | 04-01 | [Runtime API Facade 与版本化](steps/04-01-runtime-api-facade-versioning.md) | Phase 4 public Runtime API、version、stable error |
 | 04-02 | [IPC / SDK 形态与 Host 进程边界](steps/04-02-ipc-sdk-host-process-boundary.md) | Phase 4 IPC/headless JSON/Rust SDK boundary |
 | 04-03 | [Skill Registry / Cache 与版本回滚](steps/04-03-skill-registry-cache-versioning.md) | Phase 4 registry ref、digest cache、version rollback |
-| 04-04 | [持久化、配置与 Secret Store 边界](steps/04-04-persistence-config-secret-store.md) | Phase 4 token/storage/audit/cache persistence |
-| 04-05 | [Host Adapter Contract 与 Action Protocol](steps/04-05-host-adapter-contract-action-protocol.md) | Phase 4 Host renderer/provider/action conformance |
-| 04-06 | [并发、取消、重试与幂等策略](steps/04-06-concurrency-cancellation-idempotency.md) | Phase 4 session manager、cancel、retry、idempotency |
+| 04-04 | [Runtime Config 与 Secret Store 边界](steps/04-04-runtime-config-secret-store.md) | Phase 4 config schema、secret reference、redaction |
+| 04-05 | [Token Cache 持久化与恢复](steps/04-05-token-cache-persistence.md) | Phase 4 token cache secure backend、restore policy |
+| 04-06 | [Scoped Storage 持久化与 quota](steps/04-06-scoped-storage-persistence.md) | Phase 4 storage backend、scope isolation、quota |
+| 04-07 | [Persistent Audit Sink retention/export](steps/04-07-persistent-audit-retention-export.md) | Phase 4 audit persistence、retention、redacted export |
+| 04-08 | [Skill Cache cleanup 与版本清理](steps/04-08-skill-cache-cleanup.md) | Phase 4 digest cache cleanup、quarantine、eviction |
+| 04-09 | [Host Adapter Contract 与 Action Protocol](steps/04-09-host-adapter-contract-action-protocol.md) | Phase 4 Host renderer/provider/action conformance |
+| 04-10 | [并发、取消、重试与幂等策略](steps/04-10-concurrency-cancellation-idempotency.md) | Phase 4 session manager、cancel、retry、idempotency |
 | 05-01 | [CLI validate 兼容报告增强](steps/05-01-cli-validate-compatibility-report.md) | Phase 5 JSON compatibility report、release blockers |
 | 05-02 | [CLI inspect Skill package](steps/05-02-cli-inspect-skill-package.md) | Phase 5 package/API/component/permission/risk inspect |
 | 05-03 | [CLI test-skill 与 Fixture Runner](steps/05-03-cli-test-skill-fixture-runner.md) | Phase 5 fixture runner、snapshot compare、audit summary |

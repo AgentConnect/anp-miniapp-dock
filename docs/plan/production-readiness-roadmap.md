@@ -102,7 +102,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.2 Step 拆分
 
-Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06 覆盖剩余 Phase 1 `planned-p1` API 能力和 Phase 2 组件运行时 P1 起步能力；Step 03-01 至 06-06 覆盖 Phase 3 至 Phase 6 的安全、运行时/Host、开发者体验和发布运营里程碑。后续新增阶段或范围变化仍必须按同一模板拆分小 Step，并通过 Plan 变更记录补充到本表。
+Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-07 覆盖剩余 Phase 1 `planned-p1` API 能力、Phase 2 组件运行时 P1 起步能力，以及进入 Phase 3 前必须完成的批次最终 Review gate；Step 03-01 至 06-06 覆盖 Phase 3 至 Phase 6 的安全、运行时/Host、开发者体验和发布运营里程碑。后续新增阶段或范围变化仍必须按同一模板拆分小 Step，并通过 Plan 变更记录补充到本表。
 
 | Step | 标题 | 依赖 | 主要产出 | 小 Plan 文档 | Commit gate | 状态 |
 |---|---|---|---|---|---|---|
@@ -116,15 +116,16 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 01-04 | DID 会话与 RequestBroker 收敛 | 01-01, 01-02 | `DidAuthSessionManager`、`wx.login`、`wx.checkSession`、`wx.request` 正式路径 | [production-readiness/steps/01-04-did-session-request-broker.md](production-readiness/steps/01-04-did-session-request-broker.md) | 必须 | done |
 | 01-05 | Unsupported API Registry 与统一 fail shape | 01-01, 01-04 | unsupported registry、统一 fail shape、矩阵同步 | [production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md](production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md) | 必须 | pending |
 | 01-06 | Storage JS Bridge | 01-01, 01-04, 01-05 | `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 及同步版本 | [production-readiness/steps/01-06-storage-js-bridge.md](production-readiness/steps/01-06-storage-js-bridge.md) | 必须 | pending |
-| 01-07 | Device/App Info Atomic API | 01-01 | `wx.getDeviceInfo`、`wx.getAppBaseInfo` Atomic API 最小实现 | [production-readiness/steps/01-07-device-app-info-atomic-api.md](production-readiness/steps/01-07-device-app-info-atomic-api.md) | 必须 | pending |
+| 01-07 | Device/App Info Atomic API | 01-01；独立于 01-06，可在 01-06 blocked 时按 Blocked 规则串行跳转 | `wx.getDeviceInfo`、`wx.getAppBaseInfo` Atomic API 最小实现 | [production-readiness/steps/01-07-device-app-info-atomic-api.md](production-readiness/steps/01-07-device-app-info-atomic-api.md) | 必须 | pending |
 | 01-08 | 高风险 API Host Boundary 与 fail-closed | 01-01, 01-04, 01-05 | phone/address/location/media/payment/scan/phone call Host boundary、ConsentGate、fail closed | [production-readiness/steps/01-08-high-risk-api-host-boundary.md](production-readiness/steps/01-08-high-risk-api-host-boundary.md) | 必须 | pending |
 | 02-01 | Render IR schemaVersion 与 fallback reason enum | 00-03, 01-03 | `dock.render-ir.v1`、fallback reason enum | [production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md](production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md) | 必须 | pending |
 | 02-02 | Component manifest metadata runtime flow | 01-02, 01-03, 02-01 | `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` runtime metadata | [production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md](production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md) | 必须 | pending |
 | 02-03 | WXML/WXSS P1 语法增强 | 02-01 | `wx:elif` / `wx:else`、`catchtap`、disabled、简单表达式、P1 WXSS | [production-readiness/steps/02-03-wxml-wxss-p1-syntax.md](production-readiness/steps/02-03-wxml-wxss-p1-syntax.md) | 必须 | pending |
 | 02-04 | 表单与静态媒体节点 | 01-08, 02-01, 02-03 | `input`、`textarea`、`radio`、`checkbox`、`picker`、`map-preview`、`canvas-static` | [production-readiness/steps/02-04-form-static-media-nodes.md](production-readiness/steps/02-04-form-static-media-nodes.md) | 必须 | pending |
-| 02-05 | Dynamic component controls | 01-04, 02-02 | dynamic `wx.request`、timer、资源限制、expire/detach cleanup | [production-readiness/steps/02-05-dynamic-component-controls.md](production-readiness/steps/02-05-dynamic-component-controls.md) | 必须 | pending |
+| 02-05 | Dynamic component controls | 01-04, 02-02 | dynamic `wx.request`、timer、component sandbox escape/resource-limit tests、expire/detach cleanup | [production-readiness/steps/02-05-dynamic-component-controls.md](production-readiness/steps/02-05-dynamic-component-controls.md) | 必须 | pending |
 | 02-06 | Fixture 与 Render IR snapshots | 02-01, 02-02, 02-03, 02-04, 02-05 | address-form、media-review、dynamic-status、location-map-preview、golden snapshots | [production-readiness/steps/02-06-fixtures-render-ir-snapshots.md](production-readiness/steps/02-06-fixtures-render-ir-snapshots.md) | 必须 | pending |
-| 03-01 | Threat Model 与安全分级收敛 | 00-04, 01-08, 02-06 | 安全控制矩阵、L0-L4 风险分级、release gate 收敛 | [production-readiness/steps/03-01-threat-model-security-classification.md](production-readiness/steps/03-01-threat-model-security-classification.md) | 必须 | pending |
+| 02-07 | 01-05 至 02-06 批次最终 Review 与整体验证 | 01-05, 01-06, 01-07, 01-08, 02-01, 02-02, 02-03, 02-04, 02-05, 02-06 | 批次全局 Review 记录、整体验证证据、Phase 3 启动 gate | [production-readiness/steps/02-07-batch-final-review-verification.md](production-readiness/steps/02-07-batch-final-review-verification.md) | 必须 | pending |
+| 03-01 | Threat Model 与安全分级收敛 | 00-04, 01-08, 02-07 | 安全控制矩阵、L0-L4 风险分级、release gate 收敛 | [production-readiness/steps/03-01-threat-model-security-classification.md](production-readiness/steps/03-01-threat-model-security-classification.md) | 必须 | pending |
 | 03-02 | QuickJS 沙箱逃逸回归与资源限制 | 02-05, 03-01 | API VM / Component VM sandbox escape tests、resource limits | [production-readiness/steps/03-02-quickjs-sandbox-resource-limits.md](production-readiness/steps/03-02-quickjs-sandbox-resource-limits.md) | 必须 | pending |
 | 03-03 | 权限策略引擎与 allowlist decision | 01-08, 02-05, 03-01 | `PermissionDecision`、Host override、network allowlist、decision audit | [production-readiness/steps/03-03-permission-policy-engine-allowlist.md](production-readiness/steps/03-03-permission-policy-engine-allowlist.md) | 必须 | pending |
 | 03-04 | DID / Token 生命周期与 Resolver 信任锚 | 01-04, 03-01, 03-03 | refresh/revoke/logout、jti replay、resolver cache/trust anchor | [production-readiness/steps/03-04-did-token-lifecycle-resolver.md](production-readiness/steps/03-04-did-token-lifecycle-resolver.md) | 必须 | pending |
@@ -133,22 +134,28 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 04-01 | Runtime API Facade 与版本化 | 02-06, 03-06 | public Runtime API、stable DTO/error、version、CLI 收敛 | [production-readiness/steps/04-01-runtime-api-facade-versioning.md](production-readiness/steps/04-01-runtime-api-facade-versioning.md) | 必须 | pending |
 | 04-02 | IPC / SDK 形态与 Host 进程边界 | 04-01 | local IPC/headless JSON/Rust SDK envelope、version/error/redaction | [production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md](production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md) | 必须 | pending |
 | 04-03 | Skill Registry / Cache 与版本回滚 | 03-06, 04-01 | registry ref、digest-keyed cache、version pin、rollback、eviction | [production-readiness/steps/04-03-skill-registry-cache-versioning.md](production-readiness/steps/04-03-skill-registry-cache-versioning.md) | 必须 | pending |
-| 04-04 | 持久化、配置与 Secret Store 边界 | 01-06, 03-04, 03-05, 04-03 | token/storage/audit/cache persistence、runtime config、scope cleanup | [production-readiness/steps/04-04-persistence-config-secret-store.md](production-readiness/steps/04-04-persistence-config-secret-store.md) | 必须 | pending |
-| 04-05 | Host Adapter Contract 与 Action Protocol | 01-08, 02-06, 03-05, 04-01 | Host renderer/provider/action conformance、headless adapter | [production-readiness/steps/04-05-host-adapter-contract-action-protocol.md](production-readiness/steps/04-05-host-adapter-contract-action-protocol.md) | 必须 | pending |
-| 04-06 | 并发、取消、重试与幂等策略 | 02-05, 03-03, 03-05, 04-01, 04-05 | session manager、cancellation、retry policy、idempotency key | [production-readiness/steps/04-06-concurrency-cancellation-idempotency.md](production-readiness/steps/04-06-concurrency-cancellation-idempotency.md) | 必须 | pending |
+| 04-04 | Runtime Config 与 Secret Store 边界 | 04-01 | non-secret runtime config、secret provider boundary、redaction | [production-readiness/steps/04-04-runtime-config-secret-store.md](production-readiness/steps/04-04-runtime-config-secret-store.md) | 必须 | pending |
+| 04-05 | Token Cache 持久化与恢复 | 03-04, 04-04 | secure token cache backend、TTL/revocation restore policy | [production-readiness/steps/04-05-token-cache-persistence.md](production-readiness/steps/04-05-token-cache-persistence.md) | 必须 | pending |
+| 04-06 | Scoped Storage 持久化与 quota | 01-06, 04-04 | scoped storage backend、quota、scope cleanup | [production-readiness/steps/04-06-scoped-storage-persistence.md](production-readiness/steps/04-06-scoped-storage-persistence.md) | 必须 | pending |
+| 04-07 | Persistent Audit Sink retention/export | 03-05, 04-04 | audit persistence、retention、redacted export | [production-readiness/steps/04-07-persistent-audit-retention-export.md](production-readiness/steps/04-07-persistent-audit-retention-export.md) | 必须 | pending |
+| 04-08 | Skill Cache cleanup 与版本清理 | 04-03, 04-04 | digest cache cleanup、eviction、privacy/delete scope hooks | [production-readiness/steps/04-08-skill-cache-cleanup.md](production-readiness/steps/04-08-skill-cache-cleanup.md) | 必须 | pending |
+| 04-09 | Host Adapter Contract 与 Action Protocol | 01-08, 02-06, 03-05, 04-01 | Host renderer/provider/action conformance、headless adapter | [production-readiness/steps/04-09-host-adapter-contract-action-protocol.md](production-readiness/steps/04-09-host-adapter-contract-action-protocol.md) | 必须 | pending |
+| 04-10 | 并发、取消、重试与幂等策略 | 02-05, 03-03, 03-05, 04-01, 04-05, 04-06, 04-07, 04-09 | session manager、cancellation、retry policy、idempotency key | [production-readiness/steps/04-10-concurrency-cancellation-idempotency.md](production-readiness/steps/04-10-concurrency-cancellation-idempotency.md) | 必须 | pending |
 | 05-01 | CLI validate 兼容报告增强 | 01-05, 02-06, 03-06, 04-01 | JSON compatibility report、releaseBlockers、修复建议 | [production-readiness/steps/05-01-cli-validate-compatibility-report.md](production-readiness/steps/05-01-cli-validate-compatibility-report.md) | 必须 | pending |
 | 05-02 | CLI inspect Skill package | 05-01 | package 文件、API/registration 对照、组件/权限/risk/wx usage | [production-readiness/steps/05-02-cli-inspect-skill-package.md](production-readiness/steps/05-02-cli-inspect-skill-package.md) | 必须 | pending |
 | 05-03 | CLI test-skill 与 Fixture Runner | 02-06, 04-01, 05-01 | fixture runner、snapshot compare、action/audit report | [production-readiness/steps/05-03-cli-test-skill-fixture-runner.md](production-readiness/steps/05-03-cli-test-skill-fixture-runner.md) | 必须 | pending |
 | 05-04 | CLI import-wechat-mcp | 05-01, 05-02 | dry-run/safe copy、兼容报告、ANP `_meta` patch 建议 | [production-readiness/steps/05-04-cli-import-wechat-mcp.md](production-readiness/steps/05-04-cli-import-wechat-mcp.md) | 必须 | pending |
-| 05-05 | CLI doctor 环境诊断 | 03-04, 04-04, 05-01 | toolchain/DID/resolver/allowlist/storage/audit/provider diagnostics | [production-readiness/steps/05-05-cli-doctor-environment.md](production-readiness/steps/05-05-cli-doctor-environment.md) | 必须 | pending |
+| 05-05 | CLI doctor 环境诊断 | 03-04, 04-04, 04-05, 04-06, 04-07, 05-01 | toolchain/DID/resolver/allowlist/storage/audit/provider diagnostics | [production-readiness/steps/05-05-cli-doctor-environment.md](production-readiness/steps/05-05-cli-doctor-environment.md) | 必须 | pending |
 | 05-06 | 示例 Skill 与兼容测试集 | 02-06, 05-01, 05-03 | address/media/dynamic/location 示例、README、expected JSON、snapshots | [production-readiness/steps/05-06-example-skills-compatibility-fixtures.md](production-readiness/steps/05-06-example-skills-compatibility-fixtures.md) | 必须 | pending |
 | 05-07 | 开发者文档与迁移指南 | 05-01, 05-02, 05-03, 05-04, 05-05, 05-06 | import/API/component/security/Host adapter developer docs | [production-readiness/steps/05-07-developer-docs-migration-guides.md](production-readiness/steps/05-07-developer-docs-migration-guides.md) | 必须 | pending |
 | 06-01 | 结构化观测事件与脱敏日志 | 04-01, 04-04, 05-07 | structured events、traceId/sessionId、redaction | [production-readiness/steps/06-01-structured-observability-events.md](production-readiness/steps/06-01-structured-observability-events.md) | 必须 | pending |
 | 06-02 | Metrics / Tracing 与请求链路关联 | 04-02, 06-01 | metrics registry、trace propagation、low-cardinality labels | [production-readiness/steps/06-02-metrics-tracing-correlation.md](production-readiness/steps/06-02-metrics-tracing-correlation.md) | 必须 | pending |
-| 06-03 | 性能基线与 Stress Tests | 04-06, 06-02 | benchmarks、stress tests、baseline artifact | [production-readiness/steps/06-03-performance-baselines-stress.md](production-readiness/steps/06-03-performance-baselines-stress.md) | 必须 | pending |
+| 06-03 | 性能基线与 Stress Tests | 04-10, 06-02 | benchmarks、stress tests、baseline artifact | [production-readiness/steps/06-03-performance-baselines-stress.md](production-readiness/steps/06-03-performance-baselines-stress.md) | 必须 | pending |
 | 06-04 | CI/CD Release Gates 自动化 | 02-06, 03-06, 05-03, 06-03 | gate runner、CI workflow、release report、docs link/redaction/snapshot gates | [production-readiness/steps/06-04-ci-cd-release-gates-automation.md](production-readiness/steps/06-04-ci-cd-release-gates-automation.md) | 必须 | pending |
-| 06-05 | Canary 发布、版本化与回滚策略 | 04-03, 04-05, 06-02, 06-03, 06-04 | release notes、canary stages、rollback/cache purge | [production-readiness/steps/06-05-canary-release-rollback.md](production-readiness/steps/06-05-canary-release-rollback.md) | 必须 | pending |
-| 06-06 | 运维 Runbook 与隐私删除流程 | 04-04, 05-05, 06-01, 06-02, 06-04, 06-05 | operations/troubleshooting/privacy deletion runbooks | [production-readiness/steps/06-06-operations-runbook-privacy-deletion.md](production-readiness/steps/06-06-operations-runbook-privacy-deletion.md) | 必须 | pending |
+| 06-05 | Canary 发布、版本化与回滚策略 | 04-03, 04-09, 06-02, 06-03, 06-04 | release notes、canary stages、rollback/cache purge | [production-readiness/steps/06-05-canary-release-rollback.md](production-readiness/steps/06-05-canary-release-rollback.md) | 必须 | pending |
+| 06-06 | 运维 Runbook 与隐私删除流程 | 04-04, 04-06, 04-07, 04-08, 05-05, 06-01, 06-02, 06-04, 06-05 | operations/troubleshooting/privacy deletion runbooks | [production-readiness/steps/06-06-operations-runbook-privacy-deletion.md](production-readiness/steps/06-06-operations-runbook-privacy-deletion.md) | 必须 | pending |
+
+独立跳转说明：Step 01-07 只依赖 Step 01-01，和 Step 01-06 storage 工作没有实现依赖。若 Step 01-06 被标记为 `blocked`，执行者可以在记录 blocker、确认工作区无未提交完成工作后，按 Blocked 规则串行转入 Step 01-07；这不是并行执行授权。
 
 #### 2.3.3 执行台账
 
@@ -166,7 +173,7 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 01-04 | done | `main` | 2026-06-12 11:47:39 +0800 | 2026-06-12 12:23:36 +0800 | `e9cbdbe` | Step 文档 Review 环节已记录：修复 callback exception 改变 Promise outcome/跳过 `complete` 的契约问题；确认 token 只在 Host/runtime 边界、JS auth header fail closed、response auth/token headers 已脱敏；production Host RequestBroker transport 和 persistent audit 按 Phase 4 残余风险记录 | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 15]`；`cargo fmt --check` 通过；`cargo test -p anp-adapter session` 8 passed；`cargo test -p js-runtime-quickjs wx_login/check_session/wx_request/wx_callback_exception/model_context_expire_all_cards` 均通过；`cargo test -p js-runtime-quickjs` 28 passed；`cargo test -p anp-adapter` 41 passed；`cargo test -p wx-compat` 9 passed；`cargo test -p demo-server token` 4 passed under filter；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/js-runtime-quickjs crates/wx-compat crates/dock-core crates/demo-server crates/dock-cli examples/coffee-fastapi-server docs/architecture docs/runbook docs/security docs/plan` 无输出；post-commit `git status --short --branch` = `## main...origin/main [ahead 16]` | 首批 Step 已全部完成，进入最终全局 Review |
 | 01-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 启动 01-05 |
 | 01-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-05 完成 |
-| 01-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-06 完成 |
+| 01-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-06 完成；若 01-06 blocked，可按 Blocked 规则串行跳转 |
 | 01-08 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-07 完成 |
 | 02-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-08 完成 |
 | 02-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-01 完成 |
@@ -174,7 +181,8 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 02-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-03 完成 |
 | 02-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-04 完成 |
 | 02-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-05 完成 |
-| 03-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-06 和当前批次最终 Review 完成 |
+| 02-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-05 至 02-06 全部完成后，执行批次最终 Review |
+| 03-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-07 完成 |
 | 03-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-01 完成 |
 | 03-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-02 完成 |
 | 03-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-03 完成 |
@@ -186,7 +194,11 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 04-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-03 完成 |
 | 04-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-04 完成 |
 | 04-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-05 完成 |
-| 05-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-06 完成 |
+| 04-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-06 完成 |
+| 04-08 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-07 完成 |
+| 04-09 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-08 完成 |
+| 04-10 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-09 完成 |
+| 05-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-10 完成 |
 | 05-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-01 完成 |
 | 05-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-02 完成 |
 | 05-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-03 完成 |
@@ -252,6 +264,7 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-06
 | 2026-06-12 | 新增 Codex Goal 执行控制、执行台账和 Phase 0/Phase 1 首批 Step 文档 | 将 roadmap 补强为可恢复执行的 AWiki 长跑计划 | 00-01 至 01-04 | 是 |
 | 2026-06-12 | 新增 Phase 1 剩余 `planned-p1` 与 Phase 2 P1 下一批 Step 文档 | 将首批完成后的残余 API 缺口和组件运行时起步能力拆成可由 Codex Goal 继续执行的小 Plan | 01-05 至 02-06 | 是 |
 | 2026-06-12 | 新增 Phase 3 至 Phase 6 全部后续里程碑 Step 文档 | 将安全增强、生产运行时/Host、开发者体验、观测发布运营阶段拆成可由 Codex Goal 顺序执行的小 Plan | 03-01 至 06-06 | 是 |
+| 2026-06-12 | 修复计划 Review 发现：新增 02-07 final Review gate、前置 dynamic sandbox gate、拆分 Phase 4 持久化、标注 01-07 blocked 跳转 | 让 Codex Goal 恢复执行时不会跳过批次最终 Review，避免动态组件先于安全 gate 扩权，保持每个 Step 一个 focused commit | 01-07、02-05、02-06、02-07、03-01、04-04 至 04-10、05-05、06-01、06-03、06-05、06-06 | 是 |
 
 变更规则：
 
@@ -324,6 +337,20 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 需要改变范围、顺序、验收标准、公开契约、数据模型、安全边界或验证策略时，先更新 Plan 变更记录和受影响 Step 文档。不得绕过 ANP DID、capability token、allowlist、ConsentGate、audit、redaction 和 sandbox 边界。
 
 所有步骤完成后，执行最终全局 Review 和整体验证，记录实际命令、通过/失败/跳过数量、失败或跳过原因、剩余风险和最终工作区状态。
+```
+
+本次 Phase 1/2 执行型 Codex Goal 可使用更窄的提示词。它只执行当前未完成的 Phase 1 Step 和 Phase 2 全部 Step，完成 Step 02-07 后停止，不进入 Phase 3：
+
+```text
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，只执行当前未完成的 Phase 1 Step 和 Phase 2 全部 Step：从 01-05 开始，做到 02-07 完成后停止，不进入 03-01。
+
+开始前先读取主 Plan、当前 Step 文档、执行台账、Codex Goal 执行协议、Review 与提交门禁、Blocked 处理、Plan 变更记录，以及当前 git status --short --branch。
+
+请按执行台账从第一个非 done Step 继续，一次只执行一个 Step。每个 Step 都必须按对应小 Plan 实现、验证、Review、修复或记录 Review 发现，创建一个 focused commit，并回填主 Plan 执行台账和 Step 执行状态。
+
+Step 01-07 独立于 01-06；只有当 01-06 被记录为 blocked 且无未提交完成工作时，才可按 Blocked 规则串行跳转到 01-07。Step 02-05 开放 dynamic request/timer 前必须先通过 component sandbox escape/resource-limit gate。Step 02-06 完成后必须执行 02-07 批次最终 Review 与整体验证。
+
+不要启动 Phase 3。02-07 完成、提交并回填台账后结束本 Goal，报告 commit hash、验证证据、剩余风险和最终 git status。
 ```
 
 ## 3. Phase 0：基线冻结与产品化门槛

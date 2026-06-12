@@ -64,7 +64,27 @@ close_session(session)
 - cache eviction；
 - package.zip 从 demo no-op 变为真实候选路径。
 
-### 3.4 持久化
+### 3.4 Runtime Config 与 Secret Store
+
+先冻结配置和 secret 边界，再分别实现具体持久化 backend，避免一个 Step 同时跨 token、storage、audit、cache 和 migration。
+
+配置范围：
+
+| 配置 | 策略 |
+|---|---|
+| runtime profile | dev/demo/production 明确区分 |
+| identity/resolver | 保存 provider reference，不保存 private key material |
+| token issuer | 保存 secret reference，不保存 token 或 issuer secret |
+| storage/audit/cache path | 保存 workspace/runtime 相对或配置路径，输出时 redacted |
+| Host providers | 声明 provider handle、capability 和 mock/dev 标记 |
+
+要求：
+
+- config 文件只允许 non-secret value 和 secret reference；
+- secret material 只能来自 env、Secret Store 或 Host credential provider；
+- production profile 缺少 required provider 时 fail closed 或 release blocked。
+
+### 3.5 持久化
 
 持久化范围：
 
@@ -74,9 +94,16 @@ close_session(session)
 | scoped storage | SQLite，按 DID/merchant/Skill scope，quota |
 | audit | append-only 或 SQLite，retention |
 | skill cache | digest-keyed directory，read-only after verify |
-| runtime config | non-secret config file + env/secret store |
+| runtime config | 只由 3.4 负责 schema、secret boundary 和 provider reference |
 
-### 3.5 Host Adapter Contract
+拆分顺序：
+
+1. token cache 持久化与恢复；
+2. scoped storage 持久化与 quota；
+3. persistent audit sink retention/export；
+4. Skill cache cleanup 与版本清理。
+
+### 3.6 Host Adapter Contract
 
 Host 必须实现或声明不支持：
 
@@ -94,7 +121,7 @@ Host 不允许：
 - 向 Skill JS 暴露 token/private key；
 - 绕过 Runtime audit。
 
-### 3.6 并发、取消与幂等
+### 3.7 并发、取消与幂等
 
 开发项：
 
@@ -121,5 +148,5 @@ Host 不允许：
 - [ ] CLI 使用同一 Runtime API。
 - [ ] 至少一个 Host 通过稳定协议接入。
 - [ ] Skill package 可下载/缓存/校验/回滚。
-- [ ] storage/token/audit 有生产候选持久化。
+- [ ] runtime config 与 secret store 边界冻结，且 storage/token/audit/cache 分别有 focused production candidate 或 release blocker。
 - [ ] 多 session 隔离和高风险串行策略有测试。
