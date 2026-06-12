@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-02
-状态：draft
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
-| Branch | 待执行时记录 |
-| Started | 待记录 |
+| Status | review |
+| Branch | `main` |
+| Started | 2026-06-12 10:18:26 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 00-01 完成后，抽取小程序 MCP API 列表并建立矩阵 |
+| Review evidence | 初审未发现需修复的矩阵内容问题；确认状态未过度承诺，`wx.login` / `wx.request` 仍标记为 `demo-only`，高风险 API 均要求 ConsentGate/audit 或明确 unsupported |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 3]`；`git diff --check -- docs/architecture/wx-api-compatibility-matrix.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-02-wx-api-compatibility-matrix.md` 无输出；协议覆盖抽样 `rg 'wx\.login|wx\.request|wx\.requestPayment|wx\.getPhoneNumber|wx\.chooseAddress|wx\.modelContext' docs/weichat-miniapp-mcp-protocol docs/architecture/wx-api-compatibility-matrix.md` 命中协议参考和矩阵；按表结构检查 status 列无非法枚举；矩阵 Markdown 链接检查无破链；L3/L4 与敏感字段抽样确认有 ConsentGate/audit/fail closed/opaque handle/redaction 说明 |
+| Next action | 创建 Step 00-02 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -62,11 +62,11 @@ Step index：00-02
 
 ## 7. 验收标准
 
-- [ ] 矩阵覆盖 `wx.modelContext`、auth、network、storage、privacy、media/file、location、payment、device/scan/phone call、unsupported API 分组。
-- [ ] 每行都有 status、target phase、owner crate 或明确 `unsupported-by-design` 原因。
-- [ ] `wx.login`、`wx.checkSession`、`wx.request`、storage、`wx.requestPayment`、`wx.getPhoneNumber`、`wx.chooseAddress` 有明确 ANP DID / Host provider / consent 映射。
-- [ ] callback/Promise 不确定项明确标为 Phase 1 contract 决策点。
-- [ ] Review 发现已修复或明确记录。
+- [x] 矩阵覆盖 `wx.modelContext`、auth、network、storage、privacy、media/file、location、payment、device/scan/phone call、unsupported API 分组。
+- [x] 每行都有 status、target phase、owner crate 或明确 `unsupported-by-design` 原因。
+- [x] `wx.login`、`wx.checkSession`、`wx.request`、storage、`wx.requestPayment`、`wx.getPhoneNumber`、`wx.chooseAddress` 有明确 ANP DID / Host provider / consent 映射。
+- [x] callback/Promise 不确定项明确标为 Phase 1 contract 决策点。
+- [x] Review 发现已修复或明确记录。
 - [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -87,11 +87,11 @@ Step index：00-02
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 文档 Step 通常不新增测试，但需说明 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 无阻塞问题 | 矩阵未把协议“支持”误写为本项目生产支持；`wx.login`、`wx.request` 当前能力仍标为 `demo-only`，Host/provider 边界未被过度承诺。 |
+| 已修复问题 | 无文档内容修复 | 验证中发现一次 status 枚举检查命令过宽，会误报 API 名称列；已改用按表结构定位 status 列的 `awk` 检查，未把失败命令作为通过证据。 |
+| 剩余风险 | 可接受 | 协议参考长尾 API 较多，本 Step 以关键 API 和大类 unsupported/deferred 分组覆盖；后续 Step 01-01 需冻结 callback/Promise、错误语义和 unsupported stub 形态。 |
+| 新增或缺失测试 | 未新增自动化测试 | 本 Step 为文档矩阵冻结；验证使用 diff whitespace 检查、协议覆盖抽样、状态枚举结构化检查、Markdown 链接检查和高风险 API 安全抽样。 |
+| 已更新或缺失文档 | 已更新 | 新增 `anp/anp-miniapp-dock/docs/architecture/wx-api-compatibility-matrix.md`，并在 `anp/anp-miniapp-dock/README.md` 增加入口链接；主 Plan 与本 Step 文档已回填 review/verification evidence。 |
 
 ## 10. Commit 要求
 
