@@ -8,7 +8,7 @@
 
 本文定义 Atomic API VM 中 `wx.*` bridge 的统一契约。实现前先冻结此契约，避免每个 API 分别实现 callback、Promise、错误和权限逻辑，造成行为不一致。
 
-本文的冻结决策适用于 Step 01-02 之后新增或迁移的 `wx.*` / `wx.modelContext` JS bridge。当前 `wx.login` / `wx.request` 的 localhost demo bridge 仍按兼容矩阵标记为 `demo-only`，后续 Step 01-04 必须迁移到本契约。
+本文的冻结决策适用于 Step 01-02 之后新增或迁移的 `wx.*` / `wx.modelContext` JS bridge。Step 01-04 已将 `wx.login` / `wx.checkSession` / `wx.request` 接入本契约约束：Host DID 配置下复用 `DidAuthSessionManager`，`wx.request` 经 `wx-compat::RequestBroker` trait 的本地 DID broker 执行；无 Host DID 配置和 loopback transport 仍是 demo-only / host-boundary，不是 production Host RequestBroker。
 
 ## 2. 冻结决策摘要
 
@@ -289,11 +289,11 @@ callback 入参和 Promise settlement value 必须是同一个脱敏 result obje
 
 ## 10. 实现验收
 
-- [ ] 所有 API 都从同一 JS wrapper 入口进入 Rust。
-- [ ] callback 与 Promise 有测试。
+- [x] Step 01-04 覆盖的 `wx.login` / `wx.checkSession` / `wx.request` / `modelContext.expireAllCards` 已从统一 async wrapper 入口进入 Rust；后续新增 API 仍必须沿用本契约。
+- [x] Step 01-04 覆盖的 async API callback 与 Promise 有测试。
 - [ ] unsupported API 不抛 JS TypeError，而是稳定 fail。
-- [ ] 错误输出通过 redaction test。
-- [ ] 兼容矩阵记录每个 API 的 callback/Promise 行为。
-- [ ] `wx.request` 非 2xx response resolve，broker/local failure reject。
-- [ ] JS-provided `Authorization` / `Signature` header 被拒绝且不出站。
+- [x] Step 01-04 覆盖的 login/request/session 错误输出通过 redaction test；全量 provider 和 unsupported stub 的 redaction 仍以后续 Step 补齐。
+- [x] 兼容矩阵记录 Step 01-03 / 01-04 覆盖 API 的 callback/Promise 行为。
+- [x] `wx.request` HTTP response resolve，broker/local failure reject；非 2xx/401 重试的生产 Host transport 语义仍需 Phase 4 扩展验证。
+- [x] JS-provided `Authorization` / `Signature` / `Signature-Input` / `Cookie` header 被拒绝且不出站。
 - [ ] L3/L4 API 未配置 provider 或未通过 consent 时 fail closed。

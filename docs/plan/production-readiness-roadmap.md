@@ -219,6 +219,19 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 
 若命令因环境、依赖或时间无法运行，必须记录原因、影响、替代检查和剩余风险。最终 Review 若修改文件，必须单独记录 Review、验证和最终集成 commit。
 
+最终 Review 执行记录：
+
+| 项目 | 记录 |
+|---|---|
+| 执行时间 | 2026-06-12 12:31:47 +0800 |
+| 范围 | Roadmap 执行台账、Step 00-01 至 01-04 文档、Phase 1 子文档、兼容矩阵、release gates、local demo runbook、threat model、相关源码/测试和 git history。 |
+| Step/ledger 审计 | 执行台账中 00-01 至 01-04 均为 `done`；未发现 pending / in_progress / review / blocked / committed Step；台账记录的主产物 commit `de4c3e2`、`22e7f25`、`fea9d35`、`04448a1`、`10db676`、`ec46e1f`、`1504eff`、`e9cbdbe` 均能在 git history 解析。 |
+| Review 发现与修复 | 修复文档漂移：`current-capability-baseline.md` 明确为 Step 00-01 时点基线，避免与 01-03/01-04 后实时能力混淆；`phase-1-wx-capability-broker.md` 和 `phase-1-wx-api-bridge-contract.md` 标出已由 01-03/01-04 证明的验收项，并保留 storage、L3/L4 provider、全量 unsupported stub、production Host RequestBroker 等后续工作。 |
+| 安全/敏感信息 Review | 运行敏感词扫描命中预期的测试夹具、redaction 代码、安全文档和 demo-only 文档；未发现真实 secret、真实 DID private key、真实 bearer token 或生产凭据。测试继续覆盖 CLI/demo redaction、JS auth header fail closed、response auth/token header redaction、challenge proof redaction 和 audit redaction。 |
+| 残余风险 | 首批 Step 已完成；production Host RequestBroker transport、registry allowlist、persistent request/audit store、logout/revocation list、全量 unsupported API stub、storage JS bridge、L3/L4 Host provider conformance 仍按 Phase 2/3/4/5 计划推进，不作为本次首批 Step 完成条件。 |
+| 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo run -p dock-cli -- validate examples/coffee-skill` 通过并保持 `compatibilityLevel: demo-only`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 通过。 |
+| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 17]`；本最终 Review 修改文档后将单独验证并提交最终集成 commit。 |
+
 #### 2.3.9 Codex Goal 提示词
 
 下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准。

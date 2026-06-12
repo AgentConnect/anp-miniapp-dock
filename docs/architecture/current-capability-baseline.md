@@ -5,6 +5,8 @@
 > 范围：记录当前 P0/P0.5 能力、证据、限制和 demo-only 边界；不声明新增运行时能力。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 00-01。
 
+> 注意：本文是 Step 00-01 的时点基线，不是实时能力矩阵。Step 01-03 / 01-04 已完成的 `wx.modelContext`、`wx.login`、`wx.checkSession` 和 `wx.request` 收敛状态，以 [`wx-api-compatibility-matrix.md`](wx-api-compatibility-matrix.md)、[`../runbook/release-gates.md`](../runbook/release-gates.md) 和对应 Step 文档为准。
+
 ## 1. 状态枚举
 
 本基线只使用下列状态词，后续 API 矩阵、组件矩阵和 release gates 应沿用这些语义：
@@ -26,7 +28,7 @@
 | [`README.md`](../../README.md) | 已描述 MVP 能力、CLI、demo、Mac host 和安全边界。 | 校准用户可见能力与非目标。 |
 | [`local-demo.md`](../runbook/local-demo.md) | 记录 Rust demo-server、FastAPI localhost 和 CLI coffee flow。 | 校准 demo-only 运行方式。 |
 | [`security.md`](../runbook/security.md) | 记录本地安全运行、凭据和脱敏要求。 | 校准安全边界。 |
-| [`production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) | Phase 0/1 后续工作仍为 planned。 | 避免把后续计划误标为现状。 |
+| [`production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) | 本文件冻结 Step 00-01 时点；后续 Step 状态以后续台账、矩阵和 Step 文档为准。 | 避免把时点基线误读为实时现状。 |
 
 ## 3. Workspace 基线
 
