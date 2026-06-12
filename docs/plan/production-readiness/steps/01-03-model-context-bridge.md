@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 11:24:05 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 11:45:53 +0800 |
+| Commit | `1504eff` |
 | Review evidence | commit 前 Review 已完成：`_meta.modelContext.cardEvents` 不进入 `model_visible()`；`componentPaths` 走 `resolve_component_path`；invalid options 错误不回显用户 path；NotificationType 由 `wx-compat` 单源注入 Atomic API VM 与 Component VM；`createSkill(skillPath)` 拒绝包外路径 |
-| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 13]`；`cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs -p wx-compat -p dock-core model_context` 通过，实际 js-runtime 6 passed、wx-compat 2 passed、dock-core 0 tests under filter；`cargo test -p js-runtime-quickjs create_skill` 1 passed；`cargo test -p component-runtime` 25 passed；`cargo test -p dock-core` 9 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`git diff --check -- crates/js-runtime-quickjs crates/wx-compat crates/dock-core crates/component-runtime docs/architecture docs/plan` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过 |
-| Next action | 创建 Step 01-03 focused commit |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 13]`；`cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs -p wx-compat -p dock-core model_context` 通过，实际 js-runtime 6 passed、wx-compat 2 passed、dock-core 0 tests under filter；`cargo test -p js-runtime-quickjs create_skill` 1 passed；`cargo test -p component-runtime` 25 passed；`cargo test -p dock-core` 9 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`git diff --check -- crates/js-runtime-quickjs crates/wx-compat crates/dock-core crates/component-runtime docs/architecture docs/plan` 无输出；`cargo clippy --workspace --all-targets -- -D warnings` 通过；post-commit `git status --short --branch` = `## main...origin/main [ahead 14]` |
+| Next action | 进入 Step 01-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：01-03
 - [x] 操作进入 audit 或可审计事件摘要，且不含 token/private data。
 - [x] `wx-api-compatibility-matrix.md` 与实现状态同步。
 - [x] Review 发现已修复或明确记录。
-- [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -115,8 +115,8 @@ Step index：01-03
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 `wx.modelContext` bridge、直接 tests 和文档同步。
-- Commit 前状态：记录 `git status --short`。
-- Commit 后证据：记录 commit hash 和 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 13]`，纳入 `Cargo.lock`、`crates/js-runtime-quickjs`、`crates/wx-compat`、`crates/component-runtime`、`docs/architecture`、roadmap 和本 Step 文档。
+- Commit 后证据：`1504eff`；`git status --short --branch` = `## main...origin/main [ahead 14]`。
 - 建议消息：`phase1: add model context bridge`
 
 ## 11. Blocked 处理
