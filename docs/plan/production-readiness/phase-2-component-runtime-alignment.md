@@ -48,6 +48,8 @@ P1 支持：
 - `NotificationType.Overflow`；
 - lifecycle trace 细化。
 
+当前 01-05 至 02-07 执行批次只覆盖 Phase 2 起步能力：manifest metadata runtime flow、WXML/WXSS P1 子集、表单/静态媒体节点、dynamic request/timer gate、fixtures 和 Render IR snapshots。`this.triggerEvent()` 与 `preloadDetailPage()` 仍保留为组件矩阵中的 `planned-p1`，后续必须单独拆 Step 或通过 Plan 变更降级后，才能把 Phase 2 全量 P1 关闭。
+
 P2 规划：
 
 - `observers`；
@@ -173,7 +175,8 @@ Step 02-06 已将这些 fixture 放入 `examples/fixtures/`，golden snapshots �
 ## 6. 阶段完成检查
 
 - [x] 组件 manifest 元数据进入 runtime。
-- [x] P1 Component JS/WXML/WXSS 能力有测试。
+- [x] 当前批次覆盖的 P1 WXML/WXSS、表单/静态媒体、dynamic 和 fixture 能力有测试。
+- [ ] `this.triggerEvent()` 与 `preloadDetailPage()` 仍为 `planned-p1`，需要后续 Step 或 Plan 变更处理。
 - [x] 动态组件默认关闭，声明后受限开放。
 - [x] Render IR schema version 已定义。
 - [x] 至少 3 个 coffee 之外 fixture 有 snapshot。

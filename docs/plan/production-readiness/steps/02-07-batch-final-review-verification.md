@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-07
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 23:00:42 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 01-05 至 02-06 全部 done 后，执行批次最终 Review 与整体验证 |
+| Review evidence | 2026-06-12 23:04:43 +0800 批次最终 Review 已记录：修复 Phase 2 子文档误把全部 P1 Component JS 能力标为完成的问题；确认 01-05 至 02-06 evidence、git history、dynamic sandbox gate、Render IR snapshots、release gates 和安全边界可审计 |
+| Verification evidence | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出 |
+| Next action | 准备创建 focused final review commit，然后回填 commit hash、标记 done 并停止在 Phase 2 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：02-07
 
 ## 7. 验收标准
 
-- [ ] 主 Plan 执行台账中 Step 01-05 至 02-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
-- [ ] git history 能解析 Step 01-05 至 02-06 的 commit hash。
-- [ ] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
-- [ ] Review 覆盖公开契约、兼容矩阵、Render IR snapshots、fixtures、release gates、Threat Model、redaction、安全边界和文档漂移。
-- [ ] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
-- [ ] 主 Plan `2.3.8` 已追加本批次最终 Review 记录。
+- [x] 主 Plan 执行台账中 Step 01-05 至 02-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
+- [x] git history 能解析 Step 01-05 至 02-06 的 commit hash。
+- [x] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
+- [x] Review 覆盖公开契约、兼容矩阵、Render IR snapshots、fixtures、release gates、Threat Model、redaction、安全边界和文档漂移。
+- [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
+- [x] 主 Plan `2.3.8` 已追加本批次最终 Review 记录。
 - [ ] 本步骤在进入 Step 03-01 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -87,6 +87,20 @@ Step index：02-07
 
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
+本次执行证据：
+
+- 工作区状态：启动 Review 前 `git status --short --branch` = `## main...origin/main [ahead 42]`，无未提交完成工作；进入 `02-07` 后仅有本 Step 文档和主 Plan 记录变更。
+- Git history：`8e475dd`、`1599294`、`50cc245`、`33591f0`、`0cfea24`、`79417d5`、`c8bb813`、`cc7b3b8`、`7baca29`、`f778a14` 均能解析为 commit。
+- `cargo metadata --format-version 1 --no-deps`：通过。
+- `cargo fmt --check`：通过。
+- `cargo clippy --workspace --all-targets -- -D warnings`：通过。
+- `cargo test --workspace`：通过。
+- `cargo test -p dock-cli --test coffee_order_flow`：4 passed，包含 coffee E2E 和 fixture validate/preview 测试。
+- `cargo test -p component-runtime snapshot`：通过，四个 snapshot case 通过；完整 workspace 中 `render_ir_snapshots.rs` 6 passed。
+- `cargo test -p dock-cli fixture`：通过，1 passed。
+- `git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md`：无输出。
+- `rg -n "token|Authorization|signature|private key|phone|address|latitude|longitude|file content" docs/architecture docs/runbook docs/security docs/plan README.md examples testdata`：命中只出现在安全说明、redaction 规则、mock/dev-only 示例、计划台账和测试假值；严格 fixture/snapshot 禁用串扫描无命中。
+
 ## 9. Review 环节
 
 - Review 时机：整体验证完成后、commit 前。
@@ -94,11 +108,11 @@ Step index：02-07
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录并修复 | `phase-2-component-runtime-alignment.md` 的阶段完成检查曾把 “P1 Component JS/WXML/WXSS 能力有测试” 整体标为完成，但组件矩阵中 `this.triggerEvent()` 和 `preloadDetailPage()` 仍为 `planned-p1`，容易误读为 Phase 2 全量 P1 已关闭。 |
+| 已修复问题 | 已修复 | 已把 Phase 2 子文档改为“当前批次覆盖的 P1 WXML/WXSS、表单/静态媒体、dynamic 和 fixture 能力有测试”，并明确 `this.triggerEvent()` / `preloadDetailPage()` 后续需单独拆 Step 或通过 Plan 变更处理。 |
+| 剩余风险 | 已记录 | 真实 Host renderer/provider/conformance、production network transport/background scheduler、persistent audit/request store、权限策略引擎、token revoke/replay、Skill 包签名、`triggerEvent()`、`preloadDetailPage()` 仍待 Phase 3/4/5 或后续拆分 Step；不得把本批次当作 production release 完成。 |
+| 新增或缺失测试 | 已覆盖本批次 | 本批次已通过 workspace、coffee E2E、component snapshot、dock-cli fixture、dynamic sandbox/resource-limit、高风险 provider、storage、unsupported registry 等测试；`triggerEvent()` / `preloadDetailPage()` 测试缺失是未完成范围，已在剩余风险记录。 |
+| 已更新或缺失文档 | 已同步 | 更新主 Plan final Review 记录、`02-07` Step 文档、roadmap 台账，并修复 Phase 2 子文档完成检查；API/组件矩阵、release gates、Threat Model 与当前实现状态一致。 |
 
 ## 10. Commit 要求
 
@@ -109,6 +123,14 @@ Step index：02-07
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`docs: record phase1 phase2 final review`
+
+Commit 前状态：`git status --short --branch` 显示 `docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-07-batch-final-review-verification.md` 变更，均属于本 Step final review 记录和文档漂移修复。
+
+纳入文件：`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-07-batch-final-review-verification.md`。
+
+Commit 后证据：待记录。
+
+遗留未提交变更：待 commit 后确认。
 
 ## 11. Blocked 处理
 
