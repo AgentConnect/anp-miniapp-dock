@@ -70,6 +70,8 @@ P2 规划：
 - 表单组件：`input`、`textarea`、`radio`、`checkbox`、`picker`；
 - `map` preview 和 `canvas` static 的 Render IR node。
 
+Step 02-03 已完成其中的 WXML P1 语法子集：`wx:if` / `wx:elif` / `wx:else` 条件链、`catchtap` Render IR event、disabled button 事件抑制，以及 `!flag`、`===`、`!==`、literal、boolean、null 和 path 的受限 expression evaluator。function call、mutation、复杂运算和 arbitrary JS 仍 fail closed 并产生 warning。
+
 仍不支持：
 
 - template/import/include；
@@ -88,6 +90,8 @@ P1 增加：
 - `min-width` / `max-width` / `min-height` / `max-height`；
 - `box-shadow`；
 - `overflow-x`。
+
+Step 02-03 已完成 id selector、tag selector、一层 simple descendant selector，以及 `gap`、`justify-content`、`align-items`、min/max、`box-shadow`、`overflow-x` 的 `RenderStyle` 输出。复杂 selector、media query、animation、transition、filter/mask 和 custom font 仍保持 warning / unsupported。
 
 仍降级或 warning：
 

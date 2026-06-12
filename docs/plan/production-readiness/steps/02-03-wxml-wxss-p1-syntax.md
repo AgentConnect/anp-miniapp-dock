@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-03
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 21:38:22 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 02-02 完成后，启动 WXML/WXSS P1 语法增强 |
+| Review evidence | 本文 Review 环节已记录：修复复杂 selector 静默吞掉的问题；确认 expression evaluator 为 allowlist-only，不执行任意 JS；disabled button 不产生 tap/catchtap action；`catchtap` 只扩展 Render IR 事件语义并仍映射为受控 tap；未引入 02-04 表单节点或 02-05 dynamic request/timer。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p component-runtime wx` 14 passed under filter（lib 5 passed、wxml_bindings 9 passed）；`cargo test -p component-runtime` 36 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime docs/architecture docs/plan` 无输出；本步骤 diff 敏感词抽样未新增真实 secret、本机绝对路径或隐私数据，唯一命中来自既有 02-02 台账文字。 |
+| Next action | 创建 focused implementation commit，然后回填 done 状态并进入 Step 02-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,13 +65,13 @@ Step index：02-03
 
 ## 7. 验收标准
 
-- [ ] `wx:elif` / `wx:else` 条件链编译和渲染正确，边界条件有测试。
-- [ ] `catchtap` 与 `bindtap` 有可区分事件语义，disabled button 不产生可执行 action。
-- [ ] 简单表达式白名单可用，function call / arbitrary JS expression fail closed 或 warning fallback。
-- [ ] WXSS id/tag/simple descendant selector 和 P1 style 属性输出稳定 RenderStyle 或 warning。
-- [ ] unsupported WXML/WXSS 不 panic，不执行 JS，不静默成功。
-- [ ] 组件兼容矩阵和 Phase 2 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] `wx:elif` / `wx:else` 条件链编译和渲染正确，边界条件有测试。
+- [x] `catchtap` 与 `bindtap` 有可区分事件语义，disabled button 不产生可执行 action。
+- [x] 简单表达式白名单可用，function call / arbitrary JS expression fail closed 或 warning fallback。
+- [x] WXSS id/tag/simple descendant selector 和 P1 style 属性输出稳定 RenderStyle 或 warning。
+- [x] unsupported WXML/WXSS 不 panic，不执行 JS，不静默成功。
+- [x] 组件兼容矩阵和 Phase 2 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,20 +94,20 @@ Step index：02-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 复杂 selector 初版可能被当成永远不匹配的 class/id selector 静默吞掉；`compiler.rs` 恢复时残留旧代码片段导致编译失败。 | Review 前已定位并修复。 |
+| 已修复问题 | 删除 `compiler.rs` 重复旧实现残片；修复 `wx:for` 递归遗漏 `ancestors` 参数；空白文本不再打断 `wx:if` / `wx:elif` / `wx:else` 链；复杂 selector 现在产生 warning。 | focused tests 已覆盖条件链、复杂 selector warning。 |
+| 剩余风险 | 仅支持 Step 02-03 定义的受限表达式和一层 simple descendant selector；不支持完整 CSS 级联、pseudo selector、media query、函数调用或任意 JS。 | 已在矩阵和 Phase 2 文档记录为非目标。 |
+| 新增或缺失测试 | 新增 `wxml_bindings.rs` 覆盖条件链、`catchtap`、disabled button、表达式白/黑名单、P1 selector/style、复杂 selector warning；未新增 snapshot fixture。 | Snapshot fixture 留到 Step 02-06。 |
+| 已更新或缺失文档 | 已更新组件兼容矩阵、Phase 2 component runtime alignment、本 Step 和主 Plan 台账。 | 未更新 Host adapter 文档，Host renderer 生产契约留到 Phase 4。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 WXML/WXSS P1 语法、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` 包含本 Step 的 `component-runtime` WXML/WXSS P1 实现、focused tests、组件矩阵、Phase 2 文档、Step 文档和主 Plan in-progress/review 记录，未发现其它 Step 完成工作。
+- 纳入文件：`crates/component-runtime/src/compiler.rs`、`crates/component-runtime/src/events.rs`、`crates/component-runtime/src/render_ir.rs`、`crates/component-runtime/src/wxss.rs`、`crates/component-runtime/tests/wxml_bindings.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-03-wxml-wxss-p1-syntax.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：待 implementation commit 后回填。
+- 遗留未提交变更：待 implementation commit 后回填。
 - 建议消息：`phase2: add wxml wxss p1 syntax`
 
 ## 11. Blocked 处理

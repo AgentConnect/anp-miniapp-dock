@@ -13,7 +13,7 @@ pub enum ComponentEventKind {
 impl From<&RenderEventKind> for ComponentEventKind {
     fn from(kind: &RenderEventKind) -> Self {
         match kind {
-            RenderEventKind::Tap => Self::Tap,
+            RenderEventKind::Tap | RenderEventKind::CatchTap => Self::Tap,
             RenderEventKind::ImageLoad => Self::ImageLoad,
             RenderEventKind::ImageError => Self::ImageError,
         }

@@ -104,6 +104,135 @@ fn wx_if_false_omits_node() {
 }
 
 #[test]
+fn wx_elif_else_condition_chain_renders_first_matching_branch() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <text wx:if="{{ status === 'ready' }}">Ready</text>
+          <text wx:elif="{{ status === 'pending' }}">Pending</text>
+          <text wx:else>Fallback</text>
+        </view>
+        "#,
+        "",
+        &json!({"status": "pending"}),
+    )
+    .expect("component compiles");
+
+    assert_eq!(output.root.children.len(), 1);
+    assert_eq!(output.root.children[0].text.as_deref(), Some("Pending"));
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn wx_else_branch_renders_when_previous_conditions_do_not_match() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <text wx:if="{{ count === 1 }}">One</text>
+          <text wx:elif="{{ count === 2 }}">Two</text>
+          <text wx:else>Many</text>
+        </view>
+        "#,
+        "",
+        &json!({"count": 3}),
+    )
+    .expect("component compiles");
+
+    assert_eq!(output.root.children.len(), 1);
+    assert_eq!(output.root.children[0].text.as_deref(), Some("Many"));
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn wx_catchtap_is_distinct_render_event_but_maps_to_tap_runtime_event() {
+    let output = compile_wxml_to_render_ir(
+        r#"<view><button catchtap="stopTap" data-order-id="{{ order.id }}">Stop</button></view>"#,
+        "",
+        &json!({"order": {"id": "order_demo_001"}}),
+    )
+    .expect("component compiles");
+
+    let event = output.root.children[0]
+        .events
+        .iter()
+        .find(|event| event.event == RenderEventKind::CatchTap)
+        .expect("catchtap event exists");
+    assert_eq!(event.method, "stopTap");
+    assert_eq!(
+        event.dataset.get("order-id"),
+        Some(&json!("order_demo_001"))
+    );
+
+    let component_event = component_runtime::ComponentEvent::from_binding(event);
+    assert_eq!(
+        component_event.kind,
+        component_runtime::ComponentEventKind::Tap
+    );
+    assert_eq!(
+        component_event.dataset.get("orderId"),
+        Some(&json!("order_demo_001"))
+    );
+}
+
+#[test]
+fn wx_disabled_button_sets_prop_and_suppresses_tap_events() {
+    let output = compile_wxml_to_render_ir(
+        r#"<view><button disabled="{{ !canSubmit }}" bindtap="submit" catchtap="stop">Submit</button></view>"#,
+        "",
+        &json!({"canSubmit": false}),
+    )
+    .expect("component compiles");
+
+    let button = &output.root.children[0];
+    assert_eq!(button.props.get("disabled"), Some(&json!(true)));
+    assert!(button.events.is_empty());
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn wx_simple_expression_allowlist_supports_literals_negation_and_equality() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view>
+          <text wx:if="{{ !hidden }}">Visible</text>
+          <text wx:if="{{ amount === 450 }}">Amount</text>
+          <text wx:if="{{ status !== 'closed' }}">Open</text>
+          <text wx:if="{{ false }}">Never</text>
+        </view>
+        "#,
+        "",
+        &json!({"hidden": false, "amount": 450, "status": "ready"}),
+    )
+    .expect("component compiles");
+
+    let text = output
+        .root
+        .children
+        .iter()
+        .filter_map(|node| node.text.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(text, vec!["Visible", "Amount", "Open"]);
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn wx_unsupported_condition_expression_warns_and_fails_closed() {
+    let output = compile_wxml_to_render_ir(
+        r#"<view><text wx:if="{{ isReady() }}">Unsafe</text><text>Safe</text></view>"#,
+        "",
+        &json!({"ready": true}),
+    )
+    .expect("component compiles with warning");
+
+    assert_eq!(output.root.children.len(), 1);
+    assert_eq!(output.root.children[0].text.as_deref(), Some("Safe"));
+    assert!(output
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unsupported wx:if expression")));
+}
+
+#[test]
 fn class_and_inline_style_are_merged_with_inline_precedence() {
     let output = compile_wxml_to_render_ir(
         r#"<view class="card" style="padding: 8px; opacity: 0.5"></view>"#,
@@ -115,6 +244,52 @@ fn class_and_inline_style_are_merged_with_inline_precedence() {
     assert_eq!(output.root.style.padding.as_deref(), Some("8px"));
     assert_eq!(output.root.style.background.as_deref(), Some("#fff"));
     assert_eq!(output.root.style.opacity.as_deref(), Some("0.5"));
+}
+
+#[test]
+fn wxss_p1_selectors_and_properties_map_to_render_style() {
+    let output = compile_wxml_to_render_ir(
+        r#"
+        <view id="root" class="card">
+          <view class="row"><text class="price">Price</text></view>
+        </view>
+        "#,
+        r#"
+        view { display: flex; }
+        #root { gap: 8rpx; justify-content: center; align-items: stretch; }
+        .card .price { min-width: 120rpx; max-width: 240rpx; box-shadow: 0 2rpx 6rpx #000; overflow-x: hidden; }
+        "#,
+        &json!({}),
+    )
+    .expect("component compiles");
+
+    assert_eq!(output.root.style.display.as_deref(), Some("flex"));
+    assert_eq!(output.root.style.gap.as_deref(), Some("8px"));
+    assert_eq!(output.root.style.justify_content.as_deref(), Some("center"));
+    assert_eq!(output.root.style.align_items.as_deref(), Some("stretch"));
+
+    let price = &output.root.children[0].children[0];
+    assert_eq!(price.style.min_width.as_deref(), Some("120px"));
+    assert_eq!(price.style.max_width.as_deref(), Some("240px"));
+    assert_eq!(price.style.box_shadow.as_deref(), Some("0 2px 6px #000"));
+    assert_eq!(price.style.overflow_x.as_deref(), Some("hidden"));
+    assert!(output.warnings.is_empty());
+}
+
+#[test]
+fn wxss_unsupported_complex_selector_is_warning() {
+    let output = compile_wxml_to_render_ir(
+        r#"<view class="card primary"><text class="price">Price</text></view>"#,
+        ".card.primary { color: red; } .card .price:hover { color: blue; }",
+        &json!({}),
+    )
+    .expect("component compiles with warnings");
+
+    assert_eq!(output.warnings.len(), 2);
+    assert!(output
+        .warnings
+        .iter()
+        .all(|warning| warning.contains("unsupported selector")));
 }
 
 #[test]

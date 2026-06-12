@@ -72,9 +72,23 @@ pub struct RenderStyle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flex_direction: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub justify_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align_items: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_height: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_height: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub margin: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,7 +110,11 @@ pub struct RenderStyle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub border_radius: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub box_shadow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_align: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overflow_x: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, String>,
 }
@@ -105,8 +123,15 @@ impl RenderStyle {
     pub fn is_empty(&self) -> bool {
         self.display.is_none()
             && self.flex_direction.is_none()
+            && self.gap.is_none()
+            && self.justify_content.is_none()
+            && self.align_items.is_none()
             && self.width.is_none()
             && self.height.is_none()
+            && self.min_width.is_none()
+            && self.max_width.is_none()
+            && self.min_height.is_none()
+            && self.max_height.is_none()
             && self.margin.is_none()
             && self.padding.is_none()
             && self.color.is_none()
@@ -117,7 +142,9 @@ impl RenderStyle {
             && self.line_height.is_none()
             && self.border.is_none()
             && self.border_radius.is_none()
+            && self.box_shadow.is_none()
             && self.text_align.is_none()
+            && self.overflow_x.is_none()
             && self.extra.is_empty()
     }
 }
@@ -126,6 +153,7 @@ impl RenderStyle {
 #[serde(rename_all = "snake_case")]
 pub enum RenderEventKind {
     Tap,
+    CatchTap,
     ImageLoad,
     ImageError,
 }
