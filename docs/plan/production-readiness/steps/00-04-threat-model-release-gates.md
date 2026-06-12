@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：00-04
-状态：draft
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
-| Branch | 待执行时记录 |
-| Started | 待记录 |
+| Status | review |
+| Branch | `main` |
+| Started | 2026-06-12 10:41:43 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 00-01 至 00-03 完成后，建立安全模型和发布门槛 |
+| Review evidence | 初审未发现需修复的安全/发布门槛内容问题；确认 planned gate 未被误写成当前已自动化，demo-only/mock 能力仍为 production release blocker |
+| Verification evidence | pre-flight: `git status --short --branch` = `## main...origin/main [ahead 7]`；`git diff --check -- docs/security docs/runbook/release-gates.md README.md docs/plan/production-readiness-roadmap.md docs/plan/production-readiness/steps/00-04-threat-model-release-gates.md` 无输出；安全红线抽样 `rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allowlist|fail closed" docs/security docs/runbook/release-gates.md` 命中 threat model、release gates 和 redaction 规则；README、threat model、release gates Markdown 相对链接检查无破链；release gate 命令与 `AGENTS.md` 手工核对一致 |
+| Next action | 创建 Step 00-04 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -62,11 +62,11 @@ Step index：00-04
 
 ## 7. 验收标准
 
-- [ ] threat model 覆盖 DID private key、capability token、Skill package、scoped storage、audit records、Render IR、Host providers。
-- [ ] 攻击者模型覆盖恶意 Skill、被篡改 Skill 包、恶意商家 Agent、网络中间人、恶意或误配置 Host provider、日志/审计读取者、本地文件系统攻击者。
-- [ ] release gates 包含 `cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow`。
-- [ ] release gates 明确 sandbox escape、allowlist deny、redaction、token replay/scope、Render IR snapshot、Markdown link check 的启用阶段或缺口。
-- [ ] Review 发现已修复或明确记录。
+- [x] threat model 覆盖 DID private key、capability token、Skill package、scoped storage、audit records、Render IR、Host providers。
+- [x] 攻击者模型覆盖恶意 Skill、被篡改 Skill 包、恶意商家 Agent、网络中间人、恶意或误配置 Host provider、日志/审计读取者、本地文件系统攻击者。
+- [x] release gates 包含 `cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow`。
+- [x] release gates 明确 sandbox escape、allowlist deny、redaction、token replay/scope、Render IR snapshot、Markdown link check 的启用阶段或缺口。
+- [x] Review 发现已修复或明确记录。
 - [ ] 本步骤在进入下一步之前已创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -87,11 +87,11 @@ Step index：00-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 本 Step 不实现测试，但必须标明未来 gate |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 无阻塞问题 | threat model 覆盖 Step 要求的资产和攻击者；release gates 包含仓库基础命令、文档 gate、安全 gate、fixture/Render IR gate、demo-only 禁止项和失败回滚规则。 |
+| 已修复问题 | 无文档内容修复 | 验证中未发现空白错误、相对链接破链或 release 命令与 `AGENTS.md` 不一致。 |
+| 剩余风险 | 可接受 | package signature、token revoke/jti replay、persistent audit、Host provider conformance、Render IR snapshot 仍是 planned gates；文档已明确不得作为当前已通过 gate 或 production-ready 能力。 |
+| 新增或缺失测试 | 未新增自动化测试 | 本 Step 为安全模型和 release runbook 初版；验证使用 diff whitespace 检查、安全红线抽样、Markdown 链接检查和 release 命令一致性核对。 |
+| 已更新或缺失文档 | 已更新 | 新增 `anp/anp-miniapp-dock/docs/security/threat-model.md` 和 `anp/anp-miniapp-dock/docs/runbook/release-gates.md`，并在 `anp/anp-miniapp-dock/README.md` 增加入口链接；主 Plan 与本 Step 文档已回填 review/verification evidence。 |
 
 ## 10. Commit 要求
 
