@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：02-07
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-12 23:00:42 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-12 23:06:53 +0800 |
+| Commit | `2f0d122` |
 | Review evidence | 2026-06-12 23:04:43 +0800 批次最终 Review 已记录：修复 Phase 2 子文档误把全部 P1 Component JS 能力标为完成的问题；确认 01-05 至 02-06 evidence、git history、dynamic sandbox gate、Render IR snapshots、release gates 和安全边界可审计 |
 | Verification evidence | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出 |
-| Next action | 准备创建 focused final review commit，然后回填 commit hash、标记 done 并停止在 Phase 2 |
+| Next action | 本 Goal 到 Step 02-07 结束；停止在 Phase 2，不进入 Step 03-01 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：02-07
 - [x] Review 覆盖公开契约、兼容矩阵、Render IR snapshots、fixtures、release gates、Threat Model、redaction、安全边界和文档漂移。
 - [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
 - [x] 主 Plan `2.3.8` 已追加本批次最终 Review 记录。
-- [ ] 本步骤在进入 Step 03-01 之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入 Step 03-01 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -128,9 +128,9 @@ Commit 前状态：`git status --short --branch` 显示 `docs/plan/production-re
 
 纳入文件：`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-2-component-runtime-alignment.md`、`docs/plan/production-readiness/steps/02-07-batch-final-review-verification.md`。
 
-Commit 后证据：待记录。
+Commit 后证据：final review commit `2f0d122 docs: record phase1 phase2 final review`；post-commit `git status --short --branch` = `## main...origin/main [ahead 43]`，工作区无未提交变更。
 
-遗留未提交变更：待 commit 后确认。
+遗留未提交变更：仅本 Step 文档和主 Plan 的 commit hash / done 状态回填，准备单独创建 docs closure commit。
 
 ## 11. Blocked 处理
 
