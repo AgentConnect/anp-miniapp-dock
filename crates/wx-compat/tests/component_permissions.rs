@@ -126,24 +126,24 @@ fn device_and_app_info_defaults_are_minimized() {
 
 #[test]
 fn unsupported_wx_apis_have_explicit_fail_shape() {
-    let payment = unsupported_api("requestPayment");
+    let photo_save = unsupported_api("saveImageToPhotosAlbum");
 
     assert_eq!(
-        payment.get("errMsg").and_then(|value| value.as_str()),
-        Some("requestPayment:fail unsupported")
+        photo_save.get("errMsg").and_then(|value| value.as_str()),
+        Some("saveImageToPhotosAlbum:fail unsupported")
     );
     assert_eq!(
-        payment.get("code").and_then(|value| value.as_str()),
+        photo_save.get("code").and_then(|value| value.as_str()),
         Some("unsupported")
     );
-    assert!(payment
+    assert!(photo_save
         .get("reason")
         .and_then(|value| value.as_str())
         .is_some_and(|reason| !reason.contains("4111111111111111")));
-    assert!(payment
+    assert!(photo_save
         .get("suggestion")
         .and_then(|value| value.as_str())
-        .is_some_and(|suggestion| suggestion.contains("ConsentGate")));
+        .is_some_and(|suggestion| suggestion.contains("explicit native save action")));
 }
 
 #[test]
@@ -151,8 +151,11 @@ fn unsupported_registry_marks_sync_and_async_apis() {
     let registry = unsupported_api_registry();
 
     assert!(registry.iter().any(|api| {
-        api.name == "requestPayment" && matches!(api.kind, UnsupportedApiKind::Async)
+        api.name == "getNetworkType" && matches!(api.kind, UnsupportedApiKind::Async)
     }));
+    assert!(!registry.iter().any(|api| api.name == "requestPayment"
+        || api.name == "getPhoneNumber"
+        || api.name == "chooseMedia"));
     assert!(registry.iter().any(|api| {
         api.name == "getAccountInfoSync" && matches!(api.kind, UnsupportedApiKind::Sync)
     }));

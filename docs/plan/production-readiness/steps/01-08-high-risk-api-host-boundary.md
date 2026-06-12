@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：01-08
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-12 20:55:30 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 01-07 完成后，启动高风险 Host provider boundary |
+| Review evidence | 本文 Review 环节已记录：未发现阻塞问题；确认默认 Atomic API runtime 只接入 unavailable provider、dev-only provider 未进入 production 默认路径、ConsentGate 在 provider 前阻断、本地路径和支付密码不会回显。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat provider` 3 passed；`cargo test -p wx-compat high_risk` 2 passed；`cargo test -p js-runtime-quickjs high_risk` 3 passed；`cargo test -p wx-compat unsupported` 4 passed；`cargo test -p consent-audit -p dock-core consent` 8 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/dock-core crates/consent-audit crates/js-runtime-quickjs docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值和 redaction 断言。 |
+| Next action | 创建 Step 01-08 focused commit 后回填 commit hash，并进入 Step 02-01 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,14 +66,14 @@ Step index：01-08
 
 ## 7. 验收标准
 
-- [ ] P1 高风险 API 有统一 Host provider boundary 或明确 fail-closed stub。
-- [ ] 未配置 provider 时返回 `provider_unavailable` / `unsupported`，不能使用 mock 冒充 production。
-- [ ] 未通过 ConsentGate 时返回 `consent_required`，且 provider 不会被调用。
-- [ ] phone/address/location/file/media/payment 结果最小化；file/media 只返回 opaque handle，不返回本地路径或原始文件内容。
-- [ ] `wx.requestPayment` 不复刻微信收银台，不采集支付密码，只走 Payment Intent / merchant API boundary。
-- [ ] audit 只记录脱敏 summary、risk level 和 proof id，不保存隐私原文。
-- [ ] API 矩阵、Threat Model、Release Gates 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] P1 高风险 API 有统一 Host provider boundary 或明确 fail-closed stub。
+- [x] 未配置 provider 时返回 `provider_unavailable` / `unsupported`，不能使用 mock 冒充 production。
+- [x] 未通过 ConsentGate 时返回 `consent_required`，且 provider 不会被调用。
+- [x] phone/address/location/file/media/payment 结果最小化；file/media 只返回 opaque handle，不返回本地路径或原始文件内容。
+- [x] `wx.requestPayment` 不复刻微信收银台，不采集支付密码，只走 Payment Intent / merchant API boundary。
+- [x] audit 只记录脱敏 summary、risk level 和 proof id，不保存隐私原文。
+- [x] API 矩阵、Threat Model、Release Gates 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -88,6 +88,8 @@ Step index：01-08
 | 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- crates/wx-compat crates/dock-core crates/consent-audit crates/js-runtime-quickjs docs/architecture docs/runbook docs/security docs/plan` | 无空白错误 |
 | 安全抽样 | 手工检查 API result、audit、CLI JSON | 不含手机号、地址、文件内容、精确位置、token、Authorization、signature、private key path |
 
+补充验证：`cargo test -p wx-compat high_risk` 2 passed；`cargo test -p wx-compat unsupported` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
+
 如果某个命令不能运行，必须记录原因、影响和替代证据。
 
 ## 9. Review 环节
@@ -97,20 +99,20 @@ Step index：01-08
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 未发现阻塞问题 | Review 覆盖 provider boundary、ConsentGate 顺序、默认 fail-closed、mock/dev-only 标识、payment/file/location 隐私边界、callback/Promise failure shape 和文档同步。 |
+| 已修复问题 | 将 phone/address/location/media/file/payment/scan/phone call 从 unsupported registry 中移出并接入高风险 Host boundary；Atomic API 默认 runtime 只使用 `UnavailableHighRiskHostProvider`；补齐本地路径拒绝、支付密码不回显、dev-only opaque handle 和 consent-before-provider 测试。 | focused tests 与 workspace 回归已通过。 |
+| 剩余风险 | 真实 Host provider、permission UI、provider conformance tests、persistent audit、真实 payment/location/media provider contract 仍留到 Phase 3/4；当前只提供 Host boundary 和默认 fail-closed。 | API 矩阵、Threat Model、Release Gates 已记录 production release blocker。 |
+| 新增或缺失测试 | 新增 `wx-compat` high-risk provider/redaction tests、Atomic VM high-risk callback/Promise tests，并回归 unsupported registry、consent-audit、dock-core、workspace；未新增真实 Host provider conformance tests。 | 真实 Host provider 不属于 01-08 范围。 |
+| 已更新或缺失文档 | 已更新 API 兼容矩阵、Threat Model、Release Gates、本 Step 和主 Plan 台账。 | 未更新 Host adapter contract 文档，留到 Phase 4。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含高风险 API Host boundary、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` 包含本 Step 高风险 Host boundary、直接 tests 和相关文档，未发现其它 Step 完成工作。
+- 纳入文件：`crates/wx-compat/src/high_risk.rs`、`crates/wx-compat/src/lib.rs`、`crates/wx-compat/src/unsupported.rs`、`crates/wx-compat/tests/high_risk_provider.rs`、`crates/wx-compat/tests/component_permissions.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/architecture/wx-api-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/steps/01-08-high-risk-api-host-boundary.md`、`docs/plan/production-readiness-roadmap.md`。
+- Commit 后证据：待提交后记录 commit hash 和 commit 后 `git status --short --branch`。
+- 遗留未提交变更：待提交后记录。
 - 建议消息：`phase1: add high risk api host boundary`
 
 ## 11. Blocked 处理

@@ -26,9 +26,11 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use wx_compat::{
-    unsupported_api, AppBaseInfo, CapabilityProfile, DeviceInfo, InMemoryScopedStorage,
-    RequestBroker, ScopedStorage, StorageError, StorageScope, WxMethod, WxRequest, WxRequestError,
-    WxResponse,
+    high_risk_api_spec, high_risk_consent_required_json, high_risk_error_json,
+    high_risk_success_json, unsupported_api, AppBaseInfo, CapabilityProfile, DeviceInfo,
+    HighRiskApiRequest, HighRiskHostProvider, InMemoryScopedStorage, RequestBroker, ScopedStorage,
+    StorageError, StorageScope, UnavailableHighRiskHostProvider, WxMethod, WxRequest,
+    WxRequestError, WxResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -553,6 +555,13 @@ fn install_host_bridge<'js>(
     dock.set("getAppBaseInfo", app_base_info_fn)
         .map_err(to_quickjs_error)?;
 
+    let high_risk_bridge = bridge.clone();
+    let high_risk_fn = Func::from(move |api_name: String, options_json: String| {
+        high_risk_bridge.high_risk_api_json(api_name, options_json)
+    });
+    dock.set("highRiskApi", high_risk_fn)
+        .map_err(to_quickjs_error)?;
+
     let unsupported_api_fn =
         Func::from(move |api_name: String| Value::Object(unsupported_api(&api_name)).to_string());
     dock.set("unsupportedApi", unsupported_api_fn)
@@ -908,6 +917,36 @@ impl HostBridgeRuntime {
 
     fn app_base_info_json(&self) -> String {
         serde_json::to_string(&AppBaseInfo::default()).expect("app base info must serialize")
+    }
+
+    fn high_risk_api_json(&self, api_name: String, options_json: String) -> String {
+        let Some(spec) = high_risk_api_spec(&api_name) else {
+            return serde_json::Value::Object(unsupported_api(&api_name)).to_string();
+        };
+        let options: Value = match serde_json::from_str(&options_json) {
+            Ok(options) => options,
+            Err(_) => {
+                return high_risk_error_json(spec.name, wx_compat::HighRiskApiError::InvalidOptions)
+                    .to_string()
+            }
+        };
+        if high_risk_options_contain_local_file_path(&options) {
+            return high_risk_error_json(spec.name, wx_compat::HighRiskApiError::InvalidOptions)
+                .to_string();
+        }
+        if options
+            .get("__dockConsentRequired")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            return high_risk_consent_required_json(spec.name).to_string();
+        }
+        let request = HighRiskApiRequest::new(spec.name, options);
+        let provider = UnavailableHighRiskHostProvider;
+        match provider.call_high_risk_api(spec, &request) {
+            Ok(success) => high_risk_success_json(spec.name, success).to_string(),
+            Err(error) => high_risk_error_json(spec.name, error).to_string(),
+        }
     }
 
     fn login_json(&self) -> String {
@@ -1330,6 +1369,27 @@ fn storage_failure_json(
         "suggestion": suggestion,
     })
     .to_string()
+}
+
+fn high_risk_options_contain_local_file_path(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, value)| {
+            let normalized = key.to_ascii_lowercase();
+            (normalized.contains("path") || normalized.contains("file"))
+                && value.as_str().is_some_and(looks_like_local_file_path)
+                || high_risk_options_contain_local_file_path(value)
+        }),
+        Value::Array(items) => items.iter().any(high_risk_options_contain_local_file_path),
+        Value::String(text) => looks_like_local_file_path(text),
+        _ => false,
+    }
+}
+
+fn looks_like_local_file_path(text: &str) -> bool {
+    text.starts_with('/')
+        || text.starts_with("\\\\")
+        || text.contains(":\\")
+        || text.starts_with("file:")
 }
 
 impl HostRequestFailure {

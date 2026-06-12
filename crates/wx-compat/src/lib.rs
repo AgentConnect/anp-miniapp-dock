@@ -1,11 +1,19 @@
 #![doc = "wx Compatibility Layer host capability and scoped storage crate."]
 
+pub mod high_risk;
 pub mod model_context;
 pub mod permissions;
 pub mod request;
 pub mod storage;
 pub mod unsupported;
 
+pub use high_risk::{
+    call_high_risk_api_with_boundary, high_risk_api_spec, high_risk_audit_summary,
+    high_risk_consent_required_json, high_risk_error_json, high_risk_success_json,
+    redact_high_risk_value, DevOnlyHighRiskHostProvider, HighRiskApiError, HighRiskApiKind,
+    HighRiskApiRequest, HighRiskApiSpec, HighRiskApiSuccess, HighRiskHostProvider, HighRiskLevel,
+    UnavailableHighRiskHostProvider,
+};
 pub use model_context::{
     default_app_base_info_js_literal, default_device_info_js_literal, notification_type_js_literal,
     AppBaseInfo, CardEvent, CardEventSink, DeviceInfo, InMemoryCardEventSink, ModelContext,

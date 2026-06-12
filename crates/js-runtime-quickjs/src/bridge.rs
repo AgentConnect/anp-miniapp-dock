@@ -305,6 +305,16 @@ function __dockSyncStorageOutcome(apiName, hostCall) {
   return payload;
 }
 
+function __dockHighRiskApi(apiName, options) {
+  return __dockAsyncOutcome(apiName, options, () => {
+    const optionsJson = __dockJsonOptionsOrFailure(apiName, options || {});
+    if (!optionsJson.ok) {
+      return optionsJson.json;
+    }
+    return __dock.highRiskApi(apiName, optionsJson.json);
+  });
+}
+
 function __dockInstallUnsupportedWxApi(apiDef) {
   const parts = apiDef.name.split('.');
   let index = parts[0] === 'wx' ? 1 : 0;
@@ -391,6 +401,42 @@ const wx = {
   },
   getAppBaseInfo() {
     return Object.freeze(JSON.parse(__dock.getAppBaseInfo()));
+  },
+  getPhoneNumber(options) {
+    return __dockHighRiskApi('getPhoneNumber', options);
+  },
+  chooseAddress(options) {
+    return __dockHighRiskApi('chooseAddress', options);
+  },
+  getLocation(options) {
+    return __dockHighRiskApi('getLocation', options);
+  },
+  getFuzzyLocation(options) {
+    return __dockHighRiskApi('getFuzzyLocation', options);
+  },
+  chooseLocation(options) {
+    return __dockHighRiskApi('chooseLocation', options);
+  },
+  chooseMedia(options) {
+    return __dockHighRiskApi('chooseMedia', options);
+  },
+  chooseMessageFile(options) {
+    return __dockHighRiskApi('chooseMessageFile', options);
+  },
+  requestPayment(options) {
+    return __dockHighRiskApi('requestPayment', options);
+  },
+  requestVirtualPayment(options) {
+    return __dockHighRiskApi('requestVirtualPayment', options);
+  },
+  requestJointPayment(options) {
+    return __dockHighRiskApi('requestJointPayment', options);
+  },
+  scanCode(options) {
+    return __dockHighRiskApi('scanCode', options);
+  },
+  makePhoneCall(options) {
+    return __dockHighRiskApi('makePhoneCall', options);
   },
   modelContext: Object.freeze({
     NotificationType: Object.freeze(__DOCK_NOTIFICATION_TYPE__),

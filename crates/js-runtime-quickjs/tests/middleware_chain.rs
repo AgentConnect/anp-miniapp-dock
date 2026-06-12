@@ -494,7 +494,7 @@ module.exports = skill
 }
 
 #[test]
-fn unsupported_async_wx_api_rejects_with_callbacks_and_safe_shape() {
+fn high_risk_request_payment_fails_closed_with_callbacks_and_safe_shape() {
     let skill = test_skill(
         r#"
 const skill = wx.modelContext.createSkill(__dirname)
@@ -536,25 +536,138 @@ module.exports = skill
         .call(ApiCall::new("skill", "session", "pay", json!({})))
         .expect("call pay");
 
-    assert_eq!(result.content[0].text, "requestPayment:fail unsupported");
+    assert_eq!(
+        result.content[0].text,
+        "requestPayment:fail provider_unavailable"
+    );
     let structured = result.structured_content.as_ref().expect("structured");
     assert_eq!(
         structured.get("code").and_then(|value| value.as_str()),
-        Some("unsupported")
+        Some("provider_unavailable")
     );
     assert!(structured
         .get("reason")
         .and_then(|value| value.as_str())
-        .is_some_and(|reason| reason.contains("Host provider")));
+        .is_some_and(|reason| reason.contains("No Host provider")));
     assert_eq!(
         structured
             .get("events")
             .and_then(|value| value.as_array())
             .cloned(),
         Some(vec![
-            json!("fail:requestPayment:fail unsupported"),
-            json!("complete:requestPayment:fail unsupported"),
+            json!("fail:requestPayment:fail provider_unavailable"),
+            json!("complete:requestPayment:fail provider_unavailable"),
         ])
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn high_risk_consent_required_blocks_before_provider() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('phone', async () => {
+  const events = []
+  try {
+    await wx.getPhoneNumber({
+      __dockConsentRequired: true,
+      phoneNumber: '1234567890',
+      fail(error) {
+        events.push('fail:' + error.errMsg)
+      },
+      complete(error) {
+        events.push('complete:' + error.errMsg)
+      }
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        events,
+        leaked: JSON.stringify(error).includes('1234567890')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["phone"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "phone", json!({})))
+        .expect("call phone");
+
+    assert_eq!(
+        result.content[0].text,
+        "getPhoneNumber:fail consent_required"
+    );
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("consent_required")
+    );
+    assert_eq!(
+        structured
+            .get("events")
+            .and_then(|value| value.as_array())
+            .cloned(),
+        Some(vec![
+            json!("fail:getPhoneNumber:fail consent_required"),
+            json!("complete:getPhoneNumber:fail consent_required"),
+        ])
+    );
+    assert_eq!(
+        structured.get("leaked").and_then(|value| value.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn high_risk_media_rejects_local_file_path_without_echoing_it() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('media', async () => {
+  try {
+    await wx.chooseMedia({ filePath: '/Users/alice/private-photo.png' })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: {
+        code: error.code,
+        reason: error.reason,
+        leaked: JSON.stringify(error).includes('/Users/alice')
+      }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["media"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let result = vm
+        .call(ApiCall::new("skill", "session", "media", json!({})))
+        .expect("call media");
+
+    assert_eq!(result.content[0].text, "chooseMedia:fail invalid_options");
+    let structured = result.structured_content.as_ref().expect("structured");
+    assert_eq!(
+        structured.get("code").and_then(|value| value.as_str()),
+        Some("invalid_options")
     );
     assert_eq!(
         structured.get("leaked").and_then(|value| value.as_bool()),
