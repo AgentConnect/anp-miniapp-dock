@@ -16,11 +16,26 @@
 
 ## 使用方式
 
-1. 先读总览 roadmap，确认当前要进入哪个 Phase。
-2. 进入对应 Phase 文档，按“开发顺序”拆 issue。
+1. 先读总览 roadmap，确认当前要进入哪个 Phase，并查看其中的 `Resume From Here`、执行台账、Codex Goal 执行协议和 Review 门禁。
+2. 进入对应 Phase 文档，按“开发顺序”拆 issue；已经拆出的首批 Step 必须优先以 [`steps/`](steps/) 下的小 Plan 为执行入口。
 3. 如果 Phase 文档引用深入子文档，先冻结子文档中的契约，再写代码。
-4. 每个 issue 必须同时更新：实现、测试、兼容矩阵、runbook 或开发者文档。
-5. 每个 Phase 完成前必须按对应文档的“阶段完成检查”做一次审计。
+4. 每个 issue 或 Step 必须同时更新：实现、测试、兼容矩阵、runbook 或开发者文档。
+5. 每个 Step 完成前必须按小 Plan 的“Review 环节”做 commit 前 Review；每个 Phase 完成前必须按对应文档的“阶段完成检查”做一次阶段审计。
+
+## 首批 Codex Goal Step 文档
+
+以下 Step 是 Phase 0 和 Phase 1 的首批可执行拆分。状态、依赖、commit 和证据以 [`../production-readiness-roadmap.md`](../production-readiness-roadmap.md) 的执行台账为准。
+
+| Step | 小 Plan | 范围 |
+|---|---|---|
+| 00-01 | [当前能力盘点与基线固化](steps/00-01-baseline-inventory.md) | Phase 0 当前能力、证据、demo-only 标注 |
+| 00-02 | [wx API 兼容矩阵](steps/00-02-wx-api-compatibility-matrix.md) | Phase 0 API 状态、映射、风险、测试证据 |
+| 00-03 | [组件兼容矩阵](steps/00-03-component-compatibility-matrix.md) | Phase 0 组件、WXML/WXSS、事件、Render IR 能力 |
+| 00-04 | [Threat model 与 release gates 初版](steps/00-04-threat-model-release-gates.md) | Phase 0 安全基线、发布门槛、回滚规则 |
+| 01-01 | [wx API Bridge Contract 冻结](steps/01-01-wx-api-bridge-contract-freeze.md) | Phase 1 bridge 契约、错误语义、callback/Promise 决策 |
+| 01-02 | [Skill package 与 manifest 对齐](steps/01-02-skill-package-manifest-alignment.md) | Phase 1 manifest 校验、兼容报告 |
+| 01-03 | [`wx.modelContext` 原子接口桥接](steps/01-03-model-context-bridge.md) | Phase 1 modelContext JS bridge 与 card event |
+| 01-04 | [DID 会话与 RequestBroker 收敛](steps/01-04-did-session-request-broker.md) | Phase 1 `DidAuthSessionManager`、登录、会话、请求 |
 
 ## 共同 Definition of Done
 

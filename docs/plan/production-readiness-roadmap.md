@@ -1,8 +1,8 @@
 # anp-miniapp-dock 产品化迭代总体计划
 
-> 状态：计划文档  
-> 日期：2026-06-11  
-> 范围：仅补齐后续开发计划文档，不在本步骤开发代码。  
+> 状态：计划文档
+> 日期：2026-06-11
+> 范围：仅补齐后续开发计划文档，不在本步骤开发代码。
 > 依据：`docs/architecture/`、`docs/weichat-miniapp-mcp-protocol/weichat-miniapp-mcp.txt`、`docs/runbook/`、`docs/plan/did-wx-python-integration-plan.md`、当前 Cargo workspace 与测试现状。
 
 ## 1. 目标与边界
@@ -75,6 +75,169 @@
 | Phase 6 | 观测、性能与发布运营 | 达到线上可运维、可回滚、可持续发布 | metrics/logs/traces、性能基线、CI/CD gates、runbook | 可灰度发布并定位线上问题 |
 
 > 推荐执行顺序：Phase 0 必须先做；Phase 1、Phase 2 可并行小步推进，但 Phase 3 的安全设计应在 Phase 1/2 开始前冻结关键原则；Phase 4 依赖 Phase 1/2/3 的稳定接口；Phase 5/6 与各阶段同步补齐。
+
+### 2.3 Codex Goal 执行控制
+
+本节把 roadmap 补强为可由 Codex Goal 长跑执行的主 Plan。执行者必须把本文作为唯一规划入口；阶段设计仍以第 3 至第 12 节和 [`production-readiness/`](production-readiness/README.md) 下的阶段文档为准，具体执行状态以本节台账和小 Step 文档为准。
+
+主 Plan 路径：`anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md`
+
+Step 文档目录：`anp/anp-miniapp-dock/docs/plan/production-readiness/steps/`
+
+Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/context/40-verification.md`、`awiki-harness/context/50-task-workflow.md`
+
+执行状态：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`
+
+#### 2.3.1 Resume From Here
+
+当前恢复指针：从 Step 00-01 [`production-readiness/steps/00-01-baseline-inventory.md`](production-readiness/steps/00-01-baseline-inventory.md) 开始。
+
+恢复规则：
+
+1. 启动或恢复前，读取本文、当前第一个非 `done` 的 Step 文档、执行台账、本节执行协议、Blocked 处理、Plan 变更记录和当前 `git status --short --branch`。
+2. 从执行台账中第一个状态不是 `done` 的 Step 继续，不依赖聊天历史判断进度。
+3. 同一时间只允许一个 active Step，除非本文明确标记多个 Step 彼此独立且 parallel-safe。当前首批 Step 没有标记 parallel-safe。
+4. 如果当前 Step 状态为 `blocked`，先读取该 Step 的 Blocked 记录；只有依赖允许且风险已记录时，才能转入下一个独立 Step。
+5. 每个 Step 完成实现、验证、Review、必要修复和聚焦 commit 后，才能把状态标为 `done` 并进入下一个 Step。
+
+#### 2.3.2 首批 Step 拆分
+
+本次先把 Phase 0 和 Phase 1 的首批工作拆成可执行 Step。Phase 2 及后续阶段在进入实现前，必须按同一模板继续拆分小 Step，并通过 Plan 变更记录补充到本表。
+
+| Step | 标题 | 依赖 | 主要产出 | 小 Plan 文档 | Commit gate | 状态 |
+|---|---|---|---|---|---|---|
+| 00-01 | 当前能力盘点与基线固化 | 无 | 当前能力清单、证据表、demo-only 标注 | [production-readiness/steps/00-01-baseline-inventory.md](production-readiness/steps/00-01-baseline-inventory.md) | 必须 | pending |
+| 00-02 | wx API 兼容矩阵 | 00-01 | `docs/architecture/wx-api-compatibility-matrix.md` | [production-readiness/steps/00-02-wx-api-compatibility-matrix.md](production-readiness/steps/00-02-wx-api-compatibility-matrix.md) | 必须 | pending |
+| 00-03 | 组件兼容矩阵 | 00-01 | `docs/architecture/component-compatibility-matrix.md` | [production-readiness/steps/00-03-component-compatibility-matrix.md](production-readiness/steps/00-03-component-compatibility-matrix.md) | 必须 | pending |
+| 00-04 | Threat model 与 release gates 初版 | 00-01, 00-02, 00-03 | `docs/security/threat-model.md`、`docs/runbook/release-gates.md` | [production-readiness/steps/00-04-threat-model-release-gates.md](production-readiness/steps/00-04-threat-model-release-gates.md) | 必须 | pending |
+| 01-01 | wx API Bridge Contract 冻结 | 00-02 | bridge 契约、错误语义、callback/Promise 决策 | [production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md](production-readiness/steps/01-01-wx-api-bridge-contract-freeze.md) | 必须 | pending |
+| 01-02 | Skill package 与 manifest 对齐 | 00-02, 00-03, 01-01 | manifest 校验、兼容报告、测试 | [production-readiness/steps/01-02-skill-package-manifest-alignment.md](production-readiness/steps/01-02-skill-package-manifest-alignment.md) | 必须 | pending |
+| 01-03 | `wx.modelContext` 原子接口桥接 | 01-01, 01-02 | `getSessionId`、`expireAllCards`、NotificationType、card event | [production-readiness/steps/01-03-model-context-bridge.md](production-readiness/steps/01-03-model-context-bridge.md) | 必须 | pending |
+| 01-04 | DID 会话与 RequestBroker 收敛 | 01-01, 01-02 | `DidAuthSessionManager`、`wx.login`、`wx.checkSession`、`wx.request` 正式路径 | [production-readiness/steps/01-04-did-session-request-broker.md](production-readiness/steps/01-04-did-session-request-broker.md) | 必须 | pending |
+
+#### 2.3.3 执行台账
+
+执行者必须在 Step 开始、进入 Review、被阻塞、完成 commit 和标记 done 时更新本台账。证据字段必须指向 Step 文档中的 Review/验证记录或实际命令输出摘要，不得只写“已完成”。
+
+| Step | 状态 | 分支 | 开始时间 | 完成时间 | Commit | Review 证据 | 验证证据 | 下一步 |
+|---|---|---|---|---|---|---|---|---|
+| 00-01 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 启动当前能力盘点 |
+| 00-02 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 |
+| 00-03 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 |
+| 00-04 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-01 至 00-03 |
+| 01-01 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-02 |
+| 01-02 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 00-02、00-03、01-01 |
+| 01-03 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-01、01-02 |
+| 01-04 | pending | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 01-01、01-02 |
+
+#### 2.3.4 Codex Goal 执行协议
+
+1. 启动前先执行并记录 `git status --short --branch`，确认是否存在用户未提交改动；若有，必须保护这些改动，不得回滚。
+2. 读取顺序：本文、当前 Step 文档、相关 Phase 文档、相关深入子文档、`AGENTS.md`、必要的源文件和测试。
+3. 一个 Step 的标准状态流为：`pending` -> `in_progress` -> `review` -> `committed` -> `done`。若被阻塞，记录为 `blocked`，解决后回到 `in_progress` 或 `review`。
+4. 每个 Step 必须按对应小 Plan 执行，不得把多个 Step 的完成工作混在一个 commit 中。
+5. 每个 Step 都必须同步更新实现、测试、兼容矩阵、runbook 或开发者文档中与该 Step 直接相关的部分；如果某类文档不适用，必须在 Step 记录原因。
+6. 每个 Step 都必须运行小 Plan 中列出的验证命令；不能运行时，记录原因、影响和替代证据。
+7. 每个 Step 都必须在 commit 前进行 Review，记录发现、修复、剩余风险、新增或缺失测试、已更新或缺失文档。
+8. 只有 Review 必要问题已修复或明确记录、验证证据已记录、commit 已创建并回填台账后，才能把 Step 标为 `done`。
+9. 任何改变范围、顺序、验收标准、公开契约、数据模型、配置、验证策略或安全边界的决定，必须先更新本文的 Plan 变更记录和受影响 Step 文档。
+10. 完成全部 Step 后，执行最终全局 Review 与整体验证，不得只依赖各 Step 的局部验证。
+
+#### 2.3.5 Review 与提交门禁
+
+每个 Step 的 Review 是 commit 前门禁，不是可选收尾。Review 至少覆盖：
+
+- 正确性：实现是否满足 Step 验收标准和阶段目标；
+- 回归风险：是否破坏 coffee demo、现有 VM、组件、DID、consent/audit 路径；
+- 公开契约：`SKILL.md`、`mcp.json`、`structuredContent`、`_meta.ui.componentPath`、Render IR、CLI JSON 是否漂移；
+- 安全与隐私：token、`Authorization`、HTTP signature、private key path、手机号、地址、文件内容是否脱敏；
+- 测试覆盖：是否有 unit、integration、fixture、snapshot 或文档检查证据；
+- 文档同步：兼容矩阵、runbook、开发者文档、阶段文档是否与实现一致。
+
+提交要求：
+
+- 每个完成的 Step 创建一个 focused commit，commit message 建议格式为 `phase<N>: <step outcome>` 或 `docs: <step outcome>`。
+- commit 前记录 `git status --short`、纳入文件和不纳入文件。
+- commit 后记录 commit hash 与 `git status --short --branch`。
+- 上一步完成工作未提交前，不得开始依赖它的下一步，除非 Plan 变更记录明确说明依赖原因和风险控制。
+- 最终全局 Review 如果修改文件，需要单独 Review、验证并创建最终集成 commit。
+
+#### 2.3.6 Blocked 处理
+
+| Blocker | Step | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
+|---|---|---|---|---|---|
+| 待记录 | 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+
+处理规则：
+
+1. Blocker 必须写清楚触发命令、文件、错误输出或缺失决策，不得只写“实现困难”。
+2. 若 blocker 只影响当前 Step，且后续某个 Step 在依赖表中不依赖它，执行者可以在记录风险后转入该独立 Step；当前首批 Step 默认不并行，除非更新本文。
+3. 若 blocker 影响公开契约、安全边界、数据模型或阶段顺序，必须先更新 Plan 变更记录，再决定是否继续。
+4. 只有没有安全假设、替代方案或独立下一步时，才向用户提问。
+
+#### 2.3.7 Plan 变更控制
+
+| 日期 | 变更 | 原因 | 影响步骤 | 是否需要 Review |
+|---|---|---|---|---|
+| 2026-06-12 | 新增 Codex Goal 执行控制、执行台账和 Phase 0/Phase 1 首批 Step 文档 | 将 roadmap 补强为可恢复执行的 AWiki 长跑计划 | 00-01 至 01-04 | 是 |
+
+变更规则：
+
+- 先改 Plan，再改实现；不得先扩大实现范围再补文档。
+- 变更必须说明是否影响依赖、验收标准、验证命令、Review 范围和 commit 策略。
+- 受影响 Step 已经开始时，必须同步更新该 Step 的执行状态和变更记录。
+
+#### 2.3.8 最终全局 Review 与整体验证
+
+触发条件：首批 Step 或后续扩展 Step 全部 `done`，且每个 Step 都已有 Review 证据、验证证据和 commit hash。
+
+最终 Review 范围：
+
+- 全部变更文件、公开契约、测试、fixtures、兼容矩阵、runbook、开发者文档；
+- `wx.*` / `wx.modelContext` 行为与小程序 MCP 兼容策略；
+- ANP DID、capability token、allowlist、consent、audit、redaction 和 sandbox 安全边界；
+- 执行台账是否与 git history、验证命令和 Step 文档一致；
+- 是否存在未提交变更、未解决 Review 发现、跳过验证或文档漂移。
+
+整体验证基线：
+
+```bash
+cd anp/anp-miniapp-dock
+cargo metadata --format-version 1 --no-deps
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo test -p dock-cli --test coffee_order_flow
+```
+
+文档和计划验证：
+
+```bash
+cd anp/anp-miniapp-dock
+git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md
+```
+
+若命令因环境、依赖或时间无法运行，必须记录原因、影响、替代检查和剩余风险。最终 Review 若修改文件，必须单独记录 Review、验证和最终集成 commit。
+
+#### 2.3.9 Codex Goal 提示词
+
+下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准。
+
+```text
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。
+
+开始前先读取：
+- anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md
+- 当前第一个未 done 的 Step 文档
+- 主 Plan 的执行台账、Codex Goal 执行协议、Review 与提交门禁、Blocked 处理、Plan 变更记录
+- 当前 git status --short --branch
+
+请从第一个状态不是 done 的 Step 开始，一次只执行一个 Step。每步都要按对应小 Plan 实现、验证、Review、修复或记录 Review 发现，然后创建一个 focused commit，并回填主 Plan 执行台账和 Step 执行状态。
+
+需要改变范围、顺序、验收标准、公开契约、数据模型、安全边界或验证策略时，先更新 Plan 变更记录和受影响 Step 文档。不得绕过 ANP DID、capability token、allowlist、ConsentGate、audit、redaction 和 sandbox 边界。
+
+所有步骤完成后，执行最终全局 Review 和整体验证，记录实际命令、通过/失败/跳过数量、失败或跳过原因、剩余风险和最终工作区状态。
+```
 
 ## 3. Phase 0：基线冻结与产品化门槛
 
