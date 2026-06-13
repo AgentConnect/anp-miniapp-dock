@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 04:05:17 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 04:43:25 +0800 |
+| Commit | `7fa8aee` |
 | Review evidence | 2026-06-14 04:35:38 +0800 commit 前 Review 已记录：修复初版缺失 QuickJS VM / `wx.request` / token path metrics hook、缺失 audit span、unsupported API 专项 count、`runtime.negotiateVersion` IPC 分支类型错误和 metrics label 临时借用测试问题；确认 labels 只记录 API/component/risk/outcome/status bucket 等低基数字段，不记录 URL query、headers、body、raw arguments、token、Authorization、Signature、DID 原文或本机绝对路径。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 105]`，工作区无未提交变更；已读取主 Plan、Step 06-02 文档、Phase 6 计划、06-01 closure 证据和 Release Gates；确认 06-01 implementation commit `3fb65f0` 与 closure commit `2e899b0`；`cargo check -p dock-core`、`cargo check -p js-runtime-quickjs`、`cargo fmt --check`、`cargo test -p dock-core metrics`、`cargo test -p dock-core trace`、`cargo test -p js-runtime-quickjs quickjs_executor_records_vm_request_and_token_metrics_with_trace`、`cargo test -p dock-core`、`cargo test -p js-runtime-quickjs`、`cargo test -p dock-cli --test coffee_order_flow`、`cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings` 均通过；`git diff --check -- crates/dock-core crates/js-runtime-quickjs crates/anp-adapter crates/component-runtime crates/consent-audit docs/runbook docs/plan` 无输出；敏感串扫描仅命中测试假值、redaction marker、文档红线和既有 mock 说明，未发现真实凭据、raw token、Authorization、Signature、DID 原文、本机绝对路径或隐私 payload 泄露。 |
-| Next action | 创建 implementation commit，并回填 commit hash；commit 后再做 closure 文档提交 |
+| Next action | 进入 06-03 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：06-02
 - [x] In-memory/test recorder 有 unit tests，未来 exporter 有明确 boundary。
 - [x] Phase 6 文档和 runbook 与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -104,10 +104,9 @@ Step index：06-02
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 metrics/tracing、direct tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 105]`，纳入文件为 `crates/dock-core/src/lib.rs`、`crates/dock-core/src/observability.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/src/runtime.rs`、`crates/dock-core/tests/api_call_flow.rs`、`crates/dock-core/tests/runtime_facade.rs`、`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/lib.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-6-observability-release.md`、`docs/plan/production-readiness/steps/06-02-metrics-tracing-correlation.md`、`docs/runbook/release-gates.md`。
+- Commit 后证据：implementation commit `7fa8aee phase6: add metrics tracing correlation`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 106]`，工作区无未提交代码变更。
+- 遗留未提交变更：仅本 closure 文档更新，单独提交后进入 06-03。
 - 建议消息：`phase6: add metrics tracing correlation`
 
 ## 11. Blocked 处理
