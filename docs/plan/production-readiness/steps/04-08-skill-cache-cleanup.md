@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-08
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 21:01:51 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 21:22:02 +0800 |
+| Commit | `01a0cec` |
 | Review evidence | 2026-06-13 21:20:37 +0800 commit 前 Review 已记录：确认 sidecar metadata 写在 cache root 下而非 Skill 包目录内，不影响包 digest；dry-run/report 不输出 cache root、本机绝对路径或 package URL secret/query；delete scope 只删除匹配 package dir 与对应 sidecar；rollback pin 与 active retain 会保留；quarantined sidecar 会让后续 reload fail closed；legacy cache 无 sidecar 时只被全量 cleanup 匹配；本 Step 未新增 CLI 命令，CLI/ops cleanup surface 留给 Phase 5/6。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 76]`，工作区无未提交变更；已读取主 Plan、Step 04-08 文档、Phase 4 章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-07 closure evidence。`cargo fmt --check` 通过；`cargo test -p skill-loader cache` 7 passed；`cargo test -p skill-loader` 14 package/path tests + 11 registry/cache tests + doctests passed；`cargo test -p dock-cli cache` 通过但 filter 命中 0 tests，本 Step 未触及 CLI surface；`cargo clippy -p skill-loader --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感词扫描仅命中文档红线、测试假值、redaction 断言和既有计划文本，未发现真实 token、Authorization、signature、private key material、本机绝对路径或生产凭据进入 cleanup report。 |
-| Next action | 创建 04-08 focused commit，然后回填 commit hash 并关闭本 Step |
+| Next action | 进入 04-09 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：04-08
 - [x] cleanup 可按 publisher DID、merchant DID、Skill id、version/digest scope 执行。
 - [x] Release Gates、Threat Model 和 Phase 4 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
