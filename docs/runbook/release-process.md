@@ -2,7 +2,7 @@
 
 > 状态：Step 06-05 本地可执行发布流程。本文定义 release candidate、canary、rollback 和 cache purge 的审计规则；不表示已经接入真实生产发布平台或真实 Host rollout UI。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 06-05。
-> 相关门禁：[`release-gates.md`](release-gates.md)、[`../developer/host-adapter-guide.md`](../developer/host-adapter-guide.md)。
+> 相关门禁：[`release-gates.md`](release-gates.md)、[`operations.md`](operations.md)、[`privacy-deletion.md`](privacy-deletion.md)、[`../developer/host-adapter-guide.md`](../developer/host-adapter-guide.md)。
 
 ## 1. 适用范围
 
@@ -124,6 +124,8 @@ Release notes 不得包含 raw token、`Authorization`、`Signature`、private k
 | Audit preservation | 固定 retention/export evidence，禁止删除事故窗口 audit | 记录 retention policy、export approval 和 redaction result |
 
 当前仓库没有生产 cache purge CLI；执行真实 purge 前必须使用 Step 04-08 的 cache cleanup contract 规则：dry-run first、scope precise、保留 rollback pin 和 audit evidence。
+
+涉及用户或商家数据删除时，必须同时执行 [`privacy-deletion.md`](privacy-deletion.md) 的审批、scope dry-run、token revoke、storage delete-scope、audit evidence retention 和 cache cleanup 检查。
 
 ## 8. Cache Purge Procedure
 

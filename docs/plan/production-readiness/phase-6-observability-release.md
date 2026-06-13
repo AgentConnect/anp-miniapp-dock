@@ -192,7 +192,14 @@ Step 06-05 当前实现的本地发布流程契约：
 
 ## 6. 运维 Runbook
 
-需要覆盖：
+Step 06-06 当前实现的运维 runbook 契约：
+
+- [`../../runbook/operations.md`](../../runbook/operations.md) 定义事件流程、日常 gate、观测字段、升级路径和收尾 checklist。
+- [`../../runbook/troubleshooting.md`](../../runbook/troubleshooting.md) 按 DID 验签、token scope、allowlist、component render、sandbox、storage quota、audit unavailable、Host provider、merchant Agent、Skill signature 和 rollback/cache purge 故障域定义症状、event/metric、检查命令、处理步骤、升级/回滚条件。
+- [`../../runbook/privacy-deletion.md`](../../runbook/privacy-deletion.md) 定义 user/merchant/Skill/session scope 下 token revoke、storage delete-scope、audit redacted export/retention、Skill cache cleanup 和 release evidence retention 顺序。
+- 当前 runbook 只提供 repository-local 和 Host-agnostic 运维流程；真实 production Host secure store、encrypted storage/audit backend、deploy platform、traffic router 和 provider conformance 命令仍需 Host-specific 文档补齐。
+
+覆盖项：
 
 - DID 验签失败；
 - token scope mismatch；
@@ -205,6 +212,7 @@ Step 06-05 当前实现的本地发布流程契约：
 - merchant Agent unavailable；
 - Skill package signature mismatch；
 - rollback and cache purge。
+- privacy deletion。
 
 ## 7. 阶段完成检查
 
@@ -214,3 +222,4 @@ Step 06-05 当前实现的本地发布流程契约：
 - [x] CI gates 覆盖安全、兼容、snapshot、文档。
 - [x] canary/rollback runbook 可执行。
 - [x] release notes 包含版本、兼容变化、风险和回滚方式。
+- [x] operations/troubleshooting/privacy deletion runbook 覆盖主要故障域、scope deletion、audit evidence retention 和 Host-specific gap。

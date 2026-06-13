@@ -42,7 +42,7 @@ This local canary still has production release blockers:
 - No real deployment platform or staged traffic router is connected.
 - No production encrypted token/storage/audit/cache backend is configured.
 - No real remote registry download or production signing verifier is connected.
-- No production privacy deletion workflow has been executed yet; Step 06-06 must cover it.
+- Step 06-06 provides local operations/troubleshooting/privacy deletion runbooks, but no production Host privacy deletion job or approval workflow has been executed yet.
 - Perf numbers are local and hardware-dependent, not production SLOs.
 
 Hard stop conditions:

@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-06
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 05:35:55 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 06-05 完成后，启动最终运维 runbook |
+| Review evidence | 2026-06-14 05:43:22 +0800 commit 前 Review：修复 local canary release notes 仍写 Step 06-06 must cover privacy deletion 的文档漂移；修复 `operations.md` 中不可直接执行的 `runtime-json '<redacted-json>'` 占位命令，改为真实 `runtime.negotiateVersion` dry-run；确认 operations/troubleshooting/privacy deletion runbook 覆盖 Step 要求的 10 类故障、scope deletion、audit evidence retention、rollback/cache purge 和 Host-specific gap，且没有把本地/headless/mock/dev-only backend 写成 production-ready。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 113]`，工作区无未提交变更；已读取主 Plan、Step 06-06 文档、Phase 6 文档、Release Gates、Release Process、local demo/security runbook、Phase 4 持久化与 cache cleanup 证据、doctor CLI surface、storage/audit/cache 相关源码和 06-05 closure evidence；`git diff --check -- docs/runbook docs/plan README.md` 无输出；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/06-06-release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`；`python3 -m json.tool target/release-gates/06-06-release-notes-report.json >/tmp/06-06-release-notes-report.json` 通过；`cargo run -p dock-cli -- runtime-json examples/coffee-skill '{"apiVersion":"dock.runtime.v1","requestId":"ops-req-1","method":"runtime.negotiateVersion","params":{}}'` 输出 `dock.runtime.v1` / `ops-req-1` / `runtime.negotiateVersion` / `ok` 且 JSON 可解析；`./scripts/release-gates.sh --quick --report target/release-gates/06-06-quick-report.json` 通过 quick 文档/链接/矩阵/artifact redaction gates，6 pass / 0 fail / 4 skip，`releaseDecision = needs-review` 符合 quick 模式预期；安全抽样 `rg -n "token|Authorization|private key|secret|phone|address|file|location" docs/runbook docs/plan/production-readiness/phase-6-observability-release.md README.md` 只命中文档红线、mock/demo 命令、test fixture 说明和 redaction policy，没有真实 secret、raw token、private key material、本机私有路径或隐私原文；并行执行 JSON parse 曾先于 report 生成而失败，已顺序重跑通过，不是 release gate 失败。 |
+| Next action | 创建 06-06 focused implementation commit，然后回填 commit hash 并关闭 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,12 +66,12 @@ Step index：06-06
 
 ## 7. 验收标准
 
-- [ ] Runbook 覆盖 DID 验签失败、token scope mismatch、allowlist deny、component render failed、sandbox timeout、storage quota exceeded、audit sink unavailable、Host provider unavailable、merchant Agent unavailable、Skill package signature mismatch。
-- [ ] 每类故障包含症状、event/metric、检查命令、处理步骤、升级路径和回滚/关闭条件。
-- [ ] Privacy deletion 流程按 user/merchant/Skill/session scope 定义 storage、audit、cache 清理策略。
-- [ ] 命令示例使用 mock/redacted value，不包含真实 secret 或隐私数据。
-- [ ] README/runbook index 和 Phase 6 文档与 runbook 状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Runbook 覆盖 DID 验签失败、token scope mismatch、allowlist deny、component render failed、sandbox timeout、storage quota exceeded、audit sink unavailable、Host provider unavailable、merchant Agent unavailable、Skill package signature mismatch。
+- [x] 每类故障包含症状、event/metric、检查命令、处理步骤、升级路径和回滚/关闭条件。
+- [x] Privacy deletion 流程按 user/merchant/Skill/session scope 定义 storage、audit、cache 清理策略。
+- [x] 命令示例使用 mock/redacted value，不包含真实 secret 或隐私数据。
+- [x] README/runbook index 和 Phase 6 文档与 runbook 状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入最终全局 Review 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -92,11 +92,11 @@ Step index：06-06
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 本地 canary release notes 仍写 “Step 06-06 must cover it”，06-06 完成后会变成状态漂移；`operations.md` 初版使用 `runtime-json '<redacted-json>'` 占位命令，不能直接 dry-run。 |
+| 已修复问题 | 已修复 | release notes 改为说明 06-06 已提供本地 operations/troubleshooting/privacy deletion runbook，但真实 production Host deletion job/approval workflow 仍未执行；`operations.md` 改为真实 `runtime.negotiateVersion` JSON 示例并已 dry-run。 |
+| 剩余风险 | 已记录 | 真实 production Host secure store、encrypted storage/audit backend、deploy platform、traffic router、provider conformance、token revoke job、storage delete job、audit retention approval workflow 和 production cache purge CLI 仍是 Host-specific / 生产接入 blocker；本 Step 只交付 repository-local 和 Host-agnostic runbook。 |
+| 新增或缺失测试 | 已覆盖 | 本 Step 是 docs/runbook 交付，未新增 Rust 测试；通过 full release gate、quick docs/link gate、runtime-json dry-run、Markdown/diff check 和安全抽样验证。 |
+| 已更新或缺失文档 | 已更新 | 新增 `docs/runbook/operations.md`、`docs/runbook/troubleshooting.md`、`docs/runbook/privacy-deletion.md`；同步 `README.md`、`docs/runbook/release-gates.md`、`docs/runbook/release-process.md`、`docs/runbook/releases/2026-06-14-local-canary.md`、Phase 6 文档、本 Step 和主 Plan 台账。 |
 
 ## 10. Commit 要求
 
