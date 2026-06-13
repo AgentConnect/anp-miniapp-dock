@@ -52,7 +52,9 @@ close_session(session)
 | `dispatch_component_action(session, render_id, action)` | `RuntimeService::dispatch_component_action(RuntimeDispatchComponentActionRequest)`；`api/call` 回 Orchestrator，非 API action 返回 Host action outcome | unknown/high-risk action protocol 和 Host adapter conformance 由 04-09 补齐。 |
 | `expire_cards(session, filters)` | 返回稳定 `RuntimeExpireCardsResponse`，边界标记为 `host-managed-card-store` | 持久 card/session store 不在 04-01 实现，后续由 04-09/04-10 承接。 |
 | `get_audit_records(filters)` | 通过 `RuntimeAuditReader` 返回 `RuntimeAuditEvent`，参数和 proof summary 二次脱敏 | 持久化 retention/export 由 04-07 承接。 |
-| `close_session(session)` | 返回稳定 `RuntimeCloseSessionResponse`，边界标记为 `stateless-runtime-facade` | token/cache/session 清理由 04-05/04-10 承接。 |
+| `concurrency_policy()` | `RuntimeService::concurrency_policy()` 返回 `dock.runtime.concurrency.v1`，声明低风险并发、高风险串行、取消、timeout、retry 和幂等策略 | 04-10 冻结本地 Runtime contract；不声明分布式锁或耐久幂等存储已完成。 |
+| `cancel_operation(session, cancellationToken)` | `RuntimeService::cancel_operation(RuntimeCancelOperationRequest)` 把 cancellation token 写入 Runtime 本地取消注册表 | 只阻断后续带相同 token 的本地 dispatch；不承诺中断已经进入 executor/provider 的同步调用。 |
+| `close_session(session)` | 返回稳定 `RuntimeCloseSessionResponse`，边界标记为 `runtime-session-manager`，并关闭本地 session 后续 dispatch | token/cache/storage/audit 的持久化清理仍由 04-05 至 04-08 和后续 ops/privacy deletion 串联。 |
 
 版本策略：
 
@@ -106,11 +108,13 @@ close_session(session)
 | `runtime.validateSkill` | `RuntimeService::validate_skill()` |
 | `runtime.loadSkill` | `RuntimeService::load_skill_response()` |
 | `runtime.hostContract` | `RuntimeService::host_contract()` |
+| `runtime.concurrencyPolicy` | `RuntimeService::concurrency_policy()` |
 | `runtime.callApi` | `RuntimeService::call_api()` |
 | `runtime.renderComponent` | `RuntimeService::render_component()` |
 | `runtime.dispatchComponentAction` | `RuntimeService::dispatch_component_action()` |
 | `runtime.expireCards` | `RuntimeService::expire_cards()` |
 | `runtime.getAuditRecords` | `RuntimeService::get_audit_records()` |
+| `runtime.cancelOperation` | `RuntimeService::cancel_operation()` |
 | `runtime.closeSession` | `RuntimeService::close_session()` |
 
 安全边界：
@@ -267,14 +271,25 @@ Host 不允许：
 
 ### 3.7 并发、取消与幂等
 
-开发项：
+当前 Step 04-10 已在 `dock-core` 冻结 Runtime 本地并发、取消、retry 和幂等 contract：
 
-- session manager；
-- cancellation token；
-- per-session lock for high-risk transaction；
-- idempotency key for order/payment；
-- retry policy；
-- dynamic component cleanup。
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| policy query | `RuntimeService::concurrency_policy()` / `runtime.concurrencyPolicy` 输出 `dock.runtime.concurrency.v1`；低风险 API 可同 session 并发，高风险串行 scope 为 `session + api + idempotencyKey` | 这是本地 RuntimeService contract，不是跨进程或跨 Host 的全局锁协议。 |
+| operation metadata | `RuntimeOperationOptions` 可携带 `operationId`、`cancellationToken`、`timeoutMs`、`idempotencyKey`；`RuntimeCallRequest` 和 `RuntimeDispatchComponentActionRequest` 均可传入 | `operationId` 当前保留用于 Host 关联；不进入 executor 参数。 |
+| cancellation / timeout | `cancel_operation()` 把 token 写入 session 绑定的取消注册表；dispatch 前若 session 已关闭、token 已取消或 `timeoutMs = 0`，Runtime 在 executor/Host action 前 fail closed | 当前是 pre-dispatch/deadline check；同步 executor/provider 一旦开始执行，Runtime 不声明抢占式中断。 |
+| 高风险串行 | `RiskLevel::requires_consent()` 的 L3/L4 API 在同一 session、同一 API、同一 optional idempotency key 下只能有一个 in-flight；重复并发返回稳定 permission error | 不带 idempotency key 的旧调用仍按 `session + api + none` 串行拒绝同类并发，但不强制旧调用必须补 key。 |
+| 幂等 key | `operation.idempotencyKey` 会注入/校验为 `arguments.idempotencyKey`，进入 Orchestrator、ConsentGate 和 audit parameter summary；显式 key 的高风险成功结果可在同一 RuntimeService 内 replay，避免重复 executor 调用 | replay 是内存级、本地 session 级；session close 会清理本地 replay cache；生产耐久幂等仍需 merchant/provider contract。 |
+| retry policy | RequestBroker 保持只对 401 auth challenge / stale token 做受控认证重试；非幂等业务 5xx/4xx 默认返回给调用方，不自动重试 | 真实 merchant/provider 如需业务重试必须提供幂等 contract 和 audit/ops policy。 |
+| session close | `close_session()` 关闭本地 Runtime session，清理本地 cancellation、in-flight 高风险状态和 replay cache，后续 API/Host action dispatch fail closed | 不等同删除 token/storage/audit/cache；隐私删除仍待后续 Host/ops runbook 串联。 |
+| component cleanup | dynamic request/timer 的 expire/detach cleanup 继续由 Component VM gate 证明；04-10 复用现有 focused cleanup test 作为证据 | 不声明 production Host background scheduler 已完成。 |
+
+后续仍需保留的 release blocker：
+
+- 分布式 / 跨进程高风险 transaction lock；
+- merchant/provider 侧耐久 idempotency store；
+- 真实 Host provider 的 cancellation、timeout 和 background lifecycle；
+- request audit persistence、metrics 和 CI gate 自动化。
 
 ## 4. 测试计划
 

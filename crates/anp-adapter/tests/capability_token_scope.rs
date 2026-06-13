@@ -349,6 +349,33 @@ fn cached_bearer_401_clears_token_and_retries_with_signature() {
 }
 
 #[test]
+fn retry_policy_does_not_retry_non_idempotent_business_failure() {
+    let transport = MockTransport::new(vec![
+        TransportResponse::json(500, BTreeMap::new(), json!({"error": "try-later"})),
+        TransportResponse::json(200, BTreeMap::new(), json!({"ok": true})),
+    ]);
+    let calls = transport.calls.clone();
+    let client = client_with_transport(
+        transport,
+        SignedRequestPolicy::new(["merchant.example"]),
+        InMemoryTokenCache::new(),
+    );
+    let request = WxRequest {
+        url: "https://merchant.example/orders".to_owned(),
+        method: WxMethod::Post,
+        headers: BTreeMap::new(),
+        data: Some(json!({"orderId": "order-1"})),
+    };
+
+    let response = client
+        .request(request)
+        .expect("business response is returned without automatic retry");
+
+    assert_eq!(response.status_code, 500);
+    assert_eq!(calls.borrow().len(), 1);
+}
+
+#[test]
 fn request_broker_respects_wx_capability_profile() {
     let transport = MockTransport::new(vec![TransportResponse::json(
         200,

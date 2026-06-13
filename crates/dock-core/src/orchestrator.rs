@@ -259,6 +259,11 @@ where
         })
     }
 
+    pub fn api_risk_level(&self, api_name: &str) -> Result<RiskLevel, DockCoreError> {
+        let registered = self.registry.get(api_name)?;
+        Ok(RiskPolicy::new().infer_api_risk(&registered.declaration))
+    }
+
     pub fn handle_component_action(
         &self,
         base_context: &ApiCallContext,

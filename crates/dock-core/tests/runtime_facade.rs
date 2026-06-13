@@ -3,10 +3,10 @@ use dock_core::{
     negotiate_runtime_version, ApiCallContext, ApiExecutor, AuditEvent, AuditSink,
     ComponentRenderInput, ConsentDecision, ConsentGate, DockCoreError, ErrorCode,
     PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
-    RuntimeAuditRecordsRequest, RuntimeCallRequest, RuntimeCloseSessionRequest,
-    RuntimeComponentAction, RuntimeDispatchComponentActionRequest, RuntimeExpireCardsRequest,
-    RuntimeHost, RuntimePersistentAuditSink, RuntimeRenderComponentRequest, RuntimeService,
-    RuntimeSessionContext, RUNTIME_API_VERSION,
+    RuntimeAuditRecordsRequest, RuntimeCallRequest, RuntimeCancelOperationRequest,
+    RuntimeCloseSessionRequest, RuntimeComponentAction, RuntimeDispatchComponentActionRequest,
+    RuntimeExpireCardsRequest, RuntimeHost, RuntimeOperationOptions, RuntimePersistentAuditSink,
+    RuntimeRenderComponentRequest, RuntimeService, RuntimeSessionContext, RUNTIME_API_VERSION,
 };
 use mcp_schema::{AtomicApiResult, TextContent, ValidationReport};
 use serde_json::{json, Map};
@@ -14,6 +14,8 @@ use skill_loader::load_skill;
 use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Barrier, Mutex};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -51,6 +53,56 @@ fn runtime_service(
         audit.clone(),
         audit,
     )
+}
+
+fn threaded_runtime_service(
+    executor: BlockingExecutor,
+) -> Arc<
+    RuntimeService<
+        ThreadSafeAllowHost,
+        ThreadSafeApproveConsent,
+        BlockingExecutor,
+        ThreadSafeRenderer,
+        ThreadSafeAudit,
+        ThreadSafeAudit,
+    >,
+> {
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let audit = ThreadSafeAudit::default();
+    Arc::new(RuntimeService::load_skill(
+        skill,
+        ThreadSafeAllowHost,
+        ThreadSafeApproveConsent,
+        executor,
+        ThreadSafeRenderer,
+        audit.clone(),
+        audit,
+    ))
+}
+
+fn first_call_blocking_runtime_service(
+    executor: FirstCallBlockingExecutor,
+) -> Arc<
+    RuntimeService<
+        ThreadSafeAllowHost,
+        ThreadSafeApproveConsent,
+        FirstCallBlockingExecutor,
+        ThreadSafeRenderer,
+        ThreadSafeAudit,
+        ThreadSafeAudit,
+    >,
+> {
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let audit = ThreadSafeAudit::default();
+    Arc::new(RuntimeService::load_skill(
+        skill,
+        ThreadSafeAllowHost,
+        ThreadSafeApproveConsent,
+        executor,
+        ThreadSafeRenderer,
+        audit.clone(),
+        audit,
+    ))
 }
 
 #[test]
@@ -108,6 +160,7 @@ fn runtime_facade_call_render_action_expire_audit_and_close_are_versioned() {
             api_name: "confirmOrder".to_owned(),
             arguments: json!({"drinkId": "latte"}),
             capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
         })
         .expect("facade call succeeds");
     assert_eq!(call.version, RUNTIME_API_VERSION);
@@ -147,6 +200,7 @@ fn runtime_facade_call_render_action_expire_audit_and_close_are_versioned() {
                 arguments: json!({"drinkId": "latte"}),
             },
             capability_token: None,
+            operation: None,
         })
         .expect("component api/call routes through facade");
     assert!(action.data.handled);
@@ -185,7 +239,7 @@ fn runtime_facade_call_render_action_expire_audit_and_close_are_versioned() {
         .close_session(RuntimeCloseSessionRequest { session: session() })
         .expect("close response is stable");
     assert!(close.data.closed);
-    assert_eq!(close.data.boundary, "stateless-runtime-facade");
+    assert_eq!(close.data.boundary, "runtime-session-manager");
 }
 
 #[test]
@@ -225,6 +279,7 @@ fn runtime_persistent_audit_sink_records_and_reads_redacted_events() {
                 "deliveryAddress": "1 Private Road"
             }),
             capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
         })
         .expect("payment call succeeds with persistent audit");
 
@@ -283,6 +338,282 @@ fn runtime_persistent_audit_reader_reports_unavailable_when_backend_is_corrupt()
 }
 
 #[test]
+fn runtime_concurrency_policy_is_versioned_and_exposed() {
+    let service = runtime_service(MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("unused")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    }));
+
+    let policy = service.concurrency_policy();
+
+    assert_eq!(policy.data.policy.version, "dock.runtime.concurrency.v1");
+    assert!(policy.data.policy.low_risk_parallel_per_session);
+    assert_eq!(
+        policy
+            .data
+            .policy
+            .retry_policy
+            .non_idempotent_business_retry,
+        "disabled-by-default"
+    );
+    assert!(!policy.data.policy.idempotency.required_for_high_risk);
+}
+
+#[test]
+fn runtime_concurrency_cancel_and_close_block_before_executor_or_host_action() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("unused")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let calls = executor.calls.clone();
+    let service = runtime_service(executor);
+
+    service
+        .cancel_operation(RuntimeCancelOperationRequest {
+            session: session(),
+            cancellation_token: "cancel-payment".to_owned(),
+        })
+        .expect("cancel token registers");
+
+    let cancelled = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: Some(RuntimeOperationOptions {
+                cancellation_token: Some("cancel-payment".to_owned()),
+                ..Default::default()
+            }),
+        })
+        .expect_err("cancelled operation fails before executor");
+    assert_eq!(cancelled.error.code, "permission_denied");
+    assert_eq!(*calls.borrow(), 0);
+
+    let timed_out = service
+        .dispatch_component_action(RuntimeDispatchComponentActionRequest {
+            session: session(),
+            source_api_name: "searchDrinks".to_owned(),
+            source_arguments: json!({}),
+            action: RuntimeComponentAction::OpenDetailPage {
+                url: "pages/order/detail".to_owned(),
+            },
+            capability_token: None,
+            operation: Some(RuntimeOperationOptions {
+                timeout_ms: Some(0),
+                ..Default::default()
+            }),
+        })
+        .expect_err("timeout blocks before host action");
+    assert_eq!(timed_out.error.code, "timeout");
+
+    service
+        .close_session(RuntimeCloseSessionRequest { session: session() })
+        .expect("session closes");
+    let closed = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "searchDrinks".to_owned(),
+            arguments: json!({"query": "latte"}),
+            capability_token: None,
+            operation: None,
+        })
+        .expect_err("closed session fails closed");
+    assert_eq!(closed.error.code, "permission_denied");
+    assert_eq!(*calls.borrow(), 0);
+}
+
+#[test]
+fn runtime_idempotency_key_is_forwarded_redacted_and_replayed_without_reexecution() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: Some(Map::from_iter([(
+            "orderId".to_owned(),
+            json!("order_demo_001"),
+        )])),
+        meta: None,
+        extra: Default::default(),
+    });
+    let calls = executor.calls.clone();
+    let arguments = executor.arguments.clone();
+    let service = runtime_service(executor);
+    let request = || RuntimeCallRequest {
+        session: session(),
+        api_name: "payOrder".to_owned(),
+        arguments: json!({"orderId": "order_demo_001"}),
+        capability_token: Some("capability-secret-token".to_owned()),
+        operation: Some(RuntimeOperationOptions {
+            idempotency_key: Some("idem-order-001".to_owned()),
+            ..Default::default()
+        }),
+    };
+
+    let first = service.call_api(request()).expect("first payment succeeds");
+    let second = service
+        .call_api(request())
+        .expect("idempotent replay succeeds");
+
+    assert_eq!(first.data.result.content[0].text, "paid");
+    assert_eq!(second.data.result.content[0].text, "paid");
+    assert_eq!(*calls.borrow(), 1);
+    assert_eq!(arguments.borrow()[0]["idempotencyKey"], "idem-order-001");
+
+    let audit = service
+        .get_audit_records(RuntimeAuditRecordsRequest {
+            session_id: Some("session-runtime".to_owned()),
+            skill_id: Some("coffee".to_owned()),
+        })
+        .expect("audit available");
+    assert_eq!(audit.data.records.len(), 1);
+    assert_eq!(
+        audit.data.records[0].parameter_summary["idempotencyKey"],
+        "idem-order-001"
+    );
+    let rendered = serde_json::to_string(&audit).expect("audit serializes");
+    assert!(!rendered.contains("capability-secret-token"));
+}
+
+#[test]
+fn runtime_concurrency_rejects_high_risk_same_session_and_api() {
+    let blocker = BlockingExecutor::new();
+    let calls = blocker.calls.clone();
+    let service = threaded_runtime_service(blocker.clone());
+    let worker_service = service.clone();
+    let worker = std::thread::spawn(move || {
+        worker_service.call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: None,
+        })
+    });
+    blocker.wait_until_started();
+
+    let duplicate = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: None,
+        })
+        .expect_err("duplicate high-risk operation is rejected");
+    assert_eq!(duplicate.error.code, "permission_denied");
+
+    blocker.release();
+    worker
+        .join()
+        .expect("worker joins")
+        .expect("first high-risk call succeeds");
+    assert_eq!(*calls.lock().expect("calls lock"), 1);
+
+    let second_executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let second_calls = second_executor.calls.clone();
+    let second_service = runtime_service(second_executor);
+    second_service
+        .call_api(RuntimeCallRequest {
+            session: RuntimeSessionContext {
+                session_id: "session-runtime-2".to_owned(),
+                ..session()
+            },
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_002"}),
+            capability_token: None,
+            operation: None,
+        })
+        .expect("different session is isolated");
+    assert_eq!(*calls.lock().expect("calls lock"), 1);
+    assert_eq!(*second_calls.borrow(), 1);
+}
+
+#[test]
+fn runtime_concurrency_allows_high_risk_for_different_sessions() {
+    let blocker = FirstCallBlockingExecutor::new();
+    let calls = blocker.calls.clone();
+    let service = first_call_blocking_runtime_service(blocker.clone());
+    let worker_service = service.clone();
+    let worker = std::thread::spawn(move || {
+        worker_service.call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: None,
+        })
+    });
+    blocker.wait_until_started();
+
+    service
+        .call_api(RuntimeCallRequest {
+            session: RuntimeSessionContext {
+                session_id: "session-runtime-2".to_owned(),
+                ..session()
+            },
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_002"}),
+            capability_token: None,
+            operation: None,
+        })
+        .expect("different session can run while first high-risk call is in flight");
+
+    blocker.release();
+    worker
+        .join()
+        .expect("worker joins")
+        .expect("first high-risk call succeeds");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn runtime_concurrency_low_risk_calls_are_not_serialized_by_high_risk_policy() {
+    let blocker = FirstCallBlockingExecutor::new();
+    let calls = blocker.calls.clone();
+    let service = first_call_blocking_runtime_service(blocker.clone());
+    let worker_service = service.clone();
+    let worker = std::thread::spawn(move || {
+        worker_service.call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "searchDrinks".to_owned(),
+            arguments: json!({"query": "latte"}),
+            capability_token: None,
+            operation: None,
+        })
+    });
+    blocker.wait_until_started();
+
+    service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "searchDrinks".to_owned(),
+            arguments: json!({"query": "mocha"}),
+            capability_token: None,
+            operation: None,
+        })
+        .expect("low-risk calls are not serialized");
+
+    blocker.release();
+    worker
+        .join()
+        .expect("worker joins")
+        .expect("first low-risk call succeeds");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
 fn runtime_facade_errors_are_json_serializable_and_redacted() {
     let service = runtime_service(MockExecutor::fail(
         ErrorCode::VmFailed,
@@ -295,6 +626,7 @@ fn runtime_facade_errors_are_json_serializable_and_redacted() {
             api_name: "searchDrinks".to_owned(),
             arguments: json!({"query": "latte"}),
             capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
         })
         .expect_err("executor failure is wrapped as runtime error");
 
@@ -368,6 +700,7 @@ struct MockExecutor {
     result: AtomicApiResult,
     error: Option<(ErrorCode, String)>,
     calls: std::rc::Rc<RefCell<usize>>,
+    arguments: std::rc::Rc<RefCell<Vec<serde_json::Value>>>,
 }
 
 impl MockExecutor {
@@ -376,6 +709,7 @@ impl MockExecutor {
             result,
             error: None,
             calls: Default::default(),
+            arguments: Default::default(),
         }
     }
 
@@ -390,6 +724,7 @@ impl MockExecutor {
             },
             error: Some((code, message.to_owned())),
             calls: Default::default(),
+            arguments: Default::default(),
         }
     }
 }
@@ -397,14 +732,104 @@ impl MockExecutor {
 impl ApiExecutor for MockExecutor {
     fn execute(
         &self,
-        _context: &ApiCallContext,
+        context: &ApiCallContext,
         _component_path: Option<&str>,
     ) -> Result<AtomicApiResult, DockCoreError> {
         *self.calls.borrow_mut() += 1;
+        self.arguments.borrow_mut().push(context.arguments.clone());
         if let Some((code, message)) = &self.error {
             return Err(DockCoreError::core(*code, message.clone()));
         }
         Ok(self.result.clone())
+    }
+}
+
+#[derive(Clone)]
+struct BlockingExecutor {
+    started: Arc<Barrier>,
+    release: Arc<Barrier>,
+    calls: Arc<Mutex<usize>>,
+}
+
+impl BlockingExecutor {
+    fn new() -> Self {
+        Self {
+            started: Arc::new(Barrier::new(2)),
+            release: Arc::new(Barrier::new(2)),
+            calls: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    fn wait_until_started(&self) {
+        self.started.wait();
+    }
+
+    fn release(&self) {
+        self.release.wait();
+    }
+}
+
+impl ApiExecutor for BlockingExecutor {
+    fn execute(
+        &self,
+        _context: &ApiCallContext,
+        _component_path: Option<&str>,
+    ) -> Result<AtomicApiResult, DockCoreError> {
+        *self.calls.lock().expect("calls lock") += 1;
+        self.started.wait();
+        self.release.wait();
+        Ok(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("paid")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FirstCallBlockingExecutor {
+    started: Arc<Barrier>,
+    release: Arc<Barrier>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl FirstCallBlockingExecutor {
+    fn new() -> Self {
+        Self {
+            started: Arc::new(Barrier::new(2)),
+            release: Arc::new(Barrier::new(2)),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn wait_until_started(&self) {
+        self.started.wait();
+    }
+
+    fn release(&self) {
+        self.release.wait();
+    }
+}
+
+impl ApiExecutor for FirstCallBlockingExecutor {
+    fn execute(
+        &self,
+        _context: &ApiCallContext,
+        _component_path: Option<&str>,
+    ) -> Result<AtomicApiResult, DockCoreError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            self.started.wait();
+            self.release.wait();
+        }
+        Ok(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("ok")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        })
     }
 }
 
@@ -444,9 +869,87 @@ impl RenderRouter for MockRenderer {
     }
 }
 
+#[derive(Clone)]
+struct ThreadSafeRenderer;
+
+impl RenderRouter for ThreadSafeRenderer {
+    fn render(
+        &self,
+        _context: &ApiCallContext,
+        input: &ComponentRenderInput,
+    ) -> Result<RenderOutcome, DockCoreError> {
+        Ok(RenderOutcome {
+            renderer: "thread-safe-renderer".to_owned(),
+            component_path: Some(input.component_path.clone()),
+            payload: json!({ "apiName": input.api_name }),
+            fallback_reason: None,
+        })
+    }
+
+    fn fallback(
+        &self,
+        _context: &ApiCallContext,
+        _result: &AtomicApiResult,
+        reason: &str,
+    ) -> RenderOutcome {
+        RenderOutcome {
+            renderer: "thread-safe-fallback".to_owned(),
+            component_path: None,
+            payload: json!({}),
+            fallback_reason: Some(reason.to_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 struct MockAudit {
     events: std::rc::Rc<RefCell<Vec<AuditEvent>>>,
+}
+
+#[derive(Clone, Default)]
+struct ThreadSafeAudit {
+    events: Arc<Mutex<Vec<AuditEvent>>>,
+}
+
+impl AuditSink for ThreadSafeAudit {
+    fn record(&self, event: AuditEvent) -> Result<(), DockCoreError> {
+        self.events.lock().expect("audit lock").push(event);
+        Ok(())
+    }
+}
+
+impl RuntimeAuditReader for ThreadSafeAudit {
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, dock_core::DockCoreError> {
+        Ok(self.events.lock().expect("audit lock").clone())
+    }
+}
+
+#[derive(Clone)]
+struct ThreadSafeAllowHost;
+
+impl RuntimeHost for ThreadSafeAllowHost {
+    fn check_permission(
+        &self,
+        _context: &ApiCallContext,
+    ) -> Result<PermissionDecision, DockCoreError> {
+        Ok(PermissionDecision::Allow)
+    }
+}
+
+#[derive(Clone)]
+struct ThreadSafeApproveConsent;
+
+impl ConsentGate for ThreadSafeApproveConsent {
+    fn check_consent(
+        &self,
+        _context: &ApiCallContext,
+        _request: &ConsentRequest,
+    ) -> Result<ConsentDecision, DockCoreError> {
+        Ok(ConsentDecision::approved(
+            DEV_HEADLESS_CONSENT_PROVIDER,
+            DEV_HEADLESS_DECISION_ACTOR,
+        ))
+    }
 }
 
 struct TempDir {

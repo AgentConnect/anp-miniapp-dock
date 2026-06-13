@@ -8,7 +8,7 @@ use crate::orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
 };
 use crate::RuntimeHost;
-use consent_audit::{redact_value, AuditOutcome, AuditRecord, AuditRecordInput};
+use consent_audit::{redact_value, AuditOutcome, AuditRecord, AuditRecordInput, RiskLevel};
 use mcp_schema::{
     AtomicApiResult, ModelVisibleApiResult, TextContent, ValidationIssue, ValidationReport,
 };
@@ -16,10 +16,12 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use skill_loader::{load_skill, LoadedSkill, SkillPackageError};
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub const RUNTIME_API_VERSION: &str = "dock.runtime.v1";
 pub const RUNTIME_IPC_TRANSPORT: &str = "headless-cli-json";
@@ -340,6 +342,8 @@ pub struct RuntimeCallRequest {
     pub arguments: Value,
     #[serde(default, skip_serializing)]
     pub capability_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<RuntimeOperationOptions>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -450,6 +454,21 @@ pub struct RuntimeDispatchComponentActionRequest {
     pub action: RuntimeComponentAction,
     #[serde(default, skip_serializing)]
     pub capability_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<RuntimeOperationOptions>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeOperationOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancellation_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -546,6 +565,88 @@ pub struct RuntimeCloseSessionResponse {
     pub boundary: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConcurrencyPolicy {
+    pub version: String,
+    pub low_risk_parallel_per_session: bool,
+    pub high_risk_serial_scope: String,
+    pub cancellation_boundary: String,
+    pub timeout_boundary: String,
+    pub retry_policy: RuntimeRetryPolicy,
+    pub idempotency: RuntimeIdempotencyPolicy,
+}
+
+impl Default for RuntimeConcurrencyPolicy {
+    fn default() -> Self {
+        Self {
+            version: "dock.runtime.concurrency.v1".to_owned(),
+            low_risk_parallel_per_session: true,
+            high_risk_serial_scope: "session+api+idempotencyKey".to_owned(),
+            cancellation_boundary: "runtime-pre-dispatch".to_owned(),
+            timeout_boundary: "runtime-pre-dispatch-deadline".to_owned(),
+            retry_policy: RuntimeRetryPolicy::default(),
+            idempotency: RuntimeIdempotencyPolicy::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeRetryPolicy {
+    pub auth_challenge_retry: String,
+    pub non_idempotent_business_retry: String,
+}
+
+impl Default for RuntimeRetryPolicy {
+    fn default() -> Self {
+        Self {
+            auth_challenge_retry: "single-401-did-challenge-or-stale-token-refresh".to_owned(),
+            non_idempotent_business_retry: "disabled-by-default".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIdempotencyPolicy {
+    pub forwarded_argument: String,
+    pub required_for_high_risk: bool,
+    pub audit_summary: String,
+}
+
+impl Default for RuntimeIdempotencyPolicy {
+    fn default() -> Self {
+        Self {
+            forwarded_argument: "idempotencyKey".to_owned(),
+            required_for_high_risk: false,
+            audit_summary: "redacted-parameter-summary".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConcurrencyPolicyResponse {
+    pub policy: RuntimeConcurrencyPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCancelOperationRequest {
+    pub session: RuntimeSessionContext,
+    pub cancellation_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCancelOperationResponse {
+    pub session_id: String,
+    pub cancellation_token: String,
+    pub cancelled: bool,
+    pub boundary: String,
+}
+
 pub trait RuntimeAuditReader {
     fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError>;
 }
@@ -554,6 +655,338 @@ impl RuntimeAuditReader for () {
     fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError> {
         Ok(Vec::new())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeSessionKey {
+    user_did: Option<String>,
+    agent_did: Option<String>,
+    merchant_did: Option<String>,
+    skill_id: String,
+    session_id: String,
+}
+
+impl RuntimeSessionKey {
+    fn from_session(session: &RuntimeSessionContext) -> Self {
+        Self {
+            user_did: session.user_did.clone(),
+            agent_did: session.agent_did.clone(),
+            merchant_did: session.merchant_did.clone(),
+            skill_id: session.skill_id.clone(),
+            session_id: session.session_id.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct HighRiskOperationKey {
+    session: RuntimeSessionKey,
+    api_name: String,
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeConcurrencyState {
+    closed_sessions: BTreeSet<RuntimeSessionKey>,
+    cancelled_tokens: BTreeSet<(RuntimeSessionKey, String)>,
+    high_risk_in_flight: BTreeSet<HighRiskOperationKey>,
+    high_risk_completed: BTreeMap<HighRiskOperationKey, RuntimeCallResponse>,
+}
+
+#[derive(Debug, Default)]
+struct RuntimeConcurrencyControl {
+    state: Mutex<RuntimeConcurrencyState>,
+}
+
+impl RuntimeConcurrencyControl {
+    fn begin(
+        &self,
+        session: &RuntimeSessionContext,
+        api_name: &str,
+        arguments: &mut Value,
+        operation: Option<&RuntimeOperationOptions>,
+        risk_level: RiskLevel,
+    ) -> Result<RuntimeOperationGuard<'_>, DockCoreError> {
+        let session_key = RuntimeSessionKey::from_session(session);
+        let timeout_ms = operation.and_then(|operation| operation.timeout_ms);
+        if timeout_ms == Some(0) {
+            return Err(runtime_operation_error(
+                ErrorCode::Timeout,
+                "runtime operation timed out before dispatch",
+            ));
+        }
+        let deadline =
+            timeout_ms.map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms.max(1)));
+
+        let cancellation_token = operation
+            .and_then(|operation| operation.cancellation_token.as_deref())
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(ToOwned::to_owned);
+        let mut state = self.state.lock().map_err(|_| {
+            runtime_operation_error(
+                ErrorCode::AuditUnavailable,
+                "runtime concurrency state is unavailable",
+            )
+        })?;
+        if state.closed_sessions.contains(&session_key) {
+            return Err(runtime_operation_error(
+                ErrorCode::PermissionDenied,
+                "runtime session is closed",
+            ));
+        }
+        if let Some(token) = &cancellation_token {
+            if state
+                .cancelled_tokens
+                .contains(&(session_key.clone(), token.clone()))
+            {
+                return Err(runtime_operation_error(
+                    ErrorCode::PermissionDenied,
+                    "runtime operation was cancelled before dispatch",
+                ));
+            }
+        }
+
+        let high_risk_key = if risk_level.requires_consent() {
+            let idempotency_key = extract_or_inject_idempotency_key(arguments, operation)?;
+            let key = HighRiskOperationKey {
+                session: session_key.clone(),
+                api_name: api_name.to_owned(),
+                idempotency_key: idempotency_key.clone(),
+            };
+            if idempotency_key.is_some()
+                && state.high_risk_completed.get(&key).is_some_and(|_| true)
+            {
+                let response = state
+                    .high_risk_completed
+                    .get(&key)
+                    .cloned()
+                    .expect("checked completed response");
+                return Ok(RuntimeOperationGuard::completed(response));
+            }
+            if !state.high_risk_in_flight.insert(key.clone()) {
+                return Err(runtime_operation_error(
+                    ErrorCode::PermissionDenied,
+                    "high-risk runtime operation is already in flight",
+                ));
+            }
+            Some(key)
+        } else {
+            None
+        };
+        drop(state);
+
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            if let Some(key) = high_risk_key {
+                self.release_high_risk(&key);
+            }
+            return Err(runtime_operation_error(
+                ErrorCode::Timeout,
+                "runtime operation timed out before dispatch",
+            ));
+        }
+
+        Ok(RuntimeOperationGuard::active(self, high_risk_key, deadline))
+    }
+
+    fn cancel(
+        &self,
+        session: &RuntimeSessionContext,
+        cancellation_token: String,
+    ) -> Result<bool, DockCoreError> {
+        let token = cancellation_token.trim();
+        if token.is_empty() {
+            return Err(runtime_operation_error(
+                ErrorCode::ValidationFailed,
+                "cancellation token is required",
+            ));
+        }
+        let mut state = self.state.lock().map_err(|_| {
+            runtime_operation_error(
+                ErrorCode::AuditUnavailable,
+                "runtime concurrency state is unavailable",
+            )
+        })?;
+        Ok(state
+            .cancelled_tokens
+            .insert((RuntimeSessionKey::from_session(session), token.to_owned())))
+    }
+
+    fn close_session(&self, session: &RuntimeSessionContext) -> Result<(), DockCoreError> {
+        let session_key = RuntimeSessionKey::from_session(session);
+        let mut state = self.state.lock().map_err(|_| {
+            runtime_operation_error(
+                ErrorCode::AuditUnavailable,
+                "runtime concurrency state is unavailable",
+            )
+        })?;
+        state.closed_sessions.insert(session_key.clone());
+        state
+            .cancelled_tokens
+            .retain(|(key, _)| key != &session_key);
+        state
+            .high_risk_in_flight
+            .retain(|key| key.session != session_key);
+        state
+            .high_risk_completed
+            .retain(|key, _| key.session != session_key);
+        Ok(())
+    }
+
+    fn release_high_risk(&self, key: &HighRiskOperationKey) {
+        if let Ok(mut state) = self.state.lock() {
+            state.high_risk_in_flight.remove(key);
+        }
+    }
+
+    fn complete_high_risk(&self, key: &HighRiskOperationKey, response: RuntimeCallResponse) {
+        if let Ok(mut state) = self.state.lock() {
+            state.high_risk_in_flight.remove(key);
+            if key.idempotency_key.is_some() {
+                state.high_risk_completed.insert(key.clone(), response);
+            }
+        }
+    }
+}
+
+enum RuntimeOperationGuard<'a> {
+    Active {
+        control: &'a RuntimeConcurrencyControl,
+        high_risk_key: Option<HighRiskOperationKey>,
+        deadline: Option<Instant>,
+        completed: bool,
+    },
+    Completed(RuntimeCallResponse),
+}
+
+impl<'a> RuntimeOperationGuard<'a> {
+    fn active(
+        control: &'a RuntimeConcurrencyControl,
+        high_risk_key: Option<HighRiskOperationKey>,
+        deadline: Option<Instant>,
+    ) -> Self {
+        Self::Active {
+            control,
+            high_risk_key,
+            deadline,
+            completed: false,
+        }
+    }
+
+    fn completed(response: RuntimeCallResponse) -> Self {
+        Self::Completed(response)
+    }
+
+    fn cached_response(&self) -> Option<RuntimeCallResponse> {
+        match self {
+            Self::Completed(response) => Some(response.clone()),
+            Self::Active { .. } => None,
+        }
+    }
+
+    fn check_deadline(&self) -> Result<(), DockCoreError> {
+        match self {
+            Self::Active {
+                deadline: Some(deadline),
+                ..
+            } if Instant::now() >= *deadline => Err(runtime_operation_error(
+                ErrorCode::Timeout,
+                "runtime operation timed out before executor dispatch completed",
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    fn mark_completed(&mut self, response: &RuntimeCallResponse) {
+        if let Self::Active {
+            control,
+            high_risk_key: Some(key),
+            completed,
+            ..
+        } = self
+        {
+            control.complete_high_risk(key, response.clone());
+            *completed = true;
+        }
+    }
+}
+
+impl Drop for RuntimeOperationGuard<'_> {
+    fn drop(&mut self) {
+        if let Self::Active {
+            control,
+            high_risk_key: Some(key),
+            completed,
+            ..
+        } = self
+        {
+            if !*completed {
+                control.release_high_risk(key);
+            }
+        }
+    }
+}
+
+fn extract_or_inject_idempotency_key(
+    arguments: &mut Value,
+    operation: Option<&RuntimeOperationOptions>,
+) -> Result<Option<String>, DockCoreError> {
+    let operation_key = operation
+        .and_then(|operation| operation.idempotency_key.as_deref())
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(ToOwned::to_owned);
+    let argument_key = arguments
+        .get("idempotencyKey")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(ToOwned::to_owned);
+
+    match (operation_key, argument_key) {
+        (Some(operation_key), Some(argument_key)) if operation_key != argument_key => {
+            Err(runtime_operation_error(
+                ErrorCode::ValidationFailed,
+                "idempotencyKey in operation metadata does not match arguments",
+            ))
+        }
+        (Some(key), _) => {
+            inject_idempotency_key(arguments, &key)?;
+            Ok(Some(key))
+        }
+        (None, Some(key)) => Ok(Some(key)),
+        (None, None) => Ok(None),
+    }
+}
+
+fn inject_idempotency_key(
+    arguments: &mut Value,
+    idempotency_key: &str,
+) -> Result<(), DockCoreError> {
+    match arguments {
+        Value::Object(map) => {
+            map.entry("idempotencyKey".to_owned())
+                .or_insert_with(|| Value::String(idempotency_key.to_owned()));
+            Ok(())
+        }
+        Value::Null => {
+            let mut map = Map::new();
+            map.insert(
+                "idempotencyKey".to_owned(),
+                Value::String(idempotency_key.to_owned()),
+            );
+            *arguments = Value::Object(map);
+            Ok(())
+        }
+        _ => Err(runtime_operation_error(
+            ErrorCode::ValidationFailed,
+            "idempotencyKey can only be injected into object arguments",
+        )),
+    }
+}
+
+fn runtime_operation_error(code: ErrorCode, message: impl Into<String>) -> DockCoreError {
+    DockCoreError::core(code, message)
 }
 
 #[derive(Debug, Clone)]
@@ -718,6 +1151,7 @@ pub fn load_skill_path(skill_ref: impl AsRef<Path>) -> RuntimeResult<RuntimeLoad
 pub struct RuntimeService<H, C, E, R, A, Q = ()> {
     orchestrator: Orchestrator<H, C, E, R, A>,
     audit_reader: Q,
+    concurrency: RuntimeConcurrencyControl,
 }
 
 impl<H, C, E, R, A, Q> RuntimeService<H, C, E, R, A, Q>
@@ -741,6 +1175,7 @@ where
         Self {
             orchestrator: Orchestrator::load_skill(skill, host, consent, executor, renderer, audit),
             audit_reader,
+            concurrency: RuntimeConcurrencyControl::default(),
         }
     }
 
@@ -748,6 +1183,7 @@ where
         Self {
             orchestrator,
             audit_reader,
+            concurrency: RuntimeConcurrencyControl::default(),
         }
     }
 
@@ -775,16 +1211,63 @@ where
 
     pub fn call_api(&self, request: RuntimeCallRequest) -> RuntimeResult<RuntimeCallResponse> {
         let api_name = request.api_name.clone();
-        self.orchestrator
-            .call_api(request.session.to_api_context(
-                request.api_name,
-                request.arguments,
-                request.capability_token,
-            ))
-            .map(|outcome| {
-                RuntimeResponse::ok(RuntimeCallResponse::from_outcome(api_name, outcome))
-            })
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())
+        self.call_api_with_operation(
+            request.session,
+            request.api_name,
+            request.arguments,
+            request.capability_token,
+            request.operation,
+        )
+        .map(|mut response| {
+            response.data.api_name = api_name;
+            response
+        })
+    }
+
+    pub fn concurrency_policy(&self) -> RuntimeResponse<RuntimeConcurrencyPolicyResponse> {
+        RuntimeResponse::ok(RuntimeConcurrencyPolicyResponse {
+            policy: RuntimeConcurrencyPolicy::default(),
+        })
+    }
+
+    fn call_api_with_operation(
+        &self,
+        session: RuntimeSessionContext,
+        api_name: String,
+        mut arguments: Value,
+        capability_token: Option<String>,
+        operation: Option<RuntimeOperationOptions>,
+    ) -> RuntimeResult<RuntimeCallResponse> {
+        let risk_level = self
+            .orchestrator
+            .api_risk_level(&api_name)
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        let mut guard = self
+            .concurrency
+            .begin(
+                &session,
+                &api_name,
+                &mut arguments,
+                operation.as_ref(),
+                risk_level,
+            )
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        if let Some(response) = guard.cached_response() {
+            return Ok(RuntimeResponse::ok(response));
+        }
+        guard
+            .check_deadline()
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        let outcome = self
+            .orchestrator
+            .call_api(session.to_api_context(api_name.clone(), arguments, capability_token))
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        guard
+            .check_deadline()
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        let response = RuntimeCallResponse::from_outcome(api_name, outcome);
+        guard.mark_completed(&response);
+        Ok(RuntimeResponse::ok(response))
     }
 
     pub fn render_component(
@@ -821,26 +1304,26 @@ where
         );
         match request.action {
             RuntimeComponentAction::ApiCall { name, arguments } => {
-                let call_api_name = name.clone();
-                self.orchestrator
-                    .handle_component_action(
-                        &base_context,
-                        ComponentAction::ApiCall { name, arguments },
-                    )
-                    .map(|outcome| {
-                        RuntimeResponse::ok(RuntimeDispatchComponentActionResponse {
-                            handled: outcome.is_some(),
-                            call: outcome.map(|outcome| {
-                                RuntimeCallResponse::from_outcome(call_api_name, outcome)
-                            }),
-                            host_action: None,
-                            boundary: "runtime-orchestrator".to_owned(),
-                        })
-                    })
-                    .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())
+                let call = self.call_api_with_operation(
+                    request.session,
+                    name,
+                    arguments,
+                    base_context.capability_token,
+                    request.operation,
+                )?;
+                Ok(RuntimeResponse::ok(
+                    RuntimeDispatchComponentActionResponse {
+                        handled: true,
+                        call: Some(call.data),
+                        host_action: None,
+                        boundary: "runtime-orchestrator".to_owned(),
+                    },
+                ))
             }
             RuntimeComponentAction::SendFollowUpMessage { content } => self.dispatch_host_action(
                 &base_context,
+                &request.session,
+                request.operation,
                 HostActionRequest::send_follow_up_message(request.source_api_name, &content),
             ),
             RuntimeComponentAction::OpenDetailPage { url } => {
@@ -848,6 +1331,8 @@ where
                     .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
                 self.dispatch_host_action(
                     &base_context,
+                    &request.session,
+                    request.operation,
                     HostActionRequest::open_detail_page(request.source_api_name, canonical_url),
                 )
             }
@@ -856,6 +1341,8 @@ where
                 match_policy,
             } => self.dispatch_host_action(
                 &base_context,
+                &request.session,
+                request.operation,
                 HostActionRequest::expire_previous_cards(
                     request.source_api_name,
                     component_paths,
@@ -868,13 +1355,32 @@ where
     fn dispatch_host_action(
         &self,
         context: &ApiCallContext,
+        session: &RuntimeSessionContext,
+        operation: Option<RuntimeOperationOptions>,
         request: HostActionRequest,
     ) -> RuntimeResult<RuntimeDispatchComponentActionResponse> {
+        let mut arguments = context.arguments.clone();
+        let guard = self
+            .concurrency
+            .begin(
+                session,
+                &context.api_name,
+                &mut arguments,
+                operation.as_ref(),
+                RiskLevel::L2,
+            )
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        guard
+            .check_deadline()
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
         let outcome = self
             .orchestrator
             .handle_host_action(context, request)
             .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?
             .redacted();
+        guard
+            .check_deadline()
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
         let handled = outcome.status == HostActionStatus::Accepted;
         Ok(RuntimeResponse::ok(
             RuntimeDispatchComponentActionResponse {
@@ -921,14 +1427,33 @@ where
         Ok(RuntimeResponse::ok(RuntimeAuditRecordsResponse { records }))
     }
 
+    pub fn cancel_operation(
+        &self,
+        request: RuntimeCancelOperationRequest,
+    ) -> RuntimeResult<RuntimeCancelOperationResponse> {
+        let cancelled = self
+            .concurrency
+            .cancel(&request.session, request.cancellation_token.clone())
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        Ok(RuntimeResponse::ok(RuntimeCancelOperationResponse {
+            session_id: request.session.session_id,
+            cancellation_token: request.cancellation_token,
+            cancelled,
+            boundary: "runtime-cancellation-registry".to_owned(),
+        }))
+    }
+
     pub fn close_session(
         &self,
         request: RuntimeCloseSessionRequest,
     ) -> RuntimeResult<RuntimeCloseSessionResponse> {
+        self.concurrency
+            .close_session(&request.session)
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
         Ok(RuntimeResponse::ok(RuntimeCloseSessionResponse {
             session_id: request.session.session_id,
             closed: true,
-            boundary: "stateless-runtime-facade".to_owned(),
+            boundary: "runtime-session-manager".to_owned(),
         }))
     }
 
@@ -970,6 +1495,9 @@ where
             "runtime.hostContract" => {
                 RuntimeIpcResponse::ok(request_id, method, self.host_contract())
             }
+            "runtime.concurrencyPolicy" => {
+                RuntimeIpcResponse::ok(request_id, method, self.concurrency_policy())
+            }
             "runtime.callApi" => runtime_ipc_response(
                 request_id,
                 method,
@@ -995,6 +1523,11 @@ where
                 request_id,
                 method,
                 parse_ipc_params(&request.params).and_then(|params| self.get_audit_records(params)),
+            ),
+            "runtime.cancelOperation" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.cancel_operation(params)),
             ),
             "runtime.closeSession" => runtime_ipc_response(
                 request_id,

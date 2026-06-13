@@ -136,6 +136,7 @@ fn api_call_action_routes_to_orchestrator_not_host_adapter() {
                 arguments: json!({"drinkId": "latte"}),
             },
             capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
         })
         .expect("api/call routes through runtime");
 
@@ -179,6 +180,7 @@ fn high_risk_component_api_call_still_requires_consent_and_audit_before_executor
                 }),
             },
             capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
         })
         .expect("approved high-risk action routes through runtime");
 
@@ -220,6 +222,7 @@ fn host_action_accepts_safe_detail_page_and_redacts_follow_up_payload() {
                 url: "pages/order/detail?orderId=order_demo_001".to_owned(),
             },
             capability_token: None,
+            operation: None,
         })
         .expect("safe detail page action is accepted");
     assert!(detail.data.handled);
@@ -242,6 +245,7 @@ fn host_action_accepts_safe_detail_page_and_redacts_follow_up_payload() {
                 )],
             },
             capability_token: None,
+            operation: None,
         })
         .expect("follow-up action is accepted by headless boundary");
     assert!(follow_up.data.handled);
@@ -299,6 +303,7 @@ fn unsupported_custom_host_action_fails_closed_without_executor_or_host_side_eff
                 match_policy: Some("session".to_owned()),
             },
             capability_token: None,
+            operation: None,
         })
         .expect("unsupported action returns stable outcome");
 
@@ -334,6 +339,7 @@ fn runtime_canonicalizes_detail_target_and_redacts_custom_host_outcome() {
                 url: "pages/order/detail?orderId=order_demo_001#ignored".to_owned(),
             },
             capability_token: None,
+            operation: None,
         })
         .expect("safe detail page routes through runtime");
 

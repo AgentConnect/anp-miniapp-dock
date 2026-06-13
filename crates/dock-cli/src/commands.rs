@@ -1007,6 +1007,7 @@ impl RuntimeHarness {
                 api_name: api_name.into(),
                 arguments,
                 capability_token: None,
+                operation: None,
             })
             .map_err(CliError::Runtime)?;
         Ok(response.data.into_call_outcome())
