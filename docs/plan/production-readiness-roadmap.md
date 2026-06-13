@@ -90,7 +90,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.1 Resume From Here
 
-当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 05-01 [`production-readiness/steps/05-01-cli-validate-compatibility-report.md`](production-readiness/steps/05-01-cli-validate-compatibility-report.md)，状态为 `pending`。当前 Codex Goal 明确限定只执行 Phase 4，因此 Step 04-11 完成后停止，不进入 05-01。
+当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 05-01 [`production-readiness/steps/05-01-cli-validate-compatibility-report.md`](production-readiness/steps/05-01-cli-validate-compatibility-report.md)，状态为 `pending`。当前 Codex Goal 明确限定先完整执行 Phase 5，再执行 Phase 6；Phase 5 完成后必须经过 Step 05-08 final Review gate 才能进入 06-01，Phase 6 完成后必须经过 Step 06-07 final Review gate 才能结束。
 
 恢复规则：
 
@@ -150,12 +150,14 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 05-05 | CLI doctor 环境诊断 | 03-04, 04-04, 04-05, 04-06, 04-07, 05-01 | toolchain/DID/resolver/allowlist/storage/audit/provider diagnostics | [production-readiness/steps/05-05-cli-doctor-environment.md](production-readiness/steps/05-05-cli-doctor-environment.md) | 必须 | pending |
 | 05-06 | 示例 Skill 与兼容测试集 | 02-06, 05-01, 05-03 | address/media/dynamic/location 示例、README、expected JSON、snapshots | [production-readiness/steps/05-06-example-skills-compatibility-fixtures.md](production-readiness/steps/05-06-example-skills-compatibility-fixtures.md) | 必须 | pending |
 | 05-07 | 开发者文档与迁移指南 | 05-01, 05-02, 05-03, 05-04, 05-05, 05-06 | import/API/component/security/Host adapter developer docs | [production-readiness/steps/05-07-developer-docs-migration-guides.md](production-readiness/steps/05-07-developer-docs-migration-guides.md) | 必须 | pending |
-| 06-01 | 结构化观测事件与脱敏日志 | 04-01, 04-04, 05-07 | structured events、traceId/sessionId、redaction | [production-readiness/steps/06-01-structured-observability-events.md](production-readiness/steps/06-01-structured-observability-events.md) | 必须 | pending |
+| 05-08 | Phase 5 最终 Review 与整体验证 | 05-01, 05-02, 05-03, 05-04, 05-05, 05-06, 05-07 | Phase 5 全局 Review 记录、整体验证证据、Phase 6 启动 gate | [production-readiness/steps/05-08-phase5-final-review-verification.md](production-readiness/steps/05-08-phase5-final-review-verification.md) | 必须 | pending |
+| 06-01 | 结构化观测事件与脱敏日志 | 04-01, 04-04, 05-08 | structured events、traceId/sessionId、redaction | [production-readiness/steps/06-01-structured-observability-events.md](production-readiness/steps/06-01-structured-observability-events.md) | 必须 | pending |
 | 06-02 | Metrics / Tracing 与请求链路关联 | 04-02, 06-01 | metrics registry、trace propagation、low-cardinality labels | [production-readiness/steps/06-02-metrics-tracing-correlation.md](production-readiness/steps/06-02-metrics-tracing-correlation.md) | 必须 | pending |
 | 06-03 | 性能基线与 Stress Tests | 04-10, 06-02 | benchmarks、stress tests、baseline artifact | [production-readiness/steps/06-03-performance-baselines-stress.md](production-readiness/steps/06-03-performance-baselines-stress.md) | 必须 | pending |
 | 06-04 | CI/CD Release Gates 自动化 | 02-06, 03-06, 05-03, 06-03 | gate runner、CI workflow、release report、docs link/redaction/snapshot gates | [production-readiness/steps/06-04-ci-cd-release-gates-automation.md](production-readiness/steps/06-04-ci-cd-release-gates-automation.md) | 必须 | pending |
 | 06-05 | Canary 发布、版本化与回滚策略 | 04-03, 04-09, 06-02, 06-03, 06-04 | release notes、canary stages、rollback/cache purge | [production-readiness/steps/06-05-canary-release-rollback.md](production-readiness/steps/06-05-canary-release-rollback.md) | 必须 | pending |
 | 06-06 | 运维 Runbook 与隐私删除流程 | 04-04, 04-06, 04-07, 04-08, 05-05, 06-01, 06-02, 06-04, 06-05 | operations/troubleshooting/privacy deletion runbooks | [production-readiness/steps/06-06-operations-runbook-privacy-deletion.md](production-readiness/steps/06-06-operations-runbook-privacy-deletion.md) | 必须 | pending |
+| 06-07 | Phase 6 最终 Review 与整体验证 | 06-01, 06-02, 06-03, 06-04, 06-05, 06-06 | Phase 6 全局 Review 记录、整体验证证据、当前 Goal closure | [production-readiness/steps/06-07-phase6-final-review-verification.md](production-readiness/steps/06-07-phase6-final-review-verification.md) | 必须 | pending |
 
 独立跳转说明：Step 01-07 只依赖 Step 01-01，和 Step 01-06 storage 工作没有实现依赖。若 Step 01-06 被标记为 `blocked`，执行者可以在记录 blocker、确认工作区无未提交完成工作后，按 Blocked 规则串行转入 Step 01-07；这不是并行执行授权。
 
@@ -209,12 +211,14 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 05-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-04 完成 |
 | 05-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-05 完成 |
 | 05-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-06 完成 |
-| 06-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-07 完成 |
+| 05-08 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-07 完成 |
+| 06-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-08 完成 |
 | 06-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-01 完成 |
 | 06-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-02 完成 |
 | 06-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-03 完成 |
 | 06-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-04 完成 |
 | 06-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-05 完成 |
+| 06-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 06-06 完成 |
 
 #### 2.3.4 Codex Goal 执行协议
 
@@ -272,6 +276,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 2026-06-13 | 同步 Step 拆分表状态、恢复指针和 02-07 closure evidence | 修复 Step 拆分表与执行台账不一致、final Review 关闭提交表述滞后、以及后续 Goal 仍显示从 01-05 开始的问题 | 01-05 至 02-07、03-01 | 是 |
 | 2026-06-13 | 新增 Phase 3 final Review gate | 按当前 Codex Goal 要求，Step 03-06 完成后必须执行可追踪的 Phase 3 最终 Review 与整体验证，不能直接进入 04-01 | 03-06、03-07、04-01 | 是 |
 | 2026-06-13 | 新增 Phase 4 final Review gate | 按当前 Codex Goal 要求，Step 04-10 完成后必须执行可追踪的 Phase 4 最终 Review 与整体验证，不能直接进入 05-01 | 04-10、04-11、05-01 | 是 |
+| 2026-06-13 | 新增 Phase 5 和 Phase 6 final Review gate | 按当前 Codex Goal 要求，Phase 5 完成后必须先执行可追踪的阶段 Review 才能进入 Phase 6；Phase 6 完成后必须执行可追踪的最终 Review 与整体验证才能结束当前 Goal | 05-07、05-08、06-01、06-06、06-07 | 是 |
 
 变更规则：
 
