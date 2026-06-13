@@ -142,7 +142,8 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 04-08 | Skill Cache cleanup 与版本清理 | 04-03, 04-04 | digest cache cleanup、eviction、privacy/delete scope hooks | [production-readiness/steps/04-08-skill-cache-cleanup.md](production-readiness/steps/04-08-skill-cache-cleanup.md) | 必须 | pending |
 | 04-09 | Host Adapter Contract 与 Action Protocol | 01-08, 02-06, 03-05, 04-01 | Host renderer/provider/action conformance、headless adapter | [production-readiness/steps/04-09-host-adapter-contract-action-protocol.md](production-readiness/steps/04-09-host-adapter-contract-action-protocol.md) | 必须 | pending |
 | 04-10 | 并发、取消、重试与幂等策略 | 02-05, 03-03, 03-05, 04-01, 04-05, 04-06, 04-07, 04-09 | session manager、cancellation、retry policy、idempotency key | [production-readiness/steps/04-10-concurrency-cancellation-idempotency.md](production-readiness/steps/04-10-concurrency-cancellation-idempotency.md) | 必须 | pending |
-| 05-01 | CLI validate 兼容报告增强 | 01-05, 02-06, 03-06, 04-01 | JSON compatibility report、releaseBlockers、修复建议 | [production-readiness/steps/05-01-cli-validate-compatibility-report.md](production-readiness/steps/05-01-cli-validate-compatibility-report.md) | 必须 | pending |
+| 04-11 | Phase 4 最终 Review 与整体验证 | 04-01, 04-02, 04-03, 04-04, 04-05, 04-06, 04-07, 04-08, 04-09, 04-10 | Phase 4 全局 Review 记录、整体验证证据、Phase 5 启动 gate | [production-readiness/steps/04-11-phase4-final-review-verification.md](production-readiness/steps/04-11-phase4-final-review-verification.md) | 必须 | pending |
+| 05-01 | CLI validate 兼容报告增强 | 01-05, 02-06, 03-06, 04-01, 04-11 | JSON compatibility report、releaseBlockers、修复建议 | [production-readiness/steps/05-01-cli-validate-compatibility-report.md](production-readiness/steps/05-01-cli-validate-compatibility-report.md) | 必须 | pending |
 | 05-02 | CLI inspect Skill package | 05-01 | package 文件、API/registration 对照、组件/权限/risk/wx usage | [production-readiness/steps/05-02-cli-inspect-skill-package.md](production-readiness/steps/05-02-cli-inspect-skill-package.md) | 必须 | pending |
 | 05-03 | CLI test-skill 与 Fixture Runner | 02-06, 04-01, 05-01 | fixture runner、snapshot compare、action/audit report | [production-readiness/steps/05-03-cli-test-skill-fixture-runner.md](production-readiness/steps/05-03-cli-test-skill-fixture-runner.md) | 必须 | pending |
 | 05-04 | CLI import-wechat-mcp | 05-01, 05-02 | dry-run/safe copy、兼容报告、ANP `_meta` patch 建议 | [production-readiness/steps/05-04-cli-import-wechat-mcp.md](production-readiness/steps/05-04-cli-import-wechat-mcp.md) | 必须 | pending |
@@ -200,7 +201,8 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 04-08 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-07 完成 |
 | 04-09 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-08 完成 |
 | 04-10 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-09 完成 |
-| 05-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-10 完成 |
+| 04-11 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-10 完成 |
+| 05-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-11 完成 |
 | 05-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-01 完成 |
 | 05-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-02 完成 |
 | 05-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-03 完成 |
@@ -269,6 +271,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 2026-06-12 | 修复计划 Review 发现：新增 02-07 final Review gate、前置 dynamic sandbox gate、拆分 Phase 4 持久化、标注 01-07 blocked 跳转 | 让 Codex Goal 恢复执行时不会跳过批次最终 Review，避免动态组件先于安全 gate 扩权，保持每个 Step 一个 focused commit | 01-07、02-05、02-06、02-07、03-01、04-04 至 04-10、05-05、06-01、06-03、06-05、06-06 | 是 |
 | 2026-06-13 | 同步 Step 拆分表状态、恢复指针和 02-07 closure evidence | 修复 Step 拆分表与执行台账不一致、final Review 关闭提交表述滞后、以及后续 Goal 仍显示从 01-05 开始的问题 | 01-05 至 02-07、03-01 | 是 |
 | 2026-06-13 | 新增 Phase 3 final Review gate | 按当前 Codex Goal 要求，Step 03-06 完成后必须执行可追踪的 Phase 3 最终 Review 与整体验证，不能直接进入 04-01 | 03-06、03-07、04-01 | 是 |
+| 2026-06-13 | 新增 Phase 4 final Review gate | 按当前 Codex Goal 要求，Step 04-10 完成后必须执行可追踪的 Phase 4 最终 Review 与整体验证，不能直接进入 05-01 | 04-10、04-11、05-01 | 是 |
 
 变更规则：
 
@@ -925,6 +928,7 @@ Phase 4 的目标是把 CLI/demo-server 形态升级为可被真实宿主集成�
 - 一个真实 Host 可以通过稳定协议调用容器加载 Skill、执行 API、渲染 Render IR、处理 action；
 - 容器重启后 session/storage/audit 能按策略恢复；
 - 多用户、多商家、多 Skill session 隔离通过测试。
+- Step 04-11 完成 Phase 4 最终 Review 与整体验证后，才能作为 Phase 5 启动 gate。
 
 ### 7.2 细分小阶段与实施方案
 
