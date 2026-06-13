@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-05
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 02:43:16 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 02:58:25 +0800 |
+| Commit | `9d19744` |
 | Review evidence | 2026-06-14 02:57:06 +0800 commit 前 Review 已记录：修复 `doctor` 在仓库子目录运行时 toolchain/sandbox gate 使用相对路径可能误报的问题；确认 `dock.doctor-report.v1` 覆盖 toolchain/workspace/runtime config/Skill/DID/signing credential permission/resolver/allowlist/storage/audit/Host provider/sandbox/server health，默认 warning/skip 不被误标 production-ready，`--ci` 只在 fail 时返回非零且先输出 JSON。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 94]`；已读取主 Plan、Step 05-05 文档、Phase 5 文档、Release Gates、local demo runbook、README、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；`cargo fmt --check` 通过；`cargo test -p dock-cli doctor` 4 passed；`cargo run -p dock-cli -- doctor` 输出 `dock.doctor-report.v1`、`status = warning`、`commandStatus = ok`、summary 为 5 pass / 7 warn / 1 skip / 0 fail；`python3 -m json.tool /tmp/dock-doctor.json` 通过；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-cli crates/anp-adapter crates/dock-core docs/runbook docs/plan README.md` 无输出；doctor JSON 敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、Bearer、raw token、private key material、PEM header 或 secret。 |
-| Next action | 创建 05-05 focused implementation commit |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 94]`；已读取主 Plan、Step 05-05 文档、Phase 5 文档、Release Gates、local demo runbook、README、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；`cargo fmt --check` 通过；`cargo test -p dock-cli doctor` 4 passed；`cargo run -p dock-cli -- doctor` 输出 `dock.doctor-report.v1`、`status = warning`、`commandStatus = ok`、summary 为 5 pass / 7 warn / 1 skip / 0 fail；`python3 -m json.tool /tmp/dock-doctor.json` 通过；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-cli crates/anp-adapter crates/dock-core docs/runbook docs/plan README.md` 无输出；doctor JSON 敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、Bearer、raw token、private key material、PEM header 或 secret；implementation commit 后 `git status --short --branch` = `## main...origin/main [ahead 95]`。 |
+| Next action | 进入 05-06 示例 Skill 与兼容测试集 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -102,9 +102,9 @@ Step index：05-05
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 doctor command、direct tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 94]`，纳入文件只包含 05-05 doctor 代码、直接测试和相关文档。
+- 纳入文件：`crates/dock-cli/src/commands.rs`、`README.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-05-cli-doctor-environment.md`。
+- Commit 后证据：implementation commit `9d19744 phase5: add doctor diagnostics`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 95]`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase5: add doctor diagnostics`
 
