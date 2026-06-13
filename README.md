@@ -43,6 +43,7 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - `examples/coffee-skill`: mock MiniApp MCP coffee Skill fixture.
 - `examples/fixtures`: mock-only compatibility fixtures for address-form, media-review, dynamic-status, and location-map-preview, each with README, expected `test-skill` JSON summary, and Render IR snapshot evidence.
 - `testdata/render-ir`: golden Render IR snapshots for fixture regression tests.
+- `testdata/perf`: local performance/stress smoke baseline JSON artifacts.
 - `examples/coffee-fastapi-server`: Python/FastAPI localhost coffee service used to simulate a remote HTTP merchant.
 - `mac-app/AnpMiniappDockMac`: SwiftUI/Xcode chatbot host that recognizes user intent, calls the local MiniApp container, and renders Skill components.
 
@@ -63,6 +64,7 @@ Focused commands:
 cargo test -p dock-cli --test coffee_order_flow
 cargo test -p component-runtime snapshot
 cargo test -p dock-cli fixture
+cargo test -p dock-cli perf
 cargo test -p demo-server
 cargo test -p component-runtime component_vm
 ```
@@ -88,12 +90,15 @@ cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
 cargo run -p dock-cli -- test-skill examples/fixtures/location-map-preview
 cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dry-run
 cargo run -p dock-cli -- doctor
+cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1
 cargo run -p dock-cli -- call-api examples/coffee-skill searchDrinks '{}'
 cargo run -p dock-cli -- preview-component examples/coffee-skill components/drink-list/index '{"apiName":"searchDrinks","structuredContent":{"drinks":[{"id":"latte","name":"Latte","price":18}]}}'
 cargo run -p dock-cli -- preview-card '{"content":[{"type":"text","text":"paid"}],"structuredContent":{"orderId":"order_demo_001","status":"paid"}}'
 ```
 
 `doctor` emits `dock.doctor-report.v1` and checks the local toolchain, workspace, runtime config contract, Skill package, DID identity, signing credential file permissions, resolver, allowlist, storage/audit backend profile, Host providers, sandbox gate surface, and optional remote server health. Without `--server`, server health is `skip`, not `pass`; with `--ci`, failing checks produce `commandStatus: "failed"` after the JSON report is written. Local default config and headless/demo backends remain warning/skip evidence, not production-ready evidence.
+
+`perf` emits `dock.perf-baseline-report.v1` and records local, hardware-dependent smoke evidence for Skill load, API VM calls, component render, Render IR size, token lookup, storage read/write, process RSS memory sample, concurrent sessions, multi-Skill, multi-component render, dynamic request/timer, and resource-limit fail-closed behavior. The sample artifact in `testdata/perf/coffee-smoke-baseline.json` is release evidence and schema documentation, not a production SLO.
 
 To run the coffee flow against the Python/FastAPI localhost service:
 

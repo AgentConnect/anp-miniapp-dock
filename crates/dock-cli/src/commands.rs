@@ -1,8 +1,9 @@
 use anp::authentication::AuthMode;
 use anp_adapter::{
-    sign_challenge_proof, ChallengeLoginRequest, ChallengeLoginResponse, ChallengeProofError,
-    ChallengeProofPayload, DidChallenge as AdapterDidChallenge, DidCredentialConfig,
-    DidCredentialError, FileDidCredentialProvider, IdentitySession,
+    sign_challenge_proof, CapabilityToken, CapabilityTokenCache, CapabilityTokenScope,
+    ChallengeLoginRequest, ChallengeLoginResponse, ChallengeProofError, ChallengeProofPayload,
+    DidChallenge as AdapterDidChallenge, DidCredentialConfig, DidCredentialError,
+    FileDidCredentialProvider, IdentitySession, InMemoryTokenCache,
 };
 use card_spec::{fallback_from_result, FallbackReason};
 use clap::{Parser, Subcommand};
@@ -17,7 +18,7 @@ use dock_core::{
     RuntimeCallRequest, RuntimeConfig, RuntimeErrorResponse, RuntimeHost, RuntimeIpcRequest,
     RuntimeIpcResponse, RuntimeService, RuntimeSessionContext,
 };
-use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
+use js_runtime_quickjs::{ApiCall, ApiVm, ApiVmConfig, ApiVmError, HostDidAuthConfig};
 use mcp_schema::{
     ApiDeclaration, AtomicApiResult, ComponentDeclaration, ValidationIssue,
     ValidationIssueCategory, ValidationReport,
@@ -32,9 +33,12 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use wx_compat::{CapabilityProfile, RequestBroker, WxRequest, WxRequestError, WxResponse};
+use wx_compat::{
+    CapabilityProfile, InMemoryScopedStorage, RequestBroker, ScopedStorage, StorageError,
+    StorageScope, WxRequest, WxRequestError, WxResponse,
+};
 
 const DEFAULT_SESSION_ID: &str = "session-cli";
 const DEFAULT_SKILL_ID: &str = "coffee";
@@ -47,6 +51,7 @@ const DEFAULT_PRIVATE_KEY_FILE: &str = "key-1-private.pem";
 const VALIDATE_REPORT_SCHEMA_VERSION: &str = "dock.validate-report.v1";
 const IMPORT_REPORT_SCHEMA_VERSION: &str = "dock.import-wechat-mcp-report.v1";
 const DOCTOR_REPORT_SCHEMA_VERSION: &str = "dock.doctor-report.v1";
+const PERF_REPORT_SCHEMA_VERSION: &str = "dock.perf-baseline-report.v1";
 
 #[derive(Debug, Parser)]
 #[command(name = "dock-cli", about = "MiniApp MCP Skill runtime developer CLI")]
@@ -102,6 +107,13 @@ enum Command {
         identity_root: Option<PathBuf>,
         #[arg(long, default_value_t = false)]
         ci: bool,
+    },
+    Perf {
+        skill: PathBuf,
+        #[arg(long, default_value_t = false)]
+        full: bool,
+        #[arg(long)]
+        iterations: Option<usize>,
     },
     CallApi {
         skill: PathBuf,
@@ -213,6 +225,11 @@ impl Cli {
                 identity_root: identity_root.as_deref(),
                 ci: *ci,
             }),
+            Command::Perf {
+                skill,
+                full,
+                iterations,
+            } => perf(skill, *full, *iterations),
             Command::CallApi {
                 skill,
                 api_name,
@@ -2827,6 +2844,782 @@ fn test_skill(skill_path: &Path) -> Result<Value, CliError> {
     }))
 }
 
+fn perf(skill_path: &Path, full: bool, iterations: Option<usize>) -> Result<Value, CliError> {
+    let iterations = iterations
+        .unwrap_or(if full { 20 } else { 3 })
+        .clamp(1, if full { 200 } else { 10 });
+    let mode = if full { "full" } else { "smoke" };
+    let skill = load_skill(skill_path)?;
+    let fixture_plan = FixturePlan::from_skill(skill_path, &skill)?;
+    let mut samples = Vec::new();
+    let initial_rss = current_rss_kib();
+
+    samples.push(perf_skill_load_sample(skill_path, iterations)?);
+    samples.extend(perf_runtime_fixture_samples(
+        skill_path,
+        &skill,
+        &fixture_plan,
+        iterations,
+    )?);
+    samples.extend(perf_micro_storage_and_token_samples(iterations)?);
+    samples.push(perf_resource_limit_sample(skill_path)?);
+
+    let final_rss = current_rss_kib();
+    let status = if samples.iter().all(|sample| sample.status == "pass") {
+        "ok"
+    } else {
+        "failed"
+    };
+    let sample_values = samples.iter().map(PerfSample::to_json).collect::<Vec<_>>();
+    let max_rss = [initial_rss, final_rss].into_iter().flatten().max();
+    let baseline = json!({
+        "cases": sample_values.len(),
+        "passed": samples.iter().filter(|sample| sample.status == "pass").count(),
+        "failed": samples.iter().filter(|sample| sample.status != "pass").count(),
+        "iterationsPerCase": iterations,
+        "measurement": "local-dev-ci-friendly",
+        "note": "Hardware-dependent baseline evidence only; not a production SLO."
+    });
+
+    let report = json!({
+        "schemaVersion": PERF_REPORT_SCHEMA_VERSION,
+        "status": status,
+        "commandStatus": "ok",
+        "mode": mode,
+        "full": full,
+        "skillId": skill_id_for_path(&skill, skill_path),
+        "skillRef": validate_skill_ref(skill_path),
+        "environment": perf_environment(),
+        "baseline": baseline,
+        "resource": {
+            "memoryPerVm": {
+                "measurement": "process-rss-sample",
+                "unit": "KiB",
+                "initial": initial_rss,
+                "final": final_rss,
+                "max": max_rss,
+                "productionSlo": false
+            }
+        },
+        "stress": perf_stress_summary(&samples),
+        "samples": sample_values,
+        "redaction": {
+            "appliedByDefault": true,
+            "localPaths": "redacted",
+            "credentialMaterial": "omitted",
+            "payloadPolicy": "mock/dev-only fixture summaries only"
+        }
+    });
+    assert_perf_report_has_no_sensitive_strings(&report)?;
+    Ok(report)
+}
+
+#[derive(Debug)]
+struct PerfSample {
+    name: String,
+    category: String,
+    status: &'static str,
+    iterations: usize,
+    unit: &'static str,
+    values: Vec<u128>,
+    details: Value,
+}
+
+impl PerfSample {
+    fn duration(
+        name: impl Into<String>,
+        category: impl Into<String>,
+        values: Vec<u128>,
+        details: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            category: category.into(),
+            status: "pass",
+            iterations: values.len(),
+            unit: "us",
+            values,
+            details,
+        }
+    }
+
+    fn gauge(
+        name: impl Into<String>,
+        category: impl Into<String>,
+        unit: &'static str,
+        value: u128,
+        details: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            category: category.into(),
+            status: "pass",
+            iterations: 1,
+            unit,
+            values: vec![value],
+            details,
+        }
+    }
+
+    fn pass_fail(
+        name: impl Into<String>,
+        category: impl Into<String>,
+        passed: bool,
+        details: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            category: category.into(),
+            status: if passed { "pass" } else { "fail" },
+            iterations: 1,
+            unit: "count",
+            values: vec![u128::from(passed)],
+            details,
+        }
+    }
+
+    fn to_json(&self) -> Value {
+        let stats = perf_stats(&self.values);
+        json!({
+            "name": self.name,
+            "category": self.category,
+            "status": self.status,
+            "iterations": self.iterations,
+            "unit": self.unit,
+            "p50": stats.p50,
+            "p95": stats.p95,
+            "max": stats.max,
+            "details": self.details,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct PerfStats {
+    p50: u128,
+    p95: u128,
+    max: u128,
+}
+
+fn perf_stats(values: &[u128]) -> PerfStats {
+    if values.is_empty() {
+        return PerfStats {
+            p50: 0,
+            p95: 0,
+            max: 0,
+        };
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    PerfStats {
+        p50: percentile_value(&sorted, 50),
+        p95: percentile_value(&sorted, 95),
+        max: *sorted.last().unwrap_or(&0),
+    }
+}
+
+fn percentile_value(sorted: &[u128], percentile: usize) -> u128 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let index = ((sorted.len() - 1) * percentile).div_ceil(100);
+    sorted[index.min(sorted.len() - 1)]
+}
+
+fn perf_skill_load_sample(skill_path: &Path, iterations: usize) -> Result<PerfSample, CliError> {
+    let values = measure_iterations(iterations, || {
+        load_skill(skill_path).map(|_| ()).map_err(CliError::from)
+    })?;
+    Ok(PerfSample::duration(
+        "skill_load",
+        "skill_load",
+        values,
+        json!({
+            "loader": "skill-loader",
+            "safePathChecks": true
+        }),
+    ))
+}
+
+fn perf_runtime_fixture_samples(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    fixture_plan: &FixturePlan,
+    iterations: usize,
+) -> Result<Vec<PerfSample>, CliError> {
+    let mut samples = Vec::new();
+    for case in &fixture_plan.cases {
+        samples.push(perf_api_call_sample(skill_path, skill, case, iterations)?);
+        samples.push(perf_component_render_sample(
+            skill_path, skill, case, iterations,
+        )?);
+        samples.push(perf_render_ir_size_sample(skill_path, skill, case)?);
+    }
+    samples.push(perf_concurrent_sessions_sample(
+        skill_path,
+        skill,
+        fixture_plan,
+        iterations,
+    )?);
+    samples.push(perf_multi_skill_sample(skill_path, iterations)?);
+    samples.push(perf_multi_component_sample(
+        skill_path,
+        skill,
+        fixture_plan,
+        iterations,
+    )?);
+    samples.push(perf_dynamic_component_sample(iterations)?);
+    Ok(samples)
+}
+
+fn perf_api_call_sample(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    case: &FixtureCase,
+    iterations: usize,
+) -> Result<PerfSample, CliError> {
+    let values = measure_iterations(iterations, || {
+        let runtime = RuntimeHarness::load(
+            skill_path,
+            RuntimeIdentity::default_for_skill(skill, skill_path),
+            Option::<&DemoAuthConfig>::None,
+        )?;
+        let call = runtime.call(&case.api_name, case.arguments.clone())?;
+        if call.result.is_error {
+            return Err(CliError::Demo(format!(
+                "perf API fixture `{}` returned isError",
+                case.name
+            )));
+        }
+        Ok(())
+    })?;
+    Ok(PerfSample::duration(
+        format!("api_vm_call.{}", case.name),
+        "api_vm_call",
+        values,
+        json!({
+            "apiName": case.api_name,
+            "fixture": case.name,
+            "mode": "cold-runtime-per-iteration"
+        }),
+    ))
+}
+
+fn perf_component_render_sample(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    case: &FixtureCase,
+    iterations: usize,
+) -> Result<PerfSample, CliError> {
+    let Some(component_path) = case.component_path.as_deref() else {
+        return Ok(PerfSample::pass_fail(
+            format!("component_render.{}", case.name),
+            "component_render",
+            false,
+            json!({"reason": "fixture has no component path"}),
+        ));
+    };
+    let runtime = RuntimeHarness::load(
+        skill_path,
+        RuntimeIdentity::default_for_skill(skill, skill_path),
+        Option::<&DemoAuthConfig>::None,
+    )?;
+    let call = runtime.call(&case.api_name, case.arguments.clone())?;
+    let values = measure_iterations(iterations, || {
+        let mounted = mount_fixture_for_outcome(
+            skill_path,
+            skill,
+            &case.api_name,
+            case.arguments.clone(),
+            call.result.clone(),
+            component_path,
+        )?;
+        if mounted.mount.render.root.id.trim().is_empty() {
+            return Err(CliError::Demo(format!(
+                "perf component fixture `{}` rendered empty root id",
+                case.name
+            )));
+        }
+        Ok(())
+    })?;
+    Ok(PerfSample::duration(
+        format!("component_render.{}", case.name),
+        "component_render",
+        values,
+        json!({
+            "componentPath": component_path,
+            "fixture": case.name
+        }),
+    ))
+}
+
+fn perf_render_ir_size_sample(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    case: &FixtureCase,
+) -> Result<PerfSample, CliError> {
+    let Some(component_path) = case.component_path.as_deref() else {
+        return Ok(PerfSample::pass_fail(
+            format!("render_ir_size.{}", case.name),
+            "render_ir_size",
+            false,
+            json!({"reason": "fixture has no component path"}),
+        ));
+    };
+    let runtime = RuntimeHarness::load(
+        skill_path,
+        RuntimeIdentity::default_for_skill(skill, skill_path),
+        Option::<&DemoAuthConfig>::None,
+    )?;
+    let call = runtime.call(&case.api_name, case.arguments.clone())?;
+    let mounted = mount_fixture_for_outcome(
+        skill_path,
+        skill,
+        &case.api_name,
+        case.arguments.clone(),
+        call.result,
+        component_path,
+    )?;
+    let bytes = serde_json::to_vec(&mounted.mount.render)
+        .map_err(|source| CliError::Json {
+            label: "Render IR perf sample".to_owned(),
+            source,
+        })?
+        .len() as u128;
+    Ok(PerfSample::gauge(
+        format!("render_ir_size.{}", case.name),
+        "render_ir_size",
+        "bytes",
+        bytes,
+        json!({
+            "componentPath": component_path,
+            "schemaVersion": mounted.mount.render.schema_version,
+            "fixture": case.name
+        }),
+    ))
+}
+
+fn perf_micro_storage_and_token_samples(iterations: usize) -> Result<Vec<PerfSample>, CliError> {
+    let scope = StorageScope::new(DEFAULT_USER_DID, DEFAULT_MERCHANT_DID, DEFAULT_SKILL_ID);
+    let storage = InMemoryScopedStorage::new();
+    let write_values = measure_iterations(iterations, || {
+        storage
+            .set_storage(&scope, "cart", json!({"drinkId": "latte", "qty": 1}))
+            .map_err(storage_cli_error)
+    })?;
+    let read_values = measure_iterations(iterations, || {
+        storage
+            .get_storage(&scope, "cart")
+            .map(|_| ())
+            .map_err(storage_cli_error)
+    })?;
+
+    let cache = InMemoryTokenCache::new();
+    let token_scope = CapabilityTokenScope::for_subject(
+        DEFAULT_MERCHANT_DID,
+        DEFAULT_USER_DID,
+        Some(DEFAULT_AGENT_DID.to_owned()),
+        DEFAULT_SKILL_ID,
+        Some(DEFAULT_SESSION_ID.to_owned()),
+    );
+    cache.put(
+        token_scope.clone(),
+        CapabilityToken::new("perf-token-redacted", None),
+    );
+    let token_values = measure_iterations(iterations, || {
+        cache
+            .get(&token_scope)
+            .ok_or_else(|| CliError::Demo("perf token cache miss".to_owned()))
+            .map(|_| ())
+    })?;
+
+    Ok(vec![
+        PerfSample::duration(
+            "storage_write.in_memory",
+            "storage_write",
+            write_values,
+            json!({
+                "backend": "in-memory",
+                "scope": "mock-default",
+                "productionReady": false
+            }),
+        ),
+        PerfSample::duration(
+            "storage_read.in_memory",
+            "storage_read",
+            read_values,
+            json!({
+                "backend": "in-memory",
+                "scope": "mock-default",
+                "productionReady": false
+            }),
+        ),
+        PerfSample::duration(
+            "token_lookup.in_memory",
+            "token_lookup",
+            token_values,
+            json!({
+                "cache": "in-memory",
+                "tokenVisible": false,
+                "productionReady": false
+            }),
+        ),
+    ])
+}
+
+fn perf_concurrent_sessions_sample(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    fixture_plan: &FixturePlan,
+    iterations: usize,
+) -> Result<PerfSample, CliError> {
+    let Some(case) = fixture_plan.cases.first() else {
+        return Ok(PerfSample::pass_fail(
+            "stress.concurrent_sessions",
+            "stress",
+            false,
+            json!({"reason": "fixture plan has no cases"}),
+        ));
+    };
+    let count = iterations.clamp(2, 16);
+    let skill_id = skill_id_for_path(skill, skill_path);
+    let mut handles = Vec::with_capacity(count);
+    for index in 0..count {
+        let path = skill_path.to_path_buf();
+        let api_name = case.api_name.clone();
+        let arguments = case.arguments.clone();
+        let session_id = format!("{DEFAULT_SESSION_ID}-perf-{index}");
+        let skill_id = skill_id.clone();
+        handles.push(std::thread::spawn(move || -> Result<u128, String> {
+            let started = Instant::now();
+            let loaded = load_skill(&path).map_err(|error| error.to_string())?;
+            let runtime = RuntimeHarness::load(
+                &path,
+                RuntimeIdentity {
+                    skill_id,
+                    session_id,
+                    ..RuntimeIdentity::default_demo()
+                },
+                Option::<&DemoAuthConfig>::None,
+            )
+            .map_err(|error| error.to_string())?;
+            let call = runtime
+                .call(&api_name, arguments)
+                .map_err(|error| error.to_string())?;
+            if call.result.is_error {
+                return Err(format!(
+                    "concurrent session fixture `{}` returned isError",
+                    loaded
+                        .manifest
+                        .apis
+                        .first()
+                        .map(|api| api.name.as_str())
+                        .unwrap_or("unknown")
+                ));
+            }
+            Ok(started.elapsed().as_micros())
+        }));
+    }
+    let mut values = Vec::with_capacity(count);
+    for handle in handles {
+        match handle.join() {
+            Ok(Ok(value)) => values.push(value),
+            Ok(Err(error)) => return Err(CliError::Demo(redact_text(&error))),
+            Err(_) => {
+                return Err(CliError::Demo(
+                    "concurrent session worker panicked".to_owned(),
+                ))
+            }
+        }
+    }
+    Ok(PerfSample::duration(
+        "stress.concurrent_sessions",
+        "stress",
+        values,
+        json!({
+            "sessions": count,
+            "isolation": "unique-session-id-per-iteration",
+            "failClosed": true
+        }),
+    ))
+}
+
+fn perf_multi_skill_sample(skill_path: &Path, iterations: usize) -> Result<PerfSample, CliError> {
+    let project_root = find_project_root_from(skill_path)
+        .or_else(|| default_project_root().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut skill_paths = vec![skill_path.to_path_buf()];
+    for name in [
+        "address-form",
+        "media-review",
+        "dynamic-status",
+        "location-map-preview",
+    ] {
+        let path = project_root.join("examples/fixtures").join(name);
+        if path.join("mcp.json").is_file() {
+            skill_paths.push(path);
+        }
+    }
+    let values = measure_iterations(iterations, || {
+        for path in &skill_paths {
+            let skill = load_skill(path)?;
+            let plan = FixturePlan::from_skill(path, &skill)?;
+            if let Some(case) = plan.cases.first() {
+                let runtime = RuntimeHarness::load(
+                    path,
+                    RuntimeIdentity::default_for_skill(&skill, path),
+                    Option::<&DemoAuthConfig>::None,
+                )?;
+                let call = runtime.call(&case.api_name, case.arguments.clone())?;
+                if call.result.is_error {
+                    return Err(CliError::Demo(format!(
+                        "multi-skill perf fixture `{}` returned isError",
+                        case.name
+                    )));
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(PerfSample::duration(
+        "stress.multi_skill",
+        "stress",
+        values,
+        json!({
+            "skillCount": skill_paths.len(),
+            "skillRefs": skill_paths.iter().map(|path| validate_skill_ref(path)).collect::<Vec<_>>()
+        }),
+    ))
+}
+
+fn perf_multi_component_sample(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    fixture_plan: &FixturePlan,
+    iterations: usize,
+) -> Result<PerfSample, CliError> {
+    let cases = fixture_plan
+        .cases
+        .iter()
+        .filter(|case| case.component_path.is_some())
+        .collect::<Vec<_>>();
+    let values = measure_iterations(iterations, || {
+        let runtime = RuntimeHarness::load(
+            skill_path,
+            RuntimeIdentity::default_for_skill(skill, skill_path),
+            Option::<&DemoAuthConfig>::None,
+        )?;
+        for case in &cases {
+            let call = runtime.call(&case.api_name, case.arguments.clone())?;
+            let component_path = case
+                .component_path
+                .as_deref()
+                .or_else(|| {
+                    call.render
+                        .as_ref()
+                        .and_then(|render| render.component_path.as_deref())
+                })
+                .ok_or_else(|| CliError::Demo("component path missing".to_owned()))?;
+            let _mounted = mount_fixture_for_outcome(
+                skill_path,
+                skill,
+                &case.api_name,
+                case.arguments.clone(),
+                call.result,
+                component_path,
+            )?;
+        }
+        Ok(())
+    })?;
+    Ok(PerfSample::duration(
+        "stress.multi_component_render",
+        "stress",
+        values,
+        json!({
+            "componentCount": cases.len(),
+            "fixtureSet": fixture_plan.name
+        }),
+    ))
+}
+
+fn perf_dynamic_component_sample(iterations: usize) -> Result<PerfSample, CliError> {
+    let root = default_project_root()
+        .map(|root| root.join("examples/fixtures/dynamic-status"))
+        .map_err(|error| CliError::Demo(format!("project root unavailable: {error}")))?;
+    let skill = load_skill(&root)?;
+    let plan = FixturePlan::from_skill(&root, &skill)?;
+    let case = plan
+        .cases
+        .first()
+        .ok_or_else(|| CliError::Demo("dynamic fixture plan has no cases".to_owned()))?;
+    let values = measure_iterations(iterations, || {
+        let report = run_fixture_case(&root, &skill, case)?;
+        if report["status"] != "pass" {
+            return Err(CliError::Demo("dynamic fixture perf run failed".to_owned()));
+        }
+        Ok(())
+    })?;
+    Ok(PerfSample::duration(
+        "stress.dynamic_timer_request",
+        "stress",
+        values,
+        json!({
+            "fixture": "dynamic-status",
+            "covers": ["dynamic request broker", "timer cleanup", "expire cleanup"],
+            "mockOnly": true
+        }),
+    ))
+}
+
+fn perf_resource_limit_sample(skill_path: &Path) -> Result<PerfSample, CliError> {
+    let skill = load_skill(skill_path)?;
+    let skill_id = skill_id_for_path(&skill, skill_path);
+    let fixture_plan = FixturePlan::from_skill(skill_path, &skill)?;
+    let case = fixture_plan
+        .cases
+        .first()
+        .ok_or_else(|| CliError::Demo("perf fixture plan has no cases".to_owned()))?;
+    let api_name = case.api_name.clone();
+    let arguments = case.arguments.clone();
+    let vm = ApiVm::load_skill_with_config(
+        skill,
+        ApiVmConfig {
+            max_result_json_bytes: 1,
+            ..ApiVmConfig::default()
+        },
+    )?;
+    let error = vm
+        .call(ApiCall::new(
+            skill_id,
+            DEFAULT_SESSION_ID,
+            api_name.clone(),
+            arguments,
+        ))
+        .expect_err("resource limit should fail closed");
+    let passed = matches!(error, ApiVmError::ResultTooLarge(_, 1));
+    Ok(PerfSample::pass_fail(
+        "resource_limit.result_size_fail_closed",
+        "resource_limit",
+        passed,
+        json!({
+            "apiName": api_name,
+            "expected": "result_too_large",
+            "actual": redact_text(&error.to_string()),
+            "otherSessionImpact": "none",
+            "failClosed": passed
+        }),
+    ))
+}
+
+fn measure_iterations_indexed(
+    iterations: usize,
+    mut operation: impl FnMut(usize) -> Result<(), CliError>,
+) -> Result<Vec<u128>, CliError> {
+    let mut values = Vec::with_capacity(iterations);
+    for index in 0..iterations {
+        let started = Instant::now();
+        operation(index)?;
+        values.push(started.elapsed().as_micros());
+    }
+    Ok(values)
+}
+
+fn measure_iterations(
+    iterations: usize,
+    mut operation: impl FnMut() -> Result<(), CliError>,
+) -> Result<Vec<u128>, CliError> {
+    measure_iterations_indexed(iterations, |_| operation())
+}
+
+fn perf_environment() -> Value {
+    json!({
+        "commit": git_head_short().unwrap_or_else(|| "unknown".to_owned()),
+        "workingTreeDirty": git_working_tree_dirty(),
+        "rustc": command_stdout("rustc", ["--version"]).unwrap_or_else(|| "unknown".to_owned()),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "timestampMs": current_time_ms(),
+        "productionSlo": false
+    })
+}
+
+fn perf_stress_summary(samples: &[PerfSample]) -> Value {
+    let stress = samples
+        .iter()
+        .filter(|sample| sample.category == "stress" || sample.category == "resource_limit")
+        .map(PerfSample::to_json)
+        .collect::<Vec<_>>();
+    json!({
+        "status": if stress.iter().all(|sample| sample["status"] == "pass") { "pass" } else { "fail" },
+        "cases": stress
+    })
+}
+
+fn storage_cli_error(error: StorageError) -> CliError {
+    CliError::Demo(format!("storage perf sample failed: {error}"))
+}
+
+fn command_stdout<const N: usize>(command: &str, args: [&str; N]) -> Option<String> {
+    std::process::Command::new(command)
+        .args(args)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn git_head_short() -> Option<String> {
+    command_stdout("git", ["rev-parse", "--short", "HEAD"])
+}
+
+fn git_working_tree_dirty() -> Option<bool> {
+    command_stdout("git", ["status", "--short"]).map(|status| !status.trim().is_empty())
+}
+
+fn current_time_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default()
+}
+
+fn current_rss_kib() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+        let pages = statm.split_whitespace().nth(1)?.parse::<u64>().ok()?;
+        Some(pages.saturating_mul(4096) / 1024)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+fn assert_perf_report_has_no_sensitive_strings(value: &Value) -> Result<(), CliError> {
+    let rendered = value.to_string();
+    for forbidden in [
+        "Bearer ",
+        "Authorization",
+        "Signature",
+        "Signature-Input",
+        "capabilityToken",
+        "private key",
+        "fixture-token",
+        "perf-token-redacted",
+        "/home/",
+        "/Users/",
+    ] {
+        if rendered.contains(forbidden) {
+            return Err(CliError::Demo(format!(
+                "perf report contains forbidden string `{forbidden}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
 struct FixturePlan {
     name: String,
     cases: Vec<FixtureCase>,
@@ -3544,6 +4337,7 @@ fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value,
             agent_did: auth_config.agent_did.clone(),
             merchant_did: DEFAULT_MERCHANT_DID.to_owned(),
             skill_id: DEFAULT_SKILL_ID.to_owned(),
+            session_id: DEFAULT_SESSION_ID.to_owned(),
         })
         .unwrap_or_else(RuntimeIdentity::default_demo);
     let runtime = RuntimeHarness::load(skill_path, identity, auth_config.as_ref())?;
@@ -3655,6 +4449,7 @@ fn run_demo(
             agent_did: auth_config.agent_did.clone(),
             merchant_did: auth.merchant_did.clone(),
             skill_id: DEFAULT_SKILL_ID.to_owned(),
+            session_id: DEFAULT_SESSION_ID.to_owned(),
         },
         Some(auth_config),
     )?;
@@ -3765,6 +4560,7 @@ struct RuntimeIdentity {
     agent_did: Option<String>,
     merchant_did: String,
     skill_id: String,
+    session_id: String,
 }
 
 impl RuntimeIdentity {
@@ -3774,6 +4570,7 @@ impl RuntimeIdentity {
             agent_did: Some(DEFAULT_AGENT_DID.to_owned()),
             merchant_did: DEFAULT_MERCHANT_DID.to_owned(),
             skill_id: DEFAULT_SKILL_ID.to_owned(),
+            session_id: DEFAULT_SESSION_ID.to_owned(),
         }
     }
 
@@ -3836,7 +4633,7 @@ impl RuntimeHarness {
                     agent_did: self.identity.agent_did.clone(),
                     merchant_did: Some(self.identity.merchant_did.clone()),
                     skill_id: self.identity.skill_id.clone(),
-                    session_id: DEFAULT_SESSION_ID.to_owned(),
+                    session_id: self.identity.session_id.clone(),
                 },
                 api_name: api_name.into(),
                 arguments,
@@ -4741,6 +5538,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_perf_args() {
+        let cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "perf",
+            "examples/coffee-skill",
+            "--iterations",
+            "1",
+        ])
+        .expect("args parse");
+        assert!(matches!(
+            cli.command,
+            Command::Perf {
+                full: false,
+                iterations: Some(1),
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn parses_runtime_json_args() {
         let cli = Cli::try_parse_from_args([
             "dock-cli",
@@ -5170,6 +5987,56 @@ mod tests {
     }
 
     #[test]
+    fn perf_smoke_report_covers_baselines_stress_and_redacts() {
+        let project_root = default_project_root().expect("project root");
+        let output =
+            perf(&project_root.join("examples/coffee-skill"), false, Some(1)).expect("perf report");
+
+        assert_eq!(output["schemaVersion"], PERF_REPORT_SCHEMA_VERSION);
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["commandStatus"], "ok");
+        assert_eq!(output["mode"], "smoke");
+        assert_eq!(output["baseline"]["iterationsPerCase"], 1);
+        assert!(perf_has_category(&output, "skill_load"));
+        assert!(perf_has_category(&output, "api_vm_call"));
+        assert!(perf_has_category(&output, "component_render"));
+        assert!(perf_has_category(&output, "render_ir_size"));
+        assert!(perf_has_category(&output, "storage_read"));
+        assert!(perf_has_category(&output, "storage_write"));
+        assert!(perf_has_category(&output, "token_lookup"));
+        assert!(perf_has_sample(&output, "stress.concurrent_sessions"));
+        assert!(perf_has_sample(&output, "stress.multi_skill"));
+        assert!(perf_has_sample(&output, "stress.multi_component_render"));
+        assert!(perf_has_sample(&output, "stress.dynamic_timer_request"));
+        assert!(perf_has_sample(
+            &output,
+            "resource_limit.result_size_fail_closed"
+        ));
+        assert_eq!(output["stress"]["status"], "pass");
+        assert_eq!(
+            output["resource"]["memoryPerVm"]["measurement"],
+            "process-rss-sample"
+        );
+
+        let rendered = output.to_string();
+        for forbidden in [
+            "/home/",
+            "/Users/",
+            "Authorization",
+            "Signature",
+            "capabilityToken",
+            "fixture-token",
+            "perf-token-redacted",
+            "Bearer ",
+        ] {
+            assert!(
+                !rendered.contains(forbidden),
+                "perf report leaked forbidden marker {forbidden}"
+            );
+        }
+    }
+
+    #[test]
     fn import_wechat_mcp_safe_copy_preserves_original_fields() {
         let fixture = ImportSkillFixture::new();
         let dest_dir = TempDir::new("dock-cli-import-dest").expect("temp dir");
@@ -5483,6 +6350,22 @@ mod tests {
             .find(|check| check["id"] == id)?
             .get("status")?
             .as_str()
+    }
+
+    fn perf_has_category(report: &Value, category: &str) -> bool {
+        report["samples"]
+            .as_array()
+            .expect("perf samples")
+            .iter()
+            .any(|sample| sample["category"] == category)
+    }
+
+    fn perf_has_sample(report: &Value, name: &str) -> bool {
+        report["samples"]
+            .as_array()
+            .expect("perf samples")
+            .iter()
+            .any(|sample| sample["name"] == name)
     }
 
     #[test]

@@ -117,6 +117,13 @@ Step 06-02 当前 trace propagation：
 
 具体数值应在实现基准测试后写入 release notes，不在计划文档中凭空承诺。
 
+Step 06-03 当前实现的本地性能基线契约：
+
+- `dock-cli perf <skill> --iterations <n>` 输出 `dock.perf-baseline-report.v1` JSON，默认 smoke 模式；`--full` 可放大迭代数，仍是本地硬件相关证据。
+- samples 覆盖 Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、process RSS memory sample、concurrent sessions、多 Skill、多组件、dynamic timer/request、resource-limit fail-closed。
+- `testdata/perf/coffee-smoke-baseline.json` 是 coffee smoke baseline artifact 和 schema 样例；包含环境 commit、rustc、os、arch、workingTreeDirty、P50/P95/max 或 size/gauge，不作为跨机器固定阈值。
+- perf runner 复用 `dock-cli` headless/dev-only fixture provider、RuntimeService、Component Runtime 和 fixture snapshots；报告必须继续脱敏，不输出 raw token、Authorization、Signature、capabilityToken、private key、本机绝对路径、手机号、真实地址、文件内容或精确位置。
+
 ## 4. CI/CD Gates
 
 基础 gates：
@@ -188,7 +195,7 @@ cargo test --workspace
 
 - [x] 结构化日志和 metrics 默认脱敏。
 - [x] trace 能串起 Runtime API、QuickJS VM、`wx.login` / `wx.checkSession` / `wx.request`、render、action、nested `api/call` 和 audit 的本地测试链路；完整 Host message / model decision 侧 trace 仍需真实 Host adapter 注入。
-- [ ] 性能基准有自动化脚本。
+- [x] 性能基准有自动化脚本。
 - [ ] CI gates 覆盖安全、兼容、snapshot、文档。
 - [ ] canary/rollback runbook 可执行。
 - [ ] release notes 包含版本、兼容变化、风险和回滚方式。

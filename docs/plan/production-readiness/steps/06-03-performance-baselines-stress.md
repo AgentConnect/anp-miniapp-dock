@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-03
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 04:45:24 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 06-02 完成后，启动性能基线 |
+| Review evidence | 2026-06-14 05:06:44 +0800 commit 前 Review：修复 `iterations.max(2).min(16)` 的 clippy `manual_clamp` 问题；确认 `dock-cli perf` 覆盖 Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、RSS sample、并发 session、多 Skill、多组件、dynamic timer/request 和 result-size fail-closed；确认 report 明确为本地硬件相关 baseline，不是 production SLO；确认 artifact 不输出 raw token、Authorization、Signature、capabilityToken、private key、本机绝对路径、手机号、真实地址、文件内容或精确位置。剩余风险：未引入 Criterion/cargo bench 稳定阈值；`--full` 仅增加本地迭代数；memory per VM 是 process RSS sample，不是精确 VM 内存。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 107]`，工作区无未提交变更；已读取主 Plan、Step 06-03 文档、Phase 6 计划、执行台账和 06-02 closure evidence；`cargo fmt --check` 通过；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test -p dock-cli perf` 通过，实际命中 2 个 unit perf tests 和 1 个 integration perf test；`cargo test -p dock-cli --test coffee_order_flow perf_smoke_reports_baselines_and_stress` 通过；`cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1 > testdata/perf/coffee-smoke-baseline.json` 成功生成 artifact；`python3 -m json.tool testdata/perf/coffee-smoke-baseline.json >/tmp/coffee-smoke-baseline.json` 通过；`git diff --check -- crates testdata docs/runbook docs/plan README.md` 无输出；artifact 敏感串扫描未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`cargo test -p dock-cli` 33 unit + 13 integration passed；`cargo test -p dock-cli --test coffee_order_flow` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace perf` 通过，实际命中 dock-cli 2 个 unit perf tests 和 1 个 integration perf test。 |
+| Next action | 创建 06-03 focused implementation commit，然后回填 commit hash 并关闭 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,13 +65,13 @@ Step index：06-03
 
 ## 7. 验收标准
 
-- [ ] Benchmark 覆盖 Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、memory per VM。
-- [ ] Stress tests 覆盖并发 session、多 Skill、多组件、dynamic timer/request。
-- [ ] 输出 JSON baseline artifact，包含环境、commit、P50/P95 或明确替代指标。
-- [ ] CI-friendly smoke benchmark 与 full benchmark 区分清楚。
-- [ ] 超过资源限制时 fail closed，不影响其他 session。
-- [ ] Release Gates 和 Phase 6 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Benchmark 覆盖 Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、memory per VM。
+- [x] Stress tests 覆盖并发 session、多 Skill、多组件、dynamic timer/request。
+- [x] 输出 JSON baseline artifact，包含环境、commit、P50/P95 或明确替代指标。
+- [x] CI-friendly smoke benchmark 与 full benchmark 区分清楚。
+- [x] 超过资源限制时 fail closed，不影响其他 session。
+- [x] Release Gates 和 Phase 6 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -93,11 +93,11 @@ Step index：06-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 初次提交前 `cargo clippy -p dock-cli --all-targets -- -D warnings` 命中 `manual_clamp`；Review 同时确认原计划的 `cargo bench --workspace` 没有对应 bench harness，当前实现采用 `dock-cli perf` runner 和 workspace perf tests 作为 CI-friendly baseline gate。 |
+| 已修复问题 | 已修复 | 将 `iterations.max(2).min(16)` 改为 `iterations.clamp(2, 16)`；resource-limit sample 使用真实 fixture API 和 arguments，并通过 `max_result_json_bytes = 1` 验证 result-size fail closed；multi-component sample 每轮加载一次 runtime，降低非目标噪声。 |
+| 剩余风险 | 已记录 | baseline 数字依赖本地硬件和负载，不是 production SLO；`--full` 只是增加本地迭代数；process RSS sample 不能代表精确 VM memory；后续如需跨机器阈值，应另建 Criterion/cargo bench 或固定环境 gate。 |
+| 新增或缺失测试 | 已覆盖 | 新增 `parses_perf_args`、`perf_smoke_report_covers_baselines_stress_and_redacts` 和 `perf_smoke_reports_baselines_and_stress`；未新增 Criterion bench，原因见剩余风险。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `README.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-6-observability-release.md` 和本 Step 文档；未发现缺失的直接相关文档。 |
 
 ## 10. Commit 要求
 

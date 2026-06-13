@@ -314,6 +314,55 @@ fn test_skill_coffee_reports_fixture_passes() {
 }
 
 #[test]
+fn perf_smoke_reports_baselines_and_stress() {
+    let report = cli_json([
+        "dock-cli".to_owned(),
+        "perf".to_owned(),
+        skill_root().display().to_string(),
+        "--iterations".to_owned(),
+        "1".to_owned(),
+    ]);
+
+    assert_eq!(report["schemaVersion"], "dock.perf-baseline-report.v1");
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["commandStatus"], "ok");
+    assert_eq!(report["mode"], "smoke");
+    assert_eq!(report["baseline"]["iterationsPerCase"], 1);
+    assert_eq!(report["stress"]["status"], "pass");
+    assert!(report["samples"]
+        .as_array()
+        .expect("samples")
+        .iter()
+        .any(|sample| sample["category"] == "api_vm_call"));
+    assert!(report["samples"]
+        .as_array()
+        .expect("samples")
+        .iter()
+        .any(|sample| sample["name"] == "stress.dynamic_timer_request"));
+    assert!(report["samples"]
+        .as_array()
+        .expect("samples")
+        .iter()
+        .any(|sample| sample["name"] == "resource_limit.result_size_fail_closed"));
+
+    let rendered = report.to_string();
+    for forbidden in [
+        "/home/",
+        "/Users/",
+        "Authorization",
+        "Signature",
+        "capabilityToken",
+        "fixture-token",
+        "Bearer ",
+    ] {
+        assert!(
+            !rendered.contains(forbidden),
+            "perf report leaked forbidden marker {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn test_skill_dynamic_fixture_compares_snapshot() {
     let report = cli_json([
         "dock-cli".to_owned(),

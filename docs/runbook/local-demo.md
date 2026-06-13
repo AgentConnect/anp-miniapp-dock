@@ -39,6 +39,14 @@ The command emits `dock.doctor-report.v1` JSON. It checks Rust toolchain, worksp
 
 Expected local defaults are not production-ready: unsigned/demo Skills, missing resolver/allowlist, in-memory storage/audit, missing production Host providers, skipped server health, and sandbox gates that doctor records but does not execute should be treated as warning/skip evidence. Real signing credential material, raw tokens, Authorization values, signatures, secrets, and absolute local paths must not appear in the report.
 
+Run a CI-friendly performance/stress smoke baseline before release notes or canary decisions:
+
+```bash
+cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1
+```
+
+The command emits `dock.perf-baseline-report.v1` JSON. It records hardware-dependent local evidence for Skill load, API VM call, component render, Render IR size, token lookup, storage read/write, process RSS memory sample, concurrent sessions, multi-Skill, multi-component render, dynamic request/timer, and resource-limit fail-closed behavior. The checked-in sample artifact is `testdata/perf/coffee-smoke-baseline.json`. Treat these numbers as local baseline evidence only, not production SLOs.
+
 For the full Skill developer workflow, see the developer docs:
 
 - [Developer docs index](../developer/README.md)
@@ -140,6 +148,12 @@ Validate the Skill:
 
 ```bash
 cargo run -p dock-cli -- validate examples/coffee-skill
+```
+
+Run local performance/stress smoke evidence:
+
+```bash
+cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1
 ```
 
 Call an atomic API with local mock data only:

@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction、Step 06-02 metrics / tracing correlation 已有本地 release gate 证据
+> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction、Step 06-02 metrics / tracing correlation、Step 06-03 performance baseline / stress smoke 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -29,6 +29,7 @@ cargo test --workspace
 cargo test -p dock-cli --test coffee_order_flow
 cargo run -p dock-cli -- validate examples/coffee-skill
 cargo run -p dock-cli -- doctor
+cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1
 ```
 
 通过标准：
@@ -40,6 +41,7 @@ cargo run -p dock-cli -- doctor
 - coffee CLI E2E 通过，并继续断言 capability token、Authorization、Signature、Signature-Input、private key path/material 不出现在 JSON 输出。
 - `dock-cli validate` 输出 JSON，包含 `schemaVersion: "dock.validate-report.v1"`、`status` / `reportStatus`、`commandStatus`、`compatibilityLevel`、顶层和 `compatibilityReport` 内的 `apis/components/permissions/risks/fallbacks/releaseBlockers/repairSuggestions/releaseReadiness`；当前 coffee Skill 仍应因 demo-only localhost DID/request metadata 和 unsigned package 被标为 `status: "warning"`、`compatibilityLevel: "demo-only"`，不得误标 `supported` 或 production-ready。
 - `dock-cli doctor` 输出 JSON，包含 `schemaVersion: "dock.doctor-report.v1"`、`status` / `reportStatus`、`commandStatus`、`summary.pass/warn/fail/skip`、`skipCountsAsPass: false` 和每个 check 的 `status/evidence/suggestion`；默认本地开发配置可以是 `warning`，但不得输出 signing credential material、raw token、Authorization、signature、secret、本机绝对路径或隐私原文。
+- `dock-cli perf` 输出 JSON，包含 `schemaVersion: "dock.perf-baseline-report.v1"`、`mode`、`baseline.iterationsPerCase`、环境 commit/rustc/os/arch/workingTreeDirty、Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、process RSS memory sample、concurrent sessions、多 Skill、多组件、dynamic timer/request 和 resource-limit fail-closed 证据；输出是硬件相关 baseline，不得写成 production SLO。
 
 如果环境无法运行全量命令，必须记录原因、失败命令、影响范围和替代检查；不能把未运行命令写成通过。
 
@@ -88,6 +90,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/developer docs/ru
 | Runtime concurrency / cancellation / idempotency contract：`dock.runtime.concurrency.v1`、`RuntimeOperationOptions`、`runtime.cancelOperation`、session close fail-closed、高风险 in-flight 串行、低风险并发、显式 idempotency key forward/replay、RequestBroker 非幂等业务失败不自动重试 | [`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs)、[`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | Structured observability events / redaction：`dock.observability.event.v1`、`skill_load_*`、`api_call_*`、`consent_*`、`component_render_*`、`component_event`、`fallback_used`、`audit_record_written`、`sandbox_limit_hit`，`userDidHash` 默认 hash，事件 fields 不含 raw payload | [`observability.rs`](../../crates/dock-core/src/observability.rs)、[`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs) |
 | Metrics / tracing correlation：`dock.observability.metric.v1`、`dock.observability.trace.v1`、Runtime API latency、QuickJS VM execution time、render latency、`wx.request` status、fallback、consent、unsupported API、sandbox limit、token refresh/fail、audit metrics 和 trace spans，labels 低基数且默认脱敏 | [`observability.rs`](../../crates/dock-core/src/observability.rs)、[`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
+| Performance baseline / stress smoke：`dock.perf-baseline-report.v1`、Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、RSS memory sample、并发 session、多 Skill、多组件、dynamic timer/request、resource-limit fail-closed | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs)、[`coffee-smoke-baseline.json`](../../testdata/perf/coffee-smoke-baseline.json) |
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout、WebSocket/timer globals deny、Promise job drain、console/result size limit | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs) |
@@ -144,6 +147,23 @@ cargo test -p js-runtime-quickjs quickjs_executor_records_vm_request_and_token_m
 - QuickJS metrics 覆盖 Atomic API VM execution、`wx.request` status、`wx.login` / `wx.checkSession` token/session outcome。
 - labels 只能包含低基数 API name、component path、risk level、outcome、reason、status bucket 等定位字段；不得包含 URL query、headers、HTTP body、raw arguments、DID 原文、capability token、Authorization、Signature、private key path/material、手机号、真实地址、文件内容、精确位置或本机绝对路径。
 - Runtime / QuickJS 默认 no-op sink；`InMemoryMetricsSink` 只作为 test/local recorder。Prometheus/OpenTelemetry 或 Host exporter 接入必须另行 Review，不得在当前 gate 中误标为已完成。
+
+Performance Baseline / Stress Gate：
+
+```bash
+cargo test -p dock-cli perf
+cargo test -p dock-cli --test coffee_order_flow perf_smoke_reports_baselines_and_stress
+cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1
+python3 -m json.tool testdata/perf/coffee-smoke-baseline.json >/tmp/coffee-smoke-baseline.json
+```
+
+通过标准：
+
+- `dock-cli perf` 输出 `dock.perf-baseline-report.v1`，`status = "ok"`，`commandStatus = "ok"`，`mode = "smoke"` 或 `full`。
+- samples 至少覆盖 `skill_load`、`api_vm_call`、`component_render`、`render_ir_size`、`token_lookup`、`storage_read`、`storage_write`、`stress.concurrent_sessions`、`stress.multi_skill`、`stress.multi_component_render`、`stress.dynamic_timer_request`、`resource_limit.result_size_fail_closed`。
+- `baseline` 记录 case 数、pass/fail 数、迭代数；`environment` 记录 commit、rustc、os、arch 和 working tree 是否 dirty；`resource.memoryPerVm` 使用 process RSS 抽样并标明不是 production SLO。
+- `testdata/perf/coffee-smoke-baseline.json` 只作为本地 smoke baseline artifact 和 schema 样例；数值随硬件和负载变化，不得用于跨机器固定阈值。
+- perf report 和 artifact 不得包含 token、Authorization、Signature、capabilityToken、private key material/path、本机绝对路径、手机号、真实地址、文件内容或精确位置。
 
 ### 4.2 Phase 3 required security gates
 
