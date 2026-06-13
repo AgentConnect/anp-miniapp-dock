@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-06
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 02:59:58 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 03:16:21 +0800 |
+| Commit | `f3d97cc` |
 | Review evidence | 2026-06-14 03:14:20 +0800 commit 前 Review 已记录：确认 05-06 复用既有 `examples/fixtures/*`，避免重复创建 `examples/address-skill` 等包；修复本地 fixture 在 `validate` / `inspect` 中缺少 manifest `id` 时回退为默认 `coffee` 的报告问题，同时保留 coffee fixture 形状继续输出 `coffee`；确认 expected JSON 只记录稳定摘要，不包含易变 audit 时间戳、本机路径、token、Authorization、Signature、fixture-token、真实手机号、地址、文件内容或经纬度；确认 headless provider 仍标 `productionReady = false`，未将 Host provider 或动态网络能力写成 production-ready。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 96]`；已读取主 Plan、Step 05-06 文档、Phase 5 文档、现有 `examples/fixtures/*` 和 `testdata/render-ir/*`；确认 05-05 implementation commit `9d19744` 与 closure commit `56daf6f`；`cargo fmt --check` 通过；`cargo test -p dock-cli example` 1 unit + 1 integration passed；`cargo test -p dock-cli validate` 4 unit + 2 integration passed；`cargo test -p dock-cli inspect` 2 unit + 1 integration passed；手工 `validate` / `test-skill` 覆盖 address-form、media-review、dynamic-status、location-map-preview，全部 JSON parse 通过，`validate` 输出 `dock.validate-report.v1`、示例 skillId、`warning`、`commandStatus = ok`，`test-skill` 输出 `dock.test-skill-report.v1`、`status = ok`、`failed = 0`、snapshot `match`；`git diff --check -- examples testdata crates/dock-cli docs/architecture docs/runbook docs/plan README.md` 无输出；fixture JSON 样本敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、fixture-token、Bearer、private key material、PEM header、latitude 或 longitude；计划要求的 `rg -n "token|Authorization|signature|private key|phone|address|latitude|longitude" examples testdata docs/plan docs/architecture docs/runbook README.md` 仅命中 mock handle、示例命令、文档红线、测试假值和既有安全说明；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
-| Next action | 创建 05-06 focused implementation commit |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 96]`；已读取主 Plan、Step 05-06 文档、Phase 5 文档、现有 `examples/fixtures/*` 和 `testdata/render-ir/*`；确认 05-05 implementation commit `9d19744` 与 closure commit `56daf6f`；`cargo fmt --check` 通过；`cargo test -p dock-cli example` 1 unit + 1 integration passed；`cargo test -p dock-cli validate` 4 unit + 2 integration passed；`cargo test -p dock-cli inspect` 2 unit + 1 integration passed；手工 `validate` / `test-skill` 覆盖 address-form、media-review、dynamic-status、location-map-preview，全部 JSON parse 通过，`validate` 输出 `dock.validate-report.v1`、示例 skillId、`warning`、`commandStatus = ok`，`test-skill` 输出 `dock.test-skill-report.v1`、`status = ok`、`failed = 0`、snapshot `match`；`git diff --check -- examples testdata crates/dock-cli docs/architecture docs/runbook docs/plan README.md` 无输出；fixture JSON 样本敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、fixture-token、Bearer、private key material、PEM header、latitude 或 longitude；计划要求的 `rg -n "token|Authorization|signature|private key|phone|address|latitude|longitude" examples testdata docs/plan docs/architecture docs/runbook README.md` 仅命中 mock handle、示例命令、文档红线、测试假值和既有安全说明；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；implementation commit `f3d97cc phase5: add compatibility example skills` 后 `git status --short --branch` = `## main...origin/main [ahead 97]`。 |
+| Next action | 进入 05-07 开发者文档与迁移指南 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -108,7 +108,7 @@ Step index：05-06
 - Commit 范围：只包含示例 Skill、fixtures/snapshots、direct tests 和相关文档。
 - Commit 前状态：`git status --short` 显示 05-06 范围内的 README、`crates/dock-cli`、`examples/fixtures/*/README.md`、`expected-test-skill.json`、component matrix、runbook、Phase 5 文档和 Plan 台账变更。
 - 纳入文件：`README.md`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`examples/fixtures/*/README.md`、`examples/fixtures/*/expected-test-skill.json`、`docs/architecture/component-compatibility-matrix.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-06-example-skills-compatibility-fixtures.md`。
-- Commit 后证据：待 implementation commit 后回填。
+- Commit 后证据：implementation commit `f3d97cc phase5: add compatibility example skills`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 97]`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase5: add compatibility example skills`
 
