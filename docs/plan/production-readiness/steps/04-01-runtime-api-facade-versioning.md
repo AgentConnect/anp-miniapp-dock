@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 18:28:18 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 18:53:14 +0800 |
+| Commit | `1b470d5` |
 | Review evidence | 2026-06-13 18:43:02 +0800 commit 前 Review：发现并修复 `RuntimeSkillSummary` 输出本机 skill root 绝对路径的问题，改为 digest `packageRef` 或 `local-dev-package`；发现含 `capability_token` 的 request DTO 派生 `Debug` 会扩大日志泄露风险，已移除 `RuntimeCallRequest` / `RuntimeDispatchComponentActionRequest` 的 `Debug` derive；发现 runtime validation report 可能回显本机路径、Authorization、token、private key 路径或 secret suggestion，已对 error message、validation issue path/message/suggestion 做二次 redaction 并补回归测试；确认 `expire_cards` / `close_session` 仅冻结稳定边界，不冒充生产 card/session store。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p dock-core runtime` 4 passed，覆盖 runtime version negotiation、validate/load/call/render/action/expire/audit/close、error JSON serialization、token/Authorization/path redaction；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/component-runtime crates/skill-loader docs/runbook docs/plan` 无输出；手工运行 `cargo run -q -p dock-cli -- call-api examples/coffee-skill searchDrinks '{}'` 和 `cargo run -q -p dock-cli -- call-api examples/coffee-skill confirmOrder '{}'` 抽样，CLI JSON 保持兼容且 validation error 为 stable code；敏感词抽样只命中 `crates/dock-core/tests/runtime_facade.rs` 中的刻意测试假值，未命中 Runtime API / CLI 输出样本。 |
-| Next action | 创建 `phase4: add runtime api facade` focused commit，随后回填 commit hash 并关闭本 Step |
+| Next action | 进入 04-02 IPC / SDK 形态与 Host 进程边界 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -71,7 +71,7 @@ Step index：04-01
 - [x] CLI 至少一个关键路径调用 facade，且 coffee E2E 不回归。
 - [x] Phase 4 文档记录 API contract 和 migration 影响。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -105,8 +105,8 @@ Step index：04-01
 - Commit 范围：只包含 Runtime API facade、直接 tests、CLI 接入和相关文档。
 - Commit 前状态：`git status --short` 只包含 04-01 Runtime facade 代码、测试和文档变更。
 - 纳入文件：`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-core/src/host.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/tests/runtime_facade.rs`、`crates/dock-cli/src/commands.rs`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness-roadmap.md`、本 Step 文档。
-- Commit 后证据：待 commit 后回填。
-- 遗留未提交变更：待 commit 后确认；若只有 closure 文档回填，将作为单独提交记录。
+- Commit 后证据：主实现 commit `1b470d5`；post-commit `git status --short --branch` = `## main...origin/main [ahead 63]`。
+- 遗留未提交变更：主实现提交后无未提交变更；本 closure 文档回填作为单独提交记录。
 - 建议消息：`phase4: add runtime api facade`
 
 ## 11. Blocked 处理
