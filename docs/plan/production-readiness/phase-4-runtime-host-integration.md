@@ -143,6 +143,16 @@ close_session(session)
 | Rollback / eviction | 支持 rollback pin，`evict_unpinned()` 不删除 retain set 或 rollback pin | cache cleanup、quarantine 生命周期和 privacy/delete hooks 后续由 04-08 承接。 |
 | Audit summary | `CachedSkillMetadata::audit_summary()` 输出 source type、package ref、publisher、skill、version、digest、supply-chain status、cache flags，并脱敏 package URL secret/query | 不输出本机 cache root 或 private path。 |
 
+当前 Step 04-08 已在 `skill-loader` 内冻结 Skill cache cleanup/quarantine contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| cleanup metadata | cache root 下写入外部 sidecar `*.dock-cache.json`，记录 `SkillCacheKey`、可选 `merchantDid`、package source summary、production-ready flag、quarantine flag 和 last-used timestamp | sidecar 不写入 Skill 包目录，避免改变包 digest；04-03 之前没有 sidecar 的 legacy cache 只能被全量 cleanup 匹配，不能按 publisher/Skill 反解。 |
+| dry-run/report | `SkillCacheCleanupPolicy` + `SkillCacheCleanupReport` 支持 dry-run、delete scope、retain set、quarantine purge policy 和 redaction metadata | report 不输出 cache root、本机绝对路径或 package URL secret/query；当前是 Rust API contract，不新增 CLI 命令。 |
+| scope cleanup | `SkillCacheCleanupScope` 可按 publisher DID、merchant DID、Skill id、version、digest 过滤；用于 Host/ops 后续串联 privacy/delete scope hooks | cache 目录名仍保持 04-03 的 publisher DID + Skill id + version + digest，不把 merchant DID 加入目录名。 |
+| rollback protection | cleanup 会保留 active retain set 和 `pin_rollback()` 记录的 rollback key | 错误清理若仍删除外部备份或部署级 cache，不在本地 contract 覆盖范围内。 |
+| quarantine lifecycle | `SkillCache::quarantine()` 写入 redacted reason；后续 `load_or_insert()` 看到 quarantined sidecar 会 fail closed；cleanup 可按 digest/scope purge quarantined cache | 真实远端 registry quarantine feed、签名吊销同步和 CI release report 仍待 Phase 6。 |
+
 04-03 不声明真实 ANP Agent registry、远端 zip 下载、生产签名算法 verifier 或生产 publisher trust policy 配置已完成；这些仍是 Phase 4/6 的后续 release blocker。
 
 ### 3.4 Runtime Config 与 Secret Store
@@ -223,7 +233,7 @@ close_session(session)
 1. token cache 持久化与恢复；已由 04-05 完成本地 contract 和 dev-only backend gate；
 2. scoped storage 持久化与 quota；已由 04-06 完成本地 contract、quota/restore/delete-scope gate 和 dev-only local file backend gate；
 3. persistent audit sink retention/export；已由 04-07 完成本地 contract、retention/export report、Runtime wiring 和高风险 audit unavailable fail-closed gate；
-4. Skill cache cleanup 与版本清理。
+4. Skill cache cleanup 与版本清理；已由 04-08 完成本地 API contract、dry-run/report、scope cleanup、rollback pin protection 和 quarantine fail-closed gate。
 
 ### 3.6 Host Adapter Contract
 

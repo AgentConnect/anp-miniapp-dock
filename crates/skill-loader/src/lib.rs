@@ -16,8 +16,10 @@ pub use package::{
 };
 pub use registry::{
     load_registry_skill, CachedSkill, CachedSkillMetadata, LocalSkillRegistry,
-    PackageSourceSummary, RegistrySkillEntry, SkillCache, SkillCacheKey, SkillReference,
-    SkillReferenceKind, SkillRegistry, SkillVersionSelector,
+    PackageSourceSummary, RegistrySkillEntry, SkillCache, SkillCacheCleanupAction,
+    SkillCacheCleanupEntry, SkillCacheCleanupPolicy, SkillCacheCleanupReport,
+    SkillCacheCleanupScope, SkillCacheEntryMetadata, SkillCacheKey, SkillCacheReportRedaction,
+    SkillReference, SkillReferenceKind, SkillRegistry, SkillVersionSelector,
 };
 pub use resolver::{
     resolve_api_module, resolve_component_path, resolve_package_path, resolve_skill_path,

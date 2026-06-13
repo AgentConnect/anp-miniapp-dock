@@ -1,7 +1,8 @@
 use skill_loader::{
     compute_package_digest, development_signature_value, load_registry_skill,
     load_skill_with_integrity_policy, CachedSkillMetadata, LocalSkillRegistry, PackageDigest,
-    PackageIntegrityPolicy, PackageIntegrityStatus, RegistrySkillEntry, SkillCache, SkillCacheKey,
+    PackageIntegrityPolicy, PackageIntegrityStatus, RegistrySkillEntry, SkillCache,
+    SkillCacheCleanupAction, SkillCacheCleanupPolicy, SkillCacheCleanupScope, SkillCacheKey,
     SkillPackageError, SkillReference, SkillReferenceKind, SkillVersionSelector,
     DEVELOPMENT_SIGNATURE_ALGORITHM,
 };
@@ -223,6 +224,229 @@ fn cache_audit_summary_redacts_package_url_secrets() {
 }
 
 #[test]
+fn cache_cleanup_dry_run_reports_scope_without_paths_or_url_secrets() {
+    let publisher = "did:wba:trusted.example";
+    let merchant = "did:wba:merchant.example";
+    let skill = signed_skill("cache-cleanup-dry-run", "coffee", "1.0.0", publisher);
+    let cache_dir = TestCacheDir::new("cache-cleanup-dry-run");
+    let mut entry = registry_entry("coffee", "1.0.0", publisher, &skill);
+    entry.merchant_did = Some(merchant.to_owned());
+    entry.package_url = Some(
+        "https://registry.example.invalid/coffee.zip?token=capability-secret-token".to_owned(),
+    );
+    let registry = LocalSkillRegistry::new([entry]);
+    let mut cache = SkillCache::new(cache_dir.path());
+    let reference = SkillReference::registry_id("coffee", SkillVersionSelector::Latest, None);
+    let policy = PackageIntegrityPolicy::production([publisher]);
+    let (_, metadata) =
+        load_registry_skill(&registry, &mut cache, &reference, &policy).expect("skill loads");
+
+    let report = cache
+        .cleanup(SkillCacheCleanupPolicy::dry_run(
+            SkillCacheCleanupScope::all()
+                .publisher(publisher)
+                .merchant(merchant)
+                .skill("coffee"),
+        ))
+        .expect("dry-run cleanup report");
+
+    assert!(report.dry_run);
+    assert_eq!(report.scanned_count, 1);
+    assert_eq!(report.matched_count, 1);
+    assert_eq!(report.removed_count, 0);
+    assert_eq!(report.entries[0].action, SkillCacheCleanupAction::Remove);
+    assert_eq!(report.entries[0].key, Some(metadata.key.clone()));
+    assert_eq!(report.entries[0].merchant_did.as_deref(), Some(merchant));
+    assert!(cache.root().join(metadata.key.directory_name()).exists());
+    let rendered = serde_json::to_string(&report).expect("report serializes");
+    assert!(!rendered.contains(cache.root().to_string_lossy().as_ref()));
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("?token="));
+    assert!(rendered.contains("\"rootPathVisible\":false"));
+}
+
+#[test]
+fn cache_cleanup_delete_scope_removes_matching_cache_and_metadata_only() {
+    let publisher = "did:wba:trusted.example";
+    let other_publisher = "did:wba:other.example";
+    let merchant = "did:wba:merchant.example";
+    let skill_a = signed_skill("cache-cleanup-delete-a", "coffee", "1.0.0", publisher);
+    let skill_b = signed_skill("cache-cleanup-delete-b", "tea", "1.0.0", other_publisher);
+    let cache_dir = TestCacheDir::new("cache-cleanup-delete");
+    let mut entry_a = registry_entry("coffee", "1.0.0", publisher, &skill_a);
+    entry_a.merchant_did = Some(merchant.to_owned());
+    let registry = LocalSkillRegistry::new([
+        entry_a,
+        registry_entry("tea", "1.0.0", other_publisher, &skill_b),
+    ]);
+    let mut cache = SkillCache::new(cache_dir.path());
+    let policy = PackageIntegrityPolicy::production([publisher, other_publisher]);
+    let (_, coffee_metadata) = load_registry_skill(
+        &registry,
+        &mut cache,
+        &SkillReference::registry_id(
+            "coffee",
+            SkillVersionSelector::Latest,
+            Some(publisher.to_owned()),
+        ),
+        &policy,
+    )
+    .expect("coffee loads");
+    let (_, tea_metadata) = load_registry_skill(
+        &registry,
+        &mut cache,
+        &SkillReference::registry_id(
+            "tea",
+            SkillVersionSelector::Latest,
+            Some(other_publisher.to_owned()),
+        ),
+        &policy,
+    )
+    .expect("tea loads");
+
+    let report = cache
+        .cleanup(SkillCacheCleanupPolicy::delete_scope(
+            SkillCacheCleanupScope::all().merchant(merchant),
+        ))
+        .expect("cleanup removes merchant scope");
+
+    assert_eq!(report.matched_count, 1);
+    assert_eq!(report.removed_count, 1);
+    assert!(!cache
+        .root()
+        .join(coffee_metadata.key.directory_name())
+        .exists());
+    assert!(!cache
+        .root()
+        .join(format!(
+            "{}.dock-cache.json",
+            coffee_metadata.key.directory_name()
+        ))
+        .exists());
+    assert!(cache
+        .root()
+        .join(tea_metadata.key.directory_name())
+        .exists());
+}
+
+#[test]
+fn cache_cleanup_preserves_rollback_pin_and_active_retain() {
+    let publisher = "did:wba:trusted.example";
+    let v1 = signed_skill("cache-cleanup-pin-v1", "coffee", "1.0.0", publisher);
+    let v2 = signed_skill("cache-cleanup-pin-v2", "coffee", "1.1.0", publisher);
+    let v3 = signed_skill("cache-cleanup-pin-v3", "coffee", "1.2.0", publisher);
+    let cache_dir = TestCacheDir::new("cache-cleanup-pin");
+    let registry = LocalSkillRegistry::new([
+        registry_entry("coffee", "1.0.0", publisher, &v1),
+        registry_entry("coffee", "1.1.0", publisher, &v2),
+        registry_entry("coffee", "1.2.0", publisher, &v3),
+    ]);
+    let mut cache = SkillCache::new(cache_dir.path());
+    let policy = PackageIntegrityPolicy::production([publisher]);
+    let (_, pinned_metadata) = load_registry_skill(
+        &registry,
+        &mut cache,
+        &SkillReference::registry_id(
+            "coffee",
+            SkillVersionSelector::Pinned("1.0.0".to_owned()),
+            Some(publisher.to_owned()),
+        ),
+        &policy,
+    )
+    .expect("pinned loads");
+    let (_, retained_metadata) = load_registry_skill(
+        &registry,
+        &mut cache,
+        &SkillReference::registry_id(
+            "coffee",
+            SkillVersionSelector::Pinned("1.1.0".to_owned()),
+            Some(publisher.to_owned()),
+        ),
+        &policy,
+    )
+    .expect("retained loads");
+    let (_, stale_metadata) = load_registry_skill(
+        &registry,
+        &mut cache,
+        &SkillReference::registry_id(
+            "coffee",
+            SkillVersionSelector::Pinned("1.2.0".to_owned()),
+            Some(publisher.to_owned()),
+        ),
+        &policy,
+    )
+    .expect("stale loads");
+    cache.pin_rollback(pinned_metadata.key.clone());
+
+    let report = cache
+        .cleanup(
+            SkillCacheCleanupPolicy::delete_scope(SkillCacheCleanupScope::all().skill("coffee"))
+                .retain(retained_metadata.key.clone()),
+        )
+        .expect("cleanup preserves pins");
+
+    assert_eq!(report.matched_count, 3);
+    assert_eq!(report.retained_count, 2);
+    assert_eq!(report.removed_count, 1);
+    assert!(cache
+        .root()
+        .join(pinned_metadata.key.directory_name())
+        .exists());
+    assert!(cache
+        .root()
+        .join(retained_metadata.key.directory_name())
+        .exists());
+    assert!(!cache
+        .root()
+        .join(stale_metadata.key.directory_name())
+        .exists());
+    assert!(report
+        .entries
+        .iter()
+        .any(|entry| entry.retained_by_rollback_pin));
+    assert!(report
+        .entries
+        .iter()
+        .any(|entry| entry.retained_by_active_retain));
+}
+
+#[test]
+fn cache_quarantine_blocks_reload_and_cleanup_can_purge_it() {
+    let publisher = "did:wba:trusted.example";
+    let skill = signed_skill("cache-quarantine", "coffee", "1.0.0", publisher);
+    let cache_dir = TestCacheDir::new("cache-quarantine");
+    let entry = registry_entry("coffee", "1.0.0", publisher, &skill);
+    let key = entry.cache_key();
+    let registry = LocalSkillRegistry::new([entry]);
+    let mut cache = SkillCache::new(cache_dir.path());
+    let reference = SkillReference::registry_id("coffee", SkillVersionSelector::Latest, None);
+    let policy = PackageIntegrityPolicy::production([publisher]);
+    load_registry_skill(&registry, &mut cache, &reference, &policy).expect("initial load caches");
+
+    let quarantined = cache
+        .quarantine(&key, "Authorization Bearer secret-token")
+        .expect("cache quarantine writes metadata");
+    assert!(quarantined.quarantined);
+    assert_eq!(quarantined.quarantine_reason.as_deref(), Some("[REDACTED]"));
+
+    let error = load_registry_skill(&registry, &mut cache, &reference, &policy)
+        .expect_err("quarantined cache cannot reload");
+    assert!(matches!(
+        error,
+        SkillPackageError::PackageQuarantined { reason } if reason == "[REDACTED]"
+    ));
+
+    let report = cache
+        .cleanup(SkillCacheCleanupPolicy::delete_scope(
+            SkillCacheCleanupScope::all().digest(key.digest.clone()),
+        ))
+        .expect("cleanup purges quarantined cache");
+    assert_eq!(report.quarantined_count, 1);
+    assert_eq!(report.removed_count, 1);
+    assert!(!cache.root().join(key.directory_name()).exists());
+}
+
+#[test]
 fn skill_reference_supports_local_path_and_package_url_shapes() {
     let publisher = "did:wba:trusted.example";
     let skill = signed_skill("registry-ref-shapes", "coffee", "1.0.0", publisher);
@@ -355,6 +579,7 @@ fn registry_entry(
     RegistrySkillEntry {
         skill_id: skill_id.to_owned(),
         publisher_did: publisher.to_owned(),
+        merchant_did: None,
         version: version.to_owned(),
         digest: digest.value,
         package_path: skill.path().to_path_buf(),

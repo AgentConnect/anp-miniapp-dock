@@ -1,11 +1,16 @@
 use crate::integrity::{compute_package_digest, PackageIntegrityPolicy, PackageIntegrityReport};
 use crate::package::{load_skill_with_integrity_policy, LoadedSkill};
 use crate::resolver::{resolve_skill_path, SkillPackageError};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const CACHE_METADATA_SUFFIX: &str = ".dock-cache.json";
+const CACHE_REDACTION_POLICY: &str = "dock.skill-cache.redaction.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillReference {
@@ -100,6 +105,7 @@ pub enum SkillVersionSelector {
 pub struct RegistrySkillEntry {
     pub skill_id: String,
     pub publisher_did: String,
+    pub merchant_did: Option<String>,
     pub version: String,
     pub digest: String,
     pub package_path: PathBuf,
@@ -177,7 +183,8 @@ impl SkillRegistry for LocalSkillRegistry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillCacheKey {
     pub publisher_did: String,
     pub skill_id: String,
@@ -200,11 +207,14 @@ impl SkillCacheKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachedSkillMetadata {
     pub key: SkillCacheKey,
+    pub merchant_did: Option<String>,
     pub package_source: PackageSourceSummary,
     pub package_ref: String,
     pub integrity: PackageIntegrityReport,
     pub readonly: bool,
     pub quarantined: bool,
+    pub quarantine_reason: Option<String>,
+    pub last_used_at_ms: u64,
 }
 
 impl CachedSkillMetadata {
@@ -213,6 +223,7 @@ impl CachedSkillMetadata {
             "packageSource": self.package_source,
             "packageRef": self.package_ref,
             "publisherDid": self.key.publisher_did,
+            "merchantDid": self.merchant_did,
             "skillId": self.key.skill_id,
             "version": self.key.version,
             "digest": {
@@ -229,6 +240,8 @@ impl CachedSkillMetadata {
             "cache": {
                 "readonly": self.readonly,
                 "quarantined": self.quarantined,
+                "quarantineReason": self.quarantine_reason,
+                "lastUsedAtMs": self.last_used_at_ms,
             }
         })
     }
@@ -240,12 +253,211 @@ pub struct CachedSkill {
     pub metadata: CachedSkillMetadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageSourceSummary {
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SkillCacheCleanupScope {
+    pub publisher_did: Option<String>,
+    pub merchant_did: Option<String>,
+    pub skill_id: Option<String>,
+    pub version: Option<String>,
+    pub digest: Option<String>,
+}
+
+impl SkillCacheCleanupScope {
+    pub fn all() -> Self {
+        Self::default()
+    }
+
+    pub fn publisher(mut self, publisher_did: impl Into<String>) -> Self {
+        self.publisher_did = Some(publisher_did.into());
+        self
+    }
+
+    pub fn merchant(mut self, merchant_did: impl Into<String>) -> Self {
+        self.merchant_did = Some(merchant_did.into());
+        self
+    }
+
+    pub fn skill(mut self, skill_id: impl Into<String>) -> Self {
+        self.skill_id = Some(skill_id.into());
+        self
+    }
+
+    pub fn version(mut self, version: impl Into<String>) -> Self {
+        self.version = Some(version.into());
+        self
+    }
+
+    pub fn digest(mut self, digest: impl Into<String>) -> Self {
+        self.digest = Some(digest.into());
+        self
+    }
+
+    fn matches(&self, metadata: Option<&SkillCacheEntryMetadata>) -> bool {
+        let Some(metadata) = metadata else {
+            return self.publisher_did.is_none()
+                && self.merchant_did.is_none()
+                && self.skill_id.is_none()
+                && self.version.is_none()
+                && self.digest.is_none();
+        };
+        self.publisher_did
+            .as_ref()
+            .is_none_or(|publisher_did| &metadata.key.publisher_did == publisher_did)
+            && self
+                .merchant_did
+                .as_ref()
+                .is_none_or(|merchant_did| metadata.merchant_did.as_ref() == Some(merchant_did))
+            && self
+                .skill_id
+                .as_ref()
+                .is_none_or(|skill_id| &metadata.key.skill_id == skill_id)
+            && self
+                .version
+                .as_ref()
+                .is_none_or(|version| &metadata.key.version == version)
+            && self
+                .digest
+                .as_ref()
+                .is_none_or(|digest| &metadata.key.digest == digest)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillCacheCleanupPolicy {
+    pub scope: SkillCacheCleanupScope,
+    pub retain: BTreeSet<SkillCacheKey>,
+    pub dry_run: bool,
+    pub purge_quarantined: bool,
+}
+
+impl SkillCacheCleanupPolicy {
+    pub fn dry_run(scope: SkillCacheCleanupScope) -> Self {
+        Self {
+            scope,
+            retain: BTreeSet::new(),
+            dry_run: true,
+            purge_quarantined: true,
+        }
+    }
+
+    pub fn delete_scope(scope: SkillCacheCleanupScope) -> Self {
+        Self {
+            scope,
+            retain: BTreeSet::new(),
+            dry_run: false,
+            purge_quarantined: true,
+        }
+    }
+
+    pub fn retain(mut self, key: SkillCacheKey) -> Self {
+        self.retain.insert(key);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCacheCleanupReport {
+    pub dry_run: bool,
+    pub scanned_count: usize,
+    pub matched_count: usize,
+    pub retained_count: usize,
+    pub removed_count: usize,
+    pub skipped_count: usize,
+    pub quarantined_count: usize,
+    pub entries: Vec<SkillCacheCleanupEntry>,
+    pub redaction: SkillCacheReportRedaction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCacheCleanupEntry {
+    pub cache_ref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<SkillCacheKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merchant_did: Option<String>,
+    pub action: SkillCacheCleanupAction,
+    pub reason: String,
+    pub retained_by_active_retain: bool,
+    pub retained_by_rollback_pin: bool,
+    pub quarantined: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkillCacheCleanupAction {
+    Retain,
+    Remove,
+    Skip,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCacheReportRedaction {
+    pub marker: String,
+    pub policy: String,
+    pub root_path_visible: bool,
+    pub package_url_secrets_visible: bool,
+}
+
+impl Default for SkillCacheReportRedaction {
+    fn default() -> Self {
+        Self {
+            marker: "[REDACTED]".to_owned(),
+            policy: CACHE_REDACTION_POLICY.to_owned(),
+            root_path_visible: false,
+            package_url_secrets_visible: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCacheEntryMetadata {
+    pub key: SkillCacheKey,
+    pub merchant_did: Option<String>,
+    pub package_source: PackageSourceSummary,
+    pub package_ref: String,
+    pub production_ready: bool,
+    pub quarantined: bool,
+    pub quarantine_reason: Option<String>,
+    pub last_used_at_ms: u64,
+}
+
+impl SkillCacheEntryMetadata {
+    fn minimal(key: SkillCacheKey, merchant_did: Option<String>, last_used_at_ms: u64) -> Self {
+        Self {
+            package_source: PackageSourceSummary {
+                source_type: "unknown".to_owned(),
+                url: None,
+            },
+            package_ref: format!("sha256:{}", key.digest),
+            production_ready: false,
+            quarantined: false,
+            quarantine_reason: None,
+            key,
+            merchant_did,
+            last_used_at_ms,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ScannedSkillCacheEntry {
+    cache_ref: String,
+    cache_dir: PathBuf,
+    metadata_path: PathBuf,
+    metadata: Option<SkillCacheEntryMetadata>,
+    has_cache_dir: bool,
 }
 
 pub struct SkillCache {
@@ -270,6 +482,17 @@ impl SkillCache {
         entry: &RegistrySkillEntry,
         policy: &PackageIntegrityPolicy,
     ) -> Result<CachedSkill, SkillPackageError> {
+        let key = entry.cache_key();
+        if let Some(metadata) = self.read_metadata(&key)? {
+            if metadata.quarantined {
+                return Err(SkillPackageError::PackageQuarantined {
+                    reason: metadata
+                        .quarantine_reason
+                        .unwrap_or_else(|| "cache_quarantined".to_owned()),
+                });
+            }
+        }
+
         let source_root = resolve_skill_path(&entry.package_path)?;
         let actual_digest = compute_package_digest(&source_root)?;
         if actual_digest.value != entry.digest {
@@ -279,7 +502,6 @@ impl SkillCache {
         }
         load_skill_with_integrity_policy(&source_root, policy)?;
 
-        let key = entry.cache_key();
         let cache_dir = self.root.join(key.directory_name());
         let root = if cache_dir.exists() {
             set_readonly_recursive(&cache_dir)?;
@@ -302,6 +524,7 @@ impl SkillCache {
         }
         let metadata = CachedSkillMetadata {
             key,
+            merchant_did: entry.merchant_did.clone(),
             package_source: PackageSourceSummary {
                 source_type: if entry.package_url.is_some() {
                     "package-url".to_owned()
@@ -314,7 +537,10 @@ impl SkillCache {
             integrity: loaded.integrity,
             readonly: is_readonly_package(&root)?,
             quarantined: false,
+            quarantine_reason: None,
+            last_used_at_ms: now_ms(),
         };
+        self.write_metadata(&metadata)?;
         Ok(CachedSkill { root, metadata })
     }
 
@@ -338,36 +564,284 @@ impl SkillCache {
             .get(&rollback_scope(publisher_did, skill_id))
     }
 
-    pub fn evict_unpinned(&self, retain: impl IntoIterator<Item = SkillCacheKey>) -> usize {
-        let retain = retain.into_iter().collect::<BTreeSet<_>>();
-        let pinned = self
+    pub fn quarantine(
+        &self,
+        key: &SkillCacheKey,
+        reason: impl Into<String>,
+    ) -> Result<SkillCacheEntryMetadata, SkillPackageError> {
+        let metadata = self
+            .read_metadata(key)?
+            .unwrap_or_else(|| SkillCacheEntryMetadata::minimal(key.clone(), None, now_ms()));
+        let metadata = SkillCacheEntryMetadata {
+            quarantined: true,
+            quarantine_reason: Some(redact_cache_text(&reason.into())),
+            production_ready: false,
+            last_used_at_ms: now_ms(),
+            ..metadata
+        };
+        self.write_entry_metadata(&metadata)?;
+        Ok(metadata)
+    }
+
+    pub fn cleanup(
+        &self,
+        policy: SkillCacheCleanupPolicy,
+    ) -> Result<SkillCacheCleanupReport, SkillPackageError> {
+        let scanned = self.scan_entries()?;
+        let rollback_pins = self
             .rollback_pins
             .values()
             .cloned()
             .collect::<BTreeSet<_>>();
-        let Ok(entries) = fs::read_dir(&self.root) else {
-            return 0;
+        let mut report = SkillCacheCleanupReport {
+            dry_run: policy.dry_run,
+            scanned_count: scanned.len(),
+            matched_count: 0,
+            retained_count: 0,
+            removed_count: 0,
+            skipped_count: 0,
+            quarantined_count: 0,
+            entries: Vec::new(),
+            redaction: SkillCacheReportRedaction::default(),
         };
-        let mut removed = 0;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
+
+        for entry in scanned {
+            let key = entry.metadata.as_ref().map(|metadata| metadata.key.clone());
+            let merchant_did = entry
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.merchant_did.clone());
+            let cache_ref = entry.cache_ref.clone();
+            let quarantined = entry
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.quarantined);
+            if quarantined {
+                report.quarantined_count += 1;
+            }
+
+            if !policy.scope.matches(entry.metadata.as_ref()) {
+                report.skipped_count += 1;
+                report.entries.push(SkillCacheCleanupEntry {
+                    cache_ref,
+                    key,
+                    merchant_did,
+                    action: SkillCacheCleanupAction::Skip,
+                    reason: "scope_mismatch".to_owned(),
+                    retained_by_active_retain: false,
+                    retained_by_rollback_pin: false,
+                    quarantined,
+                });
                 continue;
             }
-            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            report.matched_count += 1;
+
+            let retained_by_active_retain =
+                key.as_ref().is_some_and(|key| policy.retain.contains(key));
+            let retained_by_rollback_pin =
+                key.as_ref().is_some_and(|key| rollback_pins.contains(key));
+            if retained_by_active_retain || retained_by_rollback_pin {
+                report.retained_count += 1;
+                report.entries.push(SkillCacheCleanupEntry {
+                    cache_ref,
+                    key,
+                    merchant_did,
+                    action: SkillCacheCleanupAction::Retain,
+                    reason: if retained_by_rollback_pin {
+                        "rollback_pin".to_owned()
+                    } else {
+                        "active_retain".to_owned()
+                    },
+                    retained_by_active_retain,
+                    retained_by_rollback_pin,
+                    quarantined,
+                });
+                continue;
+            }
+
+            if quarantined && !policy.purge_quarantined {
+                report.retained_count += 1;
+                report.entries.push(SkillCacheCleanupEntry {
+                    cache_ref,
+                    key,
+                    merchant_did,
+                    action: SkillCacheCleanupAction::Retain,
+                    reason: "quarantine_retained_by_policy".to_owned(),
+                    retained_by_active_retain: false,
+                    retained_by_rollback_pin: false,
+                    quarantined,
+                });
+                continue;
+            }
+
+            if !policy.dry_run {
+                self.remove_scanned_entry(&entry)?;
+                report.removed_count += 1;
+            }
+            report.entries.push(SkillCacheCleanupEntry {
+                cache_ref,
+                key,
+                merchant_did,
+                action: SkillCacheCleanupAction::Remove,
+                reason: if quarantined {
+                    "quarantine_purge".to_owned()
+                } else {
+                    "matched_scope".to_owned()
+                },
+                retained_by_active_retain: false,
+                retained_by_rollback_pin: false,
+                quarantined,
+            });
+        }
+
+        Ok(report)
+    }
+
+    pub fn evict_unpinned(&self, retain: impl IntoIterator<Item = SkillCacheKey>) -> usize {
+        let policy = retain.into_iter().fold(
+            SkillCacheCleanupPolicy::delete_scope(SkillCacheCleanupScope::all()),
+            |policy, key| policy.retain(key),
+        );
+        self.cleanup(policy)
+            .map(|report| report.removed_count)
+            .unwrap_or(0)
+    }
+
+    fn read_metadata(
+        &self,
+        key: &SkillCacheKey,
+    ) -> Result<Option<SkillCacheEntryMetadata>, SkillPackageError> {
+        self.read_metadata_path(&metadata_path_for_key(&self.root, key))
+    }
+
+    fn read_metadata_path(
+        &self,
+        path: &Path,
+    ) -> Result<Option<SkillCacheEntryMetadata>, SkillPackageError> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        let source = fs::read_to_string(path).map_err(|source| SkillPackageError::ReadFile {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        serde_json::from_str(&source).map(Some).map_err(|error| {
+            SkillPackageError::InvalidPackageEntry {
+                path: path.to_path_buf(),
+                reason: format!("cache metadata is invalid: {error}"),
+            }
+        })
+    }
+
+    fn write_metadata(&self, metadata: &CachedSkillMetadata) -> Result<(), SkillPackageError> {
+        self.write_entry_metadata(&SkillCacheEntryMetadata {
+            key: metadata.key.clone(),
+            merchant_did: metadata.merchant_did.clone(),
+            package_source: metadata.package_source.clone(),
+            package_ref: metadata.package_ref.clone(),
+            production_ready: metadata.integrity.production_ready,
+            quarantined: metadata.quarantined,
+            quarantine_reason: metadata.quarantine_reason.clone(),
+            last_used_at_ms: metadata.last_used_at_ms,
+        })
+    }
+
+    fn write_entry_metadata(
+        &self,
+        metadata: &SkillCacheEntryMetadata,
+    ) -> Result<(), SkillPackageError> {
+        fs::create_dir_all(&self.root).map_err(|source| SkillPackageError::ReadFile {
+            path: self.root.clone(),
+            source,
+        })?;
+        let path = metadata_path_for_key(&self.root, &metadata.key);
+        let tmp_path = path.with_extension("json.tmp");
+        let source = serde_json::to_string(metadata).map_err(|error| {
+            SkillPackageError::InvalidPackageEntry {
+                path: path.clone(),
+                reason: format!("cache metadata serialization failed: {error}"),
+            }
+        })?;
+        fs::write(&tmp_path, source).map_err(|source| SkillPackageError::ReadFile {
+            path: tmp_path.clone(),
+            source,
+        })?;
+        fs::rename(&tmp_path, &path).map_err(|source| SkillPackageError::ReadFile { path, source })
+    }
+
+    fn scan_entries(&self) -> Result<Vec<ScannedSkillCacheEntry>, SkillPackageError> {
+        if !self.root.exists() {
+            return Ok(Vec::new());
+        }
+        let entries = fs::read_dir(&self.root).map_err(|source| SkillPackageError::ReadFile {
+            path: self.root.clone(),
+            source,
+        })?;
+        let mut scanned = BTreeMap::<String, ScannedSkillCacheEntry>::new();
+        for entry in entries {
+            let entry = entry.map_err(|source| SkillPackageError::ReadFile {
+                path: self.root.clone(),
+                source,
+            })?;
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
                 continue;
             };
-            let keep_by_retain = retain.iter().any(|key| key.directory_name() == name);
-            let keep_by_pin = pinned.iter().any(|key| key.directory_name() == name);
-            if keep_by_retain || keep_by_pin {
-                continue;
-            }
-            let _ = make_writable_recursive(&path);
-            if fs::remove_dir_all(&path).is_ok() {
-                removed += 1;
+            if path.is_dir() {
+                scanned
+                    .entry(file_name.to_owned())
+                    .or_insert_with(|| ScannedSkillCacheEntry {
+                        cache_ref: file_name.to_owned(),
+                        cache_dir: path.clone(),
+                        metadata_path: self
+                            .root
+                            .join(format!("{file_name}{CACHE_METADATA_SUFFIX}")),
+                        metadata: None,
+                        has_cache_dir: true,
+                    })
+                    .has_cache_dir = true;
+            } else if let Some(cache_ref) = file_name.strip_suffix(CACHE_METADATA_SUFFIX) {
+                let metadata = self.read_metadata_path(&path)?;
+                scanned
+                    .entry(cache_ref.to_owned())
+                    .or_insert_with(|| ScannedSkillCacheEntry {
+                        cache_ref: cache_ref.to_owned(),
+                        cache_dir: self.root.join(cache_ref),
+                        metadata_path: path.clone(),
+                        metadata: None,
+                        has_cache_dir: false,
+                    })
+                    .metadata = metadata;
             }
         }
-        removed
+        for entry in scanned.values_mut() {
+            if entry.metadata.is_none() {
+                entry.metadata = self.read_metadata_path(&entry.metadata_path)?;
+            }
+        }
+        Ok(scanned.into_values().collect())
+    }
+
+    fn remove_scanned_entry(
+        &self,
+        entry: &ScannedSkillCacheEntry,
+    ) -> Result<(), SkillPackageError> {
+        if entry.has_cache_dir && entry.cache_dir.exists() {
+            make_writable_recursive(&entry.cache_dir)?;
+            fs::remove_dir_all(&entry.cache_dir).map_err(|source| SkillPackageError::ReadFile {
+                path: entry.cache_dir.clone(),
+                source,
+            })?;
+        }
+        if entry.metadata_path.exists() {
+            fs::remove_file(&entry.metadata_path).map_err(|source| {
+                SkillPackageError::ReadFile {
+                    path: entry.metadata_path.clone(),
+                    source,
+                }
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -393,6 +867,7 @@ fn registry_entry_from_local_path(
             .publisher_did
             .clone()
             .unwrap_or_else(|| "did:wba:local-dev.example".to_owned()),
+        merchant_did: None,
         version: reference
             .version
             .clone()
@@ -682,4 +1157,37 @@ fn redacted_package_url(url: &str) -> String {
         return "[REDACTED]".to_owned();
     }
     url.split(['?', '#']).next().unwrap_or(url).to_owned()
+}
+
+fn metadata_path_for_key(root: &Path, key: &SkillCacheKey) -> PathBuf {
+    root.join(format!("{}{}", key.directory_name(), CACHE_METADATA_SUFFIX))
+}
+
+fn redact_cache_text(text: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    if [
+        "authorization",
+        "signature",
+        "token",
+        "secret",
+        "credential",
+        "private",
+        "password",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+        || lower.contains("/tmp/")
+        || lower.contains("\\users\\")
+        || lower.contains("/home/")
+    {
+        return "[REDACTED]".to_owned();
+    }
+    text.to_owned()
+}
+
+fn now_ms() -> u64 {
+    let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        return 0;
+    };
+    duration.as_millis().try_into().unwrap_or(u64::MAX)
 }
