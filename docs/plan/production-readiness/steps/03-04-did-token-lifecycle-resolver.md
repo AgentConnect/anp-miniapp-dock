@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 14:49:53 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 15:11:49 +0800 |
+| Commit | `24a8f10` |
 | Review evidence | 2026-06-13 15:10:32 +0800 commit 前 Review 已记录：修复 `TrustedDidDocumentResolver` 仅校验 DID document `id`、未校验完整 trust anchor 内容的问题；确认 token 仍只在 Host/runtime 边界，`verify()` 兼容普通 JWT 校验，新增 lifecycle API 显式处理 revoke / high-risk `ConsumeOnce` jti gate，challenge 登录尝试即消费且 resolver/cache/replay failure 均 fail closed |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p anp-adapter token` 18 passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter challenge` 15 unit + 1 integration passed；`cargo test -p anp-adapter` 44 unit + 11 integration passed；`cargo test -p demo-server token` 5 unit + 1 integration passed；`cargo test -p demo-server` 7 lib + 4 main + 6 integration passed；`cargo test -p demo-server demo_signature_and_replayed_challenge_are_rejected` 1 passed；`cargo test -p js-runtime-quickjs wx_login` 3 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/demo-server crates/js-runtime-quickjs docs/security docs/runbook docs/plan` 无输出；敏感信息抽样命中测试假值、文档安全说明、redaction 断言和 `AuthMode::HttpSignatures` 常量，未发现真实 token/proof/Authorization/private key path 输出 |
-| Next action | 创建 focused commit 并回填 commit hash，然后进入 03-05 |
+| Next action | 进入 03-05 Consent Adapter 与持久化 Audit Sink |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,8 +72,8 @@ Step index：03-04
 - [x] DID resolver cache、TTL、trust anchor 和 failure policy 有 trait / tests / 文档证据。
 - [x] raw token、proof、Authorization、private key path 不进入 JS result、CLI JSON、日志、audit export 或 Render IR。
 - [x] Threat Model、Release Gates 和 runbook 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] Review 发现已经修复或明确记录。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 

@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-05
-状态：pending
+状态：in_progress
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | in_progress |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 15:11:49 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 03-04 完成后，启动 Consent/Audit 生产化 |
+| Next action | 正在阅读 consent-audit、dock-core consent flow、audit export 和 release gates，准备实现 Host consent adapter 与 persistent audit sink |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
