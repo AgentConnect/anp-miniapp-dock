@@ -131,7 +131,8 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 03-04 | DID / Token 生命周期与 Resolver 信任锚 | 01-04, 03-01, 03-03 | refresh/revoke/logout、jti replay、resolver cache/trust anchor | [production-readiness/steps/03-04-did-token-lifecycle-resolver.md](production-readiness/steps/03-04-did-token-lifecycle-resolver.md) | 必须 | pending |
 | 03-05 | Consent Adapter 与持久化 Audit Sink | 01-08, 03-01, 03-03 | Host consent adapter、ConsentProof、persistent audit、redacted export | [production-readiness/steps/03-05-consent-adapter-persistent-audit.md](production-readiness/steps/03-05-consent-adapter-persistent-audit.md) | 必须 | pending |
 | 03-06 | Skill 包完整性与供应链 Gate | 01-02, 03-01, 03-03 | digest、signature、publisher DID、trusted allowlist、quarantine | [production-readiness/steps/03-06-skill-package-integrity-supply-chain.md](production-readiness/steps/03-06-skill-package-integrity-supply-chain.md) | 必须 | pending |
-| 04-01 | Runtime API Facade 与版本化 | 02-06, 03-06 | public Runtime API、stable DTO/error、version、CLI 收敛 | [production-readiness/steps/04-01-runtime-api-facade-versioning.md](production-readiness/steps/04-01-runtime-api-facade-versioning.md) | 必须 | pending |
+| 03-07 | Phase 3 最终 Review 与整体验证 | 03-01, 03-02, 03-03, 03-04, 03-05, 03-06 | Phase 3 全局 Review 记录、整体验证证据、Phase 4 启动 gate | [production-readiness/steps/03-07-phase3-final-review-verification.md](production-readiness/steps/03-07-phase3-final-review-verification.md) | 必须 | pending |
+| 04-01 | Runtime API Facade 与版本化 | 02-06, 03-07 | public Runtime API、stable DTO/error、version、CLI 收敛 | [production-readiness/steps/04-01-runtime-api-facade-versioning.md](production-readiness/steps/04-01-runtime-api-facade-versioning.md) | 必须 | pending |
 | 04-02 | IPC / SDK 形态与 Host 进程边界 | 04-01 | local IPC/headless JSON/Rust SDK envelope、version/error/redaction | [production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md](production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md) | 必须 | pending |
 | 04-03 | Skill Registry / Cache 与版本回滚 | 03-06, 04-01 | registry ref、digest-keyed cache、version pin、rollback、eviction | [production-readiness/steps/04-03-skill-registry-cache-versioning.md](production-readiness/steps/04-03-skill-registry-cache-versioning.md) | 必须 | pending |
 | 04-04 | Runtime Config 与 Secret Store 边界 | 04-01 | non-secret runtime config、secret provider boundary、redaction | [production-readiness/steps/04-04-runtime-config-secret-store.md](production-readiness/steps/04-04-runtime-config-secret-store.md) | 必须 | pending |
@@ -188,7 +189,8 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 03-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-03 完成 |
 | 03-05 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-04 完成 |
 | 03-06 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-05 完成 |
-| 04-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-06 完成 |
+| 03-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-06 完成 |
+| 04-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-07 完成 |
 | 04-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-01 完成 |
 | 04-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-02 完成 |
 | 04-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-03 完成 |
@@ -266,6 +268,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 2026-06-12 | 新增 Phase 3 至 Phase 6 全部后续里程碑 Step 文档 | 将安全增强、生产运行时/Host、开发者体验、观测发布运营阶段拆成可由 Codex Goal 顺序执行的小 Plan | 03-01 至 06-06 | 是 |
 | 2026-06-12 | 修复计划 Review 发现：新增 02-07 final Review gate、前置 dynamic sandbox gate、拆分 Phase 4 持久化、标注 01-07 blocked 跳转 | 让 Codex Goal 恢复执行时不会跳过批次最终 Review，避免动态组件先于安全 gate 扩权，保持每个 Step 一个 focused commit | 01-07、02-05、02-06、02-07、03-01、04-04 至 04-10、05-05、06-01、06-03、06-05、06-06 | 是 |
 | 2026-06-13 | 同步 Step 拆分表状态、恢复指针和 02-07 closure evidence | 修复 Step 拆分表与执行台账不一致、final Review 关闭提交表述滞后、以及后续 Goal 仍显示从 01-05 开始的问题 | 01-05 至 02-07、03-01 | 是 |
+| 2026-06-13 | 新增 Phase 3 final Review gate | 按当前 Codex Goal 要求，Step 03-06 完成后必须执行可追踪的 Phase 3 最终 Review 与整体验证，不能直接进入 04-01 | 03-06、03-07、04-01 | 是 |
 
 变更规则：
 

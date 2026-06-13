@@ -15,7 +15,7 @@ Step index：03-06
 | Commit | 待记录 |
 | Review evidence | 待记录 |
 | Verification evidence | 待记录 |
-| Next action | 等待 03-05 完成后，启动 Skill 包供应链 Gate |
+| Next action | 等待 03-05 完成后，启动 Skill 包供应链 Gate；完成后进入 Step 03-07 Phase 3 最终 Review 与整体验证 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -42,7 +42,7 @@ Step index：03-06
 4. 加固 path boundary：symlink outside package、absolute path、zip slip、remote require、package cache read-only。
 5. 增加 tests：digest mismatch、signature mismatch、unknown publisher、symlink escape、absolute path、remote require、audit redaction。
 6. 更新 Threat Model、Release Gates、Phase 3 文档和开发者 validate 输出计划。
-7. 回填本 Step 和主 Plan 执行台账；Phase 3 完成后触发阶段 Review。
+7. 回填本 Step 和主 Plan 执行台账；完成后进入 Step 03-07 Phase 3 最终 Review 与整体验证，不得直接进入 Step 04-01。
 
 ## 5. 路径
 
@@ -54,7 +54,7 @@ Step index：03-06
 | `anp/anp-miniapp-dock/docs/security/threat-model.md` | 同步 package supply chain 控制 | 必须 |
 | `anp/anp-miniapp-dock/docs/runbook/release-gates.md` | package integrity release gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/phase-3-security-hardening.md` | 同步供应链完成状态 | 必须 |
-| `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账和 Phase 3 Review | 必须 |
+| `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` | 回填执行台账并指向 Step 03-07 final Review gate | 必须 |
 | `anp/anp-miniapp-dock/docs/plan/production-readiness/steps/03-06-skill-package-integrity-supply-chain.md` | 回填状态、证据、Review、commit | 必须 |
 
 ## 6. 依赖
@@ -120,9 +120,10 @@ Step index：03-06
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 03-06 小 Plan | 将 Skill 包完整性与供应链 Gate 拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-13 | 接入 Step 03-07 final Review gate | 按当前 Goal 要求，Phase 3 最终 Review 必须是可追踪 Step，不能只作为 free-form 下一步文字 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 
 - 风险：过早强制签名会破坏本地开发，过晚强制会留下供应链风险。
 - 回滚 / 回退：dev/local profile 可显式 warning，production profile 必须 fail closed 或 release blocker。
-- 后续文档：Phase 4 registry/cache 和 Phase 5 import/validate 必须复用本供应链 contract。
+- 后续文档：本 Step 完成后进入 Step 03-07，执行 Phase 3 最终全局 Review 和整体验证；Phase 4 registry/cache 和 Phase 5 import/validate 必须复用本供应链 contract。

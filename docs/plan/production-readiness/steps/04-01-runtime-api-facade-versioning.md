@@ -59,7 +59,7 @@ Step index：04-01
 
 ## 6. 依赖
 
-- 前置步骤：Step 02-06、Step 03-06。
+- 前置步骤：Step 02-06、Step 03-07。
 - 外部文档或决策：Phase 4 Runtime Host Integration、Release Gates、Threat Model。
 - 环境前提：Rust toolchain 1.88.0；无需外部 Host。
 
