@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 19:10:50 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 19:29:51 +0800 |
+| Commit | `81c32c9` |
 | Review evidence | 2026-06-13 19:28:30 +0800 commit 前 Review 已记录：修复 cache 命中未重新强制 readonly、unknown publisher 可能先复制进 cache、版本字符串排序不符合 `1.10.0 > 1.2.0`、package URL query/token 可能进入 audit summary、测试 readonly cache 目录清理不完整的问题；确认本 Step 只冻结本地 registry/cache contract，不声明真实远端 registry download、生产签名 verifier 或 deployment cache hardening 已完成 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p skill-loader cache` 3 passed；`cargo test -p skill-loader registry` 5 passed；`cargo test -p skill-loader package` 1 coffee package test + 3 registry-related tests under filter passed；`cargo test -p skill-loader` 14 package + 7 registry/cache tests passed；`cargo test -p dock-cli validate` 4 unit + 1 integration passed；`cargo test --workspace` 通过；`cargo clippy -p skill-loader --all-targets -- -D warnings` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/anp-adapter crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感串抽样仅命中测试假值和安全文档规则，未命中本机绝对路径 |
-| Next action | 创建 04-03 focused commit，随后回填 commit hash 并进入 04-04 |
+| Next action | 进入 04-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -115,8 +115,8 @@ Step index：04-03
 - Commit 范围：只包含 Skill registry/cache/versioning、直接 tests 和相关文档。
 - Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 66]`，未提交文件均为 04-03 registry/cache 代码、测试和直接文档。
 - 纳入文件：`crates/skill-loader/src/lib.rs`、`crates/skill-loader/src/registry.rs`、`crates/skill-loader/tests/skill_registry_cache.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-03-skill-registry-cache-versioning.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
-- Commit 后证据：待提交后回填 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：待提交后确认。
+- Commit 后证据：主实现 commit `81c32c9 phase4: add skill registry cache`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 67]`。
+- 遗留未提交变更：无；后续仅有本 Step closure 文档回填变更。
 - 建议消息：`phase4: add skill registry cache`
 
 ## 11. Blocked 处理
