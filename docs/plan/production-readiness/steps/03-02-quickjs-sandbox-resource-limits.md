@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 13:52:49 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 14:11:33 +0800 |
+| Commit | `1c4e784` |
 | Review evidence | 2026-06-13 14:06:07 +0800 commit 前 Review：修复 API VM console trace 因 `Rc::try_unwrap` 失败而丢失的问题；修复 `InvalidResult` 仍可能通过 serde 错误文本回显敏感 payload 的问题；确认 Atomic API VM WebSocket/timer globals deny、Promise job drain、console/result size、Component VM snapshot size、dynamic timer cleanup 与文档 gate 一致。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs sandbox` 通过；`cargo test -p js-runtime-quickjs limit` 2 passed；`cargo test -p js-runtime-quickjs console` 1 passed；`cargo test -p js-runtime-quickjs invalid_atomic` 1 passed；`cargo test -p js-runtime-quickjs pending_job` 1 passed；`cargo test -p component-runtime sandbox` 2 passed；`cargo test -p component-runtime dynamic` 5 passed + snapshot dynamic 2 passed；`cargo test -p component-runtime snapshot_size` 1 passed；`cargo test -p js-runtime-quickjs` 47 passed；`cargo test -p component-runtime` 53 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/js-runtime-quickjs crates/component-runtime docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值和 redaction 断言。 |
-| Next action | 创建 Step 03-02 focused commit |
+| Next action | 进入 Step 03-03 权限策略引擎与 allowlist decision |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -69,7 +69,7 @@ Step index：03-02
 - [x] 复核 Step 02-05 的 dynamic component gate 仍通过，且 Component expire/detach 后不能继续触发事件、timer 或高风险 action。
 - [x] Release Gates 将 sandbox escape regression 列为 required。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -111,8 +111,8 @@ Step index：03-02
 
 - Commit 前状态：`git status --short --branch` 显示仅 Step 03-02 范围内的 `crates/js-runtime-quickjs`、`crates/component-runtime`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 3 文档、主 Plan 和本 Step 文档变更。
 - 纳入文件：`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`crates/component-runtime/src/component_vm.rs`、`crates/component-runtime/tests/component_lifecycle.rs`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-3-security-hardening.md`、`docs/plan/production-readiness/phase-3-threat-model-and-controls.md`、主 Plan 和本 Step 文档。
-- Commit 后证据：待记录。
-- 遗留未提交变更：待记录。
+- Commit 后证据：implementation commit `1c4e784 phase3: harden quickjs sandbox limits`；post-commit `git status --short --branch` = `## main...origin/main [ahead 49]`，工作区无未提交实现变更。
+- 遗留未提交变更：仅本 Step 文档和主 Plan 的 commit hash / done 状态回填，准备单独创建 docs closure commit。
 
 ## 11. Blocked 处理
 
