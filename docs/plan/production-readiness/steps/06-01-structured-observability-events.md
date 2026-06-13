@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 03:41:41 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 04:03:32 +0800 |
+| Commit | `3fb65f0` |
 | Review evidence | 2026-06-14 03:59:38 +0800 commit 前 Review 已记录：确认 `dock-core::observability` 事件 schema、redaction policy、hashed user DID、RuntimeService emit hooks 和 tests 已覆盖当前公共 Runtime 入口；修复前期 UTF-8 截断和构造函数参数过多风险；确认事件 fields 不记录 raw arguments、token、Authorization、Signature、private key path、手机号、地址、文件内容或精确位置。剩余风险：`wx_api_call_*` / `request_*` 当前为稳定 schema 类型，尚未从 QuickJS / RequestBroker 细粒度路径 emit；06-02 必须接入 metrics/tracing bridge 时补真实链路事件和 trace propagation。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 103]`，工作区无未提交变更；已读取主 Plan、Step 06-01 文档、Phase 6 计划、Release Gates、RuntimeService/Orchestrator/Host/Audit/Component Runtime 相关源码和 runtime tests；已确认 Phase 5 final review commit `18ca5b2`、closure commit `ebec9b7`、closure evidence commit `8feb301`。`cargo fmt --check` 通过；`cargo test -p dock-core observability` 通过，实际命中 1 个 observability unit test 和 2 个 runtime observability tests；`cargo test -p dock-core runtime_observability` 通过，实际命中 2 个 runtime observability tests；`cargo test -p dock-core` 46 passed；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`git diff --check -- crates/dock-core docs/runbook docs/plan Cargo.toml Cargo.lock` 无输出；敏感串扫描仅命中测试假值、redaction 断言和安全/计划文档红线，未发现真实凭据或隐私 payload 泄露。 |
-| Next action | 创建 06-01 focused implementation commit，然后以单独 docs commit 关闭本 Step 并进入 06-02 |
+| Next action | 进入 06-02 Metrics / Tracing 与请求链路关联 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -71,7 +71,7 @@ Step index：06-01
 - [x] 事件 payload 不含 token、Authorization、signature、private key path、手机号、地址、文件内容或精确位置。
 - [x] Release Gates 增加 observability redaction 检查。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -102,17 +102,17 @@ Step index：06-01
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 observability event model/hooks、direct tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 103]`，未提交变更仅包含 06-01 observability event model/hooks、direct tests 和相关文档。
+- 纳入文件：`Cargo.lock`、`crates/dock-core/Cargo.toml`、`crates/dock-core/src/lib.rs`、`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/observability.rs`、`crates/dock-core/tests/runtime_facade.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-6-observability-release.md`、`docs/plan/production-readiness/steps/06-01-structured-observability-events.md`、`docs/runbook/release-gates.md`。
+- Commit 后证据：implementation commit `3fb65f0 phase6: add structured observability events`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 104]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase6: add structured observability events`
 
 ## 11. Blocked 处理
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 无 | 无 | 当前步骤 / 整体计划 | 无 blocker，进入 06-02 |
 
 ## 12. Plan 变更记录
 
