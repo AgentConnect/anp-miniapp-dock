@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 13:42:54 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 13:51:12 +0800 |
+| Commit | `a61a7e7` |
 | Review evidence | 2026-06-13 13:49:52 +0800 commit 前 Review：修复 Threat Model 中 Render IR schemaVersion/snapshot 与 unsupported registry 的旧 planned 表述；确认 L0-L4 分级、L3/L4 高风险能力矩阵、Phase 3 required gates、Phase 4/5 后续 gate 和 demo-only/mock 禁止项未冲突，planned gate 未被误写成已自动化。 |
 | Verification evidence | `git diff --check -- docs/security docs/runbook docs/architecture docs/plan` 无输出；`rg -n "L3|L4|ConsentGate|audit|redaction|fail closed" docs/security docs/runbook docs/architecture docs/plan/production-readiness` 命中高风险能力与控制说明；`rg -n "token|Authorization|signature|private key|phone|address|file content" docs/security docs/runbook docs/architecture docs/plan` 仅命中文档红线、mock/dev-only 示例、测试说明和计划台账；旧状态残留搜索无命中；新增/修改 Markdown 相对链接目标手工检查存在。 |
-| Next action | 准备创建 03-01 focused commit；commit 后回填 hash 和 done 状态 |
+| Next action | 进入 Step 03-02 QuickJS 沙箱逃逸回归与资源限制 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -69,7 +69,7 @@ Step index：03-01
 - [x] API/组件矩阵的 risk level 与 threat model 不冲突。
 - [x] 文档没有把 demo-only/mock/headless provider 写成 production-ready。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -109,7 +109,8 @@ Step index：03-01
 
 - Commit 前状态：`git status --short --branch` 显示仅 `docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-3-security-hardening.md`、`docs/plan/production-readiness/phase-3-threat-model-and-controls.md`、`docs/plan/production-readiness-roadmap.md` 和本 Step 文档变更。
 - 纳入文件：上述文件均属于 Step 03-01 threat model、安全分级、release gate 收敛和执行台账。
-- 遗留未提交变更：无与本 Step 无关的已知变更；commit hash 和 done 状态将在主体 commit 后用 closure commit 回填。
+- Commit 后证据：implementation commit `a61a7e7 docs: classify production security threats`；post-commit `git status --short --branch` = `## main...origin/main [ahead 47]`，工作区无未提交实现变更。
+- 遗留未提交变更：仅本 Step 文档和主 Plan 的 commit hash / done 状态回填，准备单独创建 docs closure commit。
 
 ## 11. Blocked 处理
 
