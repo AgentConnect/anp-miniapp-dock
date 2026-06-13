@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-01
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 23:39:11 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 23:53:11 +0800 |
+| Commit | `153027c` |
 | Review evidence | 2026-06-13 23:51:14 +0800 commit 前 Review 已记录：修复 validate `status` 同时表示命令成功和 release readiness 的歧义，改为 `status` / `reportStatus` 表示报告状态、`commandStatus` 表示 CLI 成功；修复 `skillRoot` 可能输出本机绝对路径的问题，改为 redacted `skillRef`；确认 release readiness 中 Host provider / persistence backend / snapshot gate 只报告为 not-evaluated 或 requires-fixture-gate，不误标 production-ready。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 86]`；已读取主 Plan、Step 05-01 文档、Phase 5/6 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；已补齐并提交 Phase 5/6 final Review gate，commit `b182076`。`cargo fmt --check` 通过；`cargo test -p dock-cli validate` 4 unit + 1 integration passed；`cargo test -p mcp-schema compatibility` 通过但 filter 命中 0 tests，实际 `mcp_validation` 15 filtered；`cargo run -p dock-cli -- validate examples/coffee-skill` 输出 `schemaVersion = dock.validate-report.v1`、`status = warning`、`commandStatus = ok`、`compatibilityLevel = demo-only`、releaseBlockers 含 `production_warning` 与 `supply_chain`，`skillRoot = examples/coffee-skill`；validate JSON 脱敏抽样未命中 `/home/`、`Authorization`、`Signature`、`capabilityToken`、private key path/material 或 package signature secret；`git diff --check -- crates/dock-cli crates/mcp-schema crates/skill-loader docs/runbook docs/plan README.md` 无输出；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
-| Next action | 创建 05-01 focused implementation commit，然后回填 commit hash 并进入 05-02 |
+| Next action | 进入 Step 05-02 CLI inspect Skill package |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：05-01
 - [x] JSON 输出 redacted，不含 token、Authorization、signature、private key path 或隐私原文。
 - [x] Release Gates 和 Phase 5 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -114,9 +114,10 @@ Step index：05-01
 
 - Commit 前状态：`git status --short` 仅包含 05-01 validate report 代码、测试、README、Release Gates、Phase 5 文档、roadmap 和本 Step 文档变更。
 - 纳入文件：`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`README.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-01-cli-validate-compatibility-report.md`。
-- Implementation commit：待记录。
+- Implementation commit：`153027c phase5: enhance validate compatibility report`。
+- Post-commit 状态：`git status --short --branch` = `## main...origin/main [ahead 87]`，工作区无未提交变更。
 - Closure commit：待记录。
-- 遗留未提交变更：待记录。
+- 遗留未提交变更：无。
 
 ## 11. Blocked 处理
 
