@@ -23,15 +23,27 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ```json
 {
+  "schemaVersion": "dock.validate-report.v1",
   "status": "ok|warning|error",
+  "commandStatus": "ok",
+  "reportStatus": "ok|warning|error",
   "skillId": "...",
-  "compatibilityLevel": "p0|p1|partial|unsupported",
+  "skillRef": {
+    "kind": "local-directory",
+    "path": "examples/coffee-skill|[REDACTED]",
+    "redacted": false
+  },
+  "compatibilityLevel": "supported|compatible-with-warnings|demo-only|invalid",
   "apis": [],
+  "apiNames": [],
   "components": [],
+  "componentPaths": [],
   "permissions": [],
   "risks": [],
   "fallbacks": [],
-  "releaseBlockers": []
+  "releaseBlockers": [],
+  "repairSuggestions": [],
+  "releaseReadiness": {}
 }
 ```
 
@@ -39,8 +51,11 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 - 全 JSON；
 - 可被 CI 消费；
-- warning 有修复建议；
-- demo-only 能力标识清楚。
+- 顶层字段和 `compatibilityReport` 嵌套对象都包含 APIs、components、permissions、risks、fallbacks、releaseBlockers 和 repair suggestions；
+- `status` / `reportStatus` 表示报告状态，`commandStatus` 表示 CLI 命令执行成功；
+- warning/blocker 有修复建议；
+- demo-only/mock/in-memory/local 未加密/unsigned package 能力标识清楚；
+- 绝对路径、private key path、token、Authorization、signature 和隐私原文必须脱敏。
 
 ### 3.2 `inspect`
 

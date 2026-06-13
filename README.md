@@ -64,6 +64,11 @@ cargo test -p component-runtime component_vm
 ## CLI
 
 `dock-cli` prints JSON so outputs can be used as validation evidence or piped into other tools.
+`validate` emits the stable `dock.validate-report.v1` schema. Its `status` / `reportStatus`
+describe release-readiness (`ok`, `warning`, or `error`), while `commandStatus: "ok"` means the
+CLI command itself completed. Local absolute paths and sensitive material are redacted from the
+report; the coffee fixture remains `compatibilityLevel: "demo-only"` because it is unsigned and
+uses demo-only localhost compatibility metadata.
 
 ```bash
 cargo run -p dock-cli -- validate examples/coffee-skill

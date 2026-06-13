@@ -69,17 +69,27 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
     let skill = skill_root().display().to_string();
 
     let validate = cli_json(["dock-cli".to_owned(), "validate".to_owned(), skill.clone()]);
-    assert_eq!(validate["status"], "ok");
+    assert_eq!(validate["schemaVersion"], "dock.validate-report.v1");
+    assert_eq!(validate["status"], "warning");
+    assert_eq!(validate["commandStatus"], "ok");
+    assert_eq!(validate["reportStatus"], "warning");
     assert_eq!(validate["compatibilityLevel"], "demo-only");
     assert_eq!(
-        validate["compatibilityReport"]["status"], "ok",
+        validate["compatibilityReport"]["status"], "warning",
         "validate should expose a machine-readable compatibility report"
+    );
+    assert_eq!(
+        validate["compatibilityReport"]["schemaVersion"],
+        "dock.validate-report.v1"
     );
     assert!(validate["compatibilityReport"]["apis"]
         .as_array()
         .expect("api reports")
         .iter()
-        .any(|api| api["name"] == "payOrder" && api["registered"] == true));
+        .any(|api| api["name"] == "payOrder"
+            && api["registered"] == true
+            && api["compatibilityStatus"] == "demo-only"
+            && api["consentRequired"] == true));
     assert!(validate["compatibilityReport"]["components"]
         .as_array()
         .expect("component reports")
@@ -100,11 +110,24 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
         .expect("release blockers")
         .iter()
         .any(|blocker| blocker["code"] == "production_warning"));
-    assert!(validate["apis"]
+    assert!(validate["releaseReadiness"]["checks"]
         .as_array()
-        .expect("apis array")
+        .expect("release readiness checks")
+        .iter()
+        .any(|check| check["code"] == "persistence_backends"
+            && check["status"] == "not-evaluated-by-validate"));
+    assert!(validate["repairSuggestions"]
+        .as_array()
+        .expect("repair suggestions")
+        .iter()
+        .any(|suggestion| suggestion["source"] == "releaseBlockers"
+            && suggestion["severity"] == "blocker"));
+    assert!(validate["apiNames"]
+        .as_array()
+        .expect("api names array")
         .iter()
         .any(|api| api == "payOrder"));
+    assert!(!validate.to_string().contains("/home/"));
 
     let call = cli_json([
         "dock-cli".to_owned(),
@@ -442,7 +465,8 @@ fn fixture_skills_validate_and_preview_component_snapshots() {
     ] {
         let skill = fixture_skill_root(fixture).display().to_string();
         let validate = cli_json(["dock-cli".to_owned(), "validate".to_owned(), skill.clone()]);
-        assert_eq!(validate["status"], "ok");
+        assert_eq!(validate["status"], "warning");
+        assert_eq!(validate["commandStatus"], "ok");
         assert!(validate["compatibilityReport"]["apis"]
             .as_array()
             .expect("api reports")
@@ -473,7 +497,8 @@ fn fixture_skills_validate_and_preview_component_snapshots() {
         "validate".to_owned(),
         dynamic_skill.clone(),
     ]);
-    assert_eq!(dynamic_validate["status"], "ok");
+    assert_eq!(dynamic_validate["status"], "warning");
+    assert_eq!(dynamic_validate["commandStatus"], "ok");
     assert!(
         dynamic_validate["compatibilityReport"]["permissions"]["dynamicComponents"]
             .as_array()

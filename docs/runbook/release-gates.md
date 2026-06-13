@@ -37,7 +37,7 @@ cargo run -p dock-cli -- validate examples/coffee-skill
 - `cargo clippy` 无 warning。
 - `cargo test --workspace` 全部通过。
 - coffee CLI E2E 通过，并继续断言 capability token、Authorization、Signature、Signature-Input、private key path/material 不出现在 JSON 输出。
-- `dock-cli validate` 输出 JSON，包含 `compatibilityLevel` 和 `compatibilityReport.apis/components/permissions/risks/fallbacks/releaseBlockers`；当前 coffee Skill 仍应因 demo-only localhost DID/request metadata 被标为 `demo-only`，不得误标 `supported`。
+- `dock-cli validate` 输出 JSON，包含 `schemaVersion: "dock.validate-report.v1"`、`status` / `reportStatus`、`commandStatus`、`compatibilityLevel`、顶层和 `compatibilityReport` 内的 `apis/components/permissions/risks/fallbacks/releaseBlockers/repairSuggestions/releaseReadiness`；当前 coffee Skill 仍应因 demo-only localhost DID/request metadata 和 unsigned package 被标为 `status: "warning"`、`compatibilityLevel: "demo-only"`，不得误标 `supported` 或 production-ready。
 
 如果环境无法运行全量命令，必须记录原因、失败命令、影响范围和替代检查；不能把未运行命令写成通过。
 
@@ -56,7 +56,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Markdown 链接 | 新增或修改文档的相对链接必须指向存在文件 | Phase 5 引入自动 link checker |
 | 兼容矩阵状态 | `supported`、`host-boundary`、`planned-p1`、`planned-p2`、`demo-only`、`unsupported-by-design` 不得混用或写成未知 | Phase 5 引入矩阵 schema checker |
 | Step 台账 | 每个 Step 有 status、Review evidence、verification evidence、commit hash | Codex Goal 长跑每步必填 |
-| Validate 报告 | `dock-cli validate examples/coffee-skill` 的 `compatibilityReport` 包含 API 注册、组件加载、权限、风险、fallback 和 release blocker 字段 | Phase 5 引入报告 schema checker |
+| Validate 报告 | `dock-cli validate examples/coffee-skill` 的 `schemaVersion` 为 `dock.validate-report.v1`，`status` 为 `warning`，`commandStatus` 为 `ok`，顶层和 `compatibilityReport` 均包含 API 注册、组件加载、权限、风险、fallback、release blocker、repair suggestion 和 release readiness 字段 | Phase 6 将报告 schema 纳入自动 release gate |
 | Plan 变更 | 改范围、顺序、验收、安全边界或验证策略前先更新 Plan 变更记录 | Phase 6 可纳入 PR checklist |
 | README 索引 | 新增架构、安全、runbook 文档必须有入口链接 | 当前手工检查 |
 
@@ -133,7 +133,7 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 | Host provider conformance：phone/address/location/file/payment/scan/phone call/share/detail page | Phase 4 | Step 04-09 已冻结 Host adapter capability/action contract、`api/call` Orchestrator boundary、Host action unsupported fail-closed 和 detail-page canonicalization；真实 provider UI、least-privilege field shape、生产 renderer 和 provider E2E 仍是 production release blocker。 |
 | distributed concurrency / durable idempotency / provider cancellation | Phase 4/6 | Step 04-10 已冻结本地 RuntimeService 内的 session 关闭、pre-dispatch cancellation、deadline check、高风险 in-flight 串行、显式 idempotency key forward/replay 和非幂等业务 no-retry gate；跨进程/跨 Host lock、merchant/provider 侧耐久 idempotency store、同步 executor 抢占式取消、真实 Host background lifecycle 和 metrics/alerting 仍是 production release blocker。 |
 | secret store、token cache 持久化、scoped storage 持久化、audit retention/export 配置化、Skill cache cleanup | Phase 4 | Step 04-04 已冻结 runtime config schema、secret reference、provider/path handle、production profile release blockers 和 redacted diagnostics；Step 04-05 已冻结 token cache persistence trait、restore policy、redacted report 和 dev-only in-memory backend gate；Step 04-06 已冻结 scoped storage persistence trait、namespace scope、quota/restore/delete-scope/redaction gate 和未加密 local file dev/test backend；Step 04-07 已冻结 audit profile、redacted export/retention report、Runtime persistent reader 和 L3/L4 audit unavailable fail-closed gate；Step 04-08 已冻结 Skill cache cleanup sidecar metadata、dry-run report、scope cleanup、rollback protection 和 quarantine fail-closed gate。真实 secret resolve、生产 Host secure store/encrypted token/storage/audit backend、storage/audit migration/access control、export approval、privacy deletion、CLI/ops cache cleanup command 仍由后续 Host/ops gate 承接 |
-| CLI compatibility / inspect / import 报告 schema、developer self-certification | Phase 5 | 当前 `dock-cli validate` 已输出 demo-only compatibility report；完整 migration/import/report schema 待 Phase 5 |
+| CLI compatibility / inspect / import 报告 schema、developer self-certification | Phase 5 | Step 05-01 已固定 `dock-cli validate` 报告 schema `dock.validate-report.v1`，输出顶层和嵌套 compatibility report、repair suggestions、release readiness 和 redacted local path；inspect/import/test-skill/doctor 仍待 Phase 5 后续 Step |
 | CI/CD 自动 gate runner、link checker、matrix schema checker、snapshot gate、privacy deletion runbook | Phase 6 | 当前手工和本地命令执行；自动化 release report 待 Phase 6 |
 
 ## 5. 兼容矩阵 Gate

@@ -19,7 +19,8 @@ use dock_core::{
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
 use mcp_schema::{
-    AtomicApiResult, ComponentDeclaration, ValidationIssueCategory, ValidationReport,
+    ApiDeclaration, AtomicApiResult, ComponentDeclaration, ValidationIssueCategory,
+    ValidationReport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -40,6 +41,7 @@ const DEFAULT_MERCHANT_DID: &str = "did:wba:coffee-merchant.example";
 const DEFAULT_IDENTITY_DIR: &str = "examples/identity";
 const DEFAULT_DID_DOCUMENT_FILE: &str = "did_document.json";
 const DEFAULT_PRIVATE_KEY_FILE: &str = "key-1-private.pem";
+const VALIDATE_REPORT_SCHEMA_VERSION: &str = "dock.validate-report.v1";
 
 #[derive(Debug, Parser)]
 #[command(name = "dock-cli", about = "MiniApp MCP Skill runtime developer CLI")]
@@ -482,25 +484,56 @@ fn validate(skill_path: &Path) -> Result<Value, CliError> {
     let risks = validate_risks(&skill);
     let fallbacks = validate_fallbacks(&skill, &component_reports);
     let release_blockers = validate_release_blockers(&skill, registration.as_ref());
+    let repair_suggestions = validate_repair_suggestions(
+        &skill.validation,
+        &api_reports,
+        &component_reports,
+        &fallbacks,
+        &release_blockers,
+    );
+    let supply_chain = supply_chain_report(&skill);
+    let release_readiness = validate_release_readiness(&skill, &release_blockers);
     let compatibility_level = compatibility_level(&skill.validation, &release_blockers);
+    let report_status = validate_report_status(&skill.validation, &release_blockers);
+    let skill_ref = validate_skill_ref(skill_path);
+    let skill_path_display = skill_ref
+        .get("path")
+        .cloned()
+        .unwrap_or_else(|| json!("[REDACTED]"));
 
     Ok(json!({
-        "status": "ok",
+        "schemaVersion": VALIDATE_REPORT_SCHEMA_VERSION,
+        "status": report_status,
+        "commandStatus": "ok",
+        "reportStatus": report_status,
         "compatibilityLevel": compatibility_level,
-        "skillRoot": skill.root,
+        "skillRoot": skill_path_display,
+        "skillRef": skill_ref,
         "skillId": skill_id(&skill),
-        "apis": skill.manifest.apis.iter().map(|api| api.name.as_str()).collect::<Vec<_>>(),
-        "components": skill.components.keys().collect::<Vec<_>>(),
+        "apis": api_reports.clone(),
+        "apiNames": skill.manifest.apis.iter().map(|api| api.name.as_str()).collect::<Vec<_>>(),
+        "components": component_reports.clone(),
+        "componentPaths": skill.components.keys().collect::<Vec<_>>(),
+        "permissions": permissions.clone(),
+        "risks": risks.clone(),
+        "fallbacks": fallbacks.clone(),
+        "releaseBlockers": release_blockers.clone(),
+        "repairSuggestions": repair_suggestions.clone(),
+        "releaseReadiness": release_readiness.clone(),
         "compatibilityReport": {
-            "status": "ok",
+            "schemaVersion": VALIDATE_REPORT_SCHEMA_VERSION,
+            "status": report_status,
             "compatibilityLevel": compatibility_level,
+            "skillId": skill_id(&skill),
             "apis": api_reports,
             "components": component_reports,
             "permissions": permissions,
             "risks": risks,
-            "supplyChain": supply_chain_report(&skill),
+            "supplyChain": supply_chain,
             "fallbacks": fallbacks,
             "releaseBlockers": release_blockers,
+            "repairSuggestions": repair_suggestions,
+            "releaseReadiness": release_readiness,
         },
         "validation": validation_summary(&skill.validation)
     }))
@@ -534,6 +567,8 @@ fn validate_api_reports(
             let registered = registration
                 .as_ref()
                 .is_ok_and(|registered| registered.iter().any(|name| name == &api.name));
+            let compatibility_status = api_compatibility_status(api, registered, &input_formats);
+            let suggestion = api_report_suggestion(api, registered, &input_formats);
             json!({
                 "name": api.name,
                 "registered": registered,
@@ -541,7 +576,11 @@ fn validate_api_reports(
                 "inputFormats": input_formats,
                 "hasOutputSchema": api.output_schema.is_some(),
                 "risk": api.meta.as_ref().and_then(|meta| meta.anp.as_ref()).and_then(|anp| anp.get("risk")).cloned(),
+                "consentRequired": api_risk_requires_consent(api),
+                "compatibilityStatus": compatibility_status,
+                "severity": if compatibility_status == "supported" { "info" } else { "warning" },
                 "status": if registered { "declared-and-registered" } else { "registration-unverified" },
+                "suggestion": suggestion,
             })
         })
         .collect()
@@ -559,18 +598,34 @@ fn validate_component_reports(skill: &LoadedSkill) -> Vec<Value> {
 fn component_report(component: &ComponentDeclaration, skill: &LoadedSkill) -> Value {
     let loaded = skill.components.contains_key(&component.path);
     let metadata = manifest_component_metadata(&skill.manifest, &component.path).ok();
+    let dynamic = metadata.as_ref().is_some_and(|metadata| metadata.dynamic);
+    let compatibility_status = if !loaded {
+        "fallback"
+    } else if dynamic {
+        "host-boundary"
+    } else {
+        "supported"
+    };
     json!({
         "path": component.path,
         "loaded": loaded,
+        "status": compatibility_status,
+        "compatibilityStatus": compatibility_status,
+        "severity": if loaded { "info" } else { "warning" },
         "relatedPage": metadata.as_ref().and_then(|metadata| metadata.related_page.clone()),
         "permissions": {
-            "dynamic": metadata.as_ref().is_some_and(|metadata| metadata.dynamic),
+            "dynamic": dynamic,
             "scopeDynamic": metadata.as_ref().and_then(|metadata| metadata.scope_dynamic.clone())
         },
         "expirable": metadata.as_ref().is_some_and(|metadata| metadata.expirable),
         "expiredText": metadata.as_ref().and_then(|metadata| metadata.expired_text.clone()),
         "runtimeMetadata": metadata,
-        "fallback": if loaded { Value::Null } else { json!("component_load_failed") },
+        "fallback": if loaded { Value::Null } else { json!({
+            "reason": "component_load_failed",
+            "fallback": "card-spec",
+            "suggestion": "Keep components[].path aligned with the component package directory and _meta.ui.componentPath."
+        }) },
+        "suggestion": component_report_suggestion(loaded, dynamic),
     })
 }
 
@@ -587,9 +642,22 @@ fn validate_permissions(component_reports: &[Value]) -> Value {
                 .and_then(Value::as_str)
         })
         .collect::<Vec<_>>();
+    let required_host_capabilities = dynamic_components
+        .iter()
+        .map(|component_path| {
+            json!({
+                "capability": "component.dynamic",
+                "componentPath": component_path,
+                "status": "host-boundary",
+                "suggestion": "Review dynamic request/timer policy, background lifecycle, and audit sink before production release.",
+            })
+        })
+        .collect::<Vec<_>>();
 
     json!({
+        "status": if dynamic_components.is_empty() { "ok" } else { "host-boundary" },
         "dynamicComponents": dynamic_components,
+        "requiredHostCapabilities": required_host_capabilities,
         "policy": "dynamic request/timer declarations require Step 02-05 runtime gate plus explicit Host production policy",
     })
 }
@@ -605,10 +673,18 @@ fn validate_risks(skill: &LoadedSkill) -> Vec<Value> {
                 .and_then(|meta| meta.anp.as_ref())
                 .and_then(|anp| anp.get("risk"))
                 .map(|risk| {
+                    let consent_required = matches!(risk.as_str(), Some("order" | "payment" | "high" | "l3" | "l4"));
                     json!({
                         "api": api.name,
                         "risk": risk,
-                        "consentRequired": matches!(risk.as_str(), Some("order" | "payment" | "high" | "l3" | "l4")),
+                        "severity": risk_severity(risk.as_str()),
+                        "status": if consent_required { "host-boundary" } else { "supported" },
+                        "consentRequired": consent_required,
+                        "suggestion": if consent_required {
+                            "Keep this API behind ConsentGate, permission decision audit, and Host provider review."
+                        } else {
+                            "No additional high-risk consent boundary is required by the declared risk metadata."
+                        },
                     })
                 })
         })
@@ -623,6 +699,8 @@ fn validate_fallbacks(skill: &LoadedSkill, component_reports: &[Value]) -> Vec<V
                 "api": api.name,
                 "fallback": "card-spec",
                 "reason": "no_component_path",
+                "severity": "warning",
+                "suggestion": "Add _meta.ui.componentPath and a matching components[] package to enable Component Runtime rendering.",
             }));
         }
     }
@@ -632,6 +710,8 @@ fn validate_fallbacks(skill: &LoadedSkill, component_reports: &[Value]) -> Vec<V
                 "componentPath": component.get("path"),
                 "fallback": "card-spec",
                 "reason": "component_load_failed",
+                "severity": "warning",
+                "suggestion": "Fix the component package directory and rerun dock-cli validate before release.",
             }));
         }
     }
@@ -646,6 +726,8 @@ fn validate_release_blockers(
     if let Err(error) = registration {
         blockers.push(json!({
             "code": "api_registration_mismatch",
+            "category": "compatibility",
+            "severity": "blocker",
             "message": error,
             "suggestion": "Keep apis[].name aligned with index.js registerAPI calls before production validation.",
         }));
@@ -655,6 +737,8 @@ fn validate_release_blockers(
         if warning.category == ValidationIssueCategory::Production {
             blockers.push(json!({
                 "code": "production_warning",
+                "category": "production-readiness",
+                "severity": "blocker",
                 "path": warning.path.clone(),
                 "message": warning.message.clone(),
                 "suggestion": warning.suggestion.clone(),
@@ -665,6 +749,8 @@ fn validate_release_blockers(
     if !skill.integrity.production_ready {
         blockers.push(json!({
             "code": "supply_chain",
+            "category": "supply-chain",
+            "severity": "blocker",
             "status": skill.integrity.status.as_str(),
             "issueCodes": skill.integrity.issue_codes,
             "message": "Skill package is not production-ready under the Step 03-06 supply-chain gate.",
@@ -705,6 +791,227 @@ fn compatibility_level(report: &ValidationReport, release_blockers: &[Value]) ->
     } else {
         "compatible-with-warnings"
     }
+}
+
+fn validate_report_status(report: &ValidationReport, release_blockers: &[Value]) -> &'static str {
+    if !report.is_valid() {
+        "error"
+    } else if !release_blockers.is_empty() || !report.warnings.is_empty() {
+        "warning"
+    } else {
+        "ok"
+    }
+}
+
+fn validate_skill_ref(input_path: &Path) -> Value {
+    let (path, redacted) = report_path(input_path);
+    json!({
+        "kind": "local-directory",
+        "path": path,
+        "redacted": redacted,
+        "note": if redacted {
+            "Absolute or sensitive local paths are redacted from validate reports."
+        } else {
+            "Path is reported as provided because it is relative to the current working directory."
+        },
+    })
+}
+
+fn report_path(path: &Path) -> (String, bool) {
+    let display = path.to_string_lossy().replace('\\', "/");
+    let lower = display.to_ascii_lowercase();
+    let sensitive = path.is_absolute()
+        || lower.contains("/home/")
+        || lower.contains("/users/")
+        || lower.contains("private")
+        || lower.contains("secret")
+        || lower.contains("token");
+
+    if sensitive {
+        ("[REDACTED]".to_owned(), true)
+    } else if display.trim().is_empty() {
+        (".".to_owned(), false)
+    } else {
+        (display, false)
+    }
+}
+
+fn api_compatibility_status(
+    api: &ApiDeclaration,
+    registered: bool,
+    input_formats: &[Value],
+) -> &'static str {
+    if !registered {
+        "unsupported"
+    } else if api_uses_demo_only_metadata(api) {
+        "demo-only"
+    } else if !input_formats.is_empty() {
+        "host-boundary"
+    } else {
+        "supported"
+    }
+}
+
+fn api_report_suggestion(
+    api: &ApiDeclaration,
+    registered: bool,
+    input_formats: &[Value],
+) -> &'static str {
+    if !registered {
+        "Register this API in index.js with the same name declared in mcp.json."
+    } else if api_uses_demo_only_metadata(api) {
+        "Remove demo-only localhost compatibility metadata before production release."
+    } else if !input_formats.is_empty() {
+        "Provide Host file/media handles and provider tests for formatted input fields."
+    } else if api_risk_requires_consent(api) {
+        "Keep high-risk execution behind ConsentGate and audit review."
+    } else {
+        "No repair required for the current validate gate."
+    }
+}
+
+fn component_report_suggestion(loaded: bool, dynamic: bool) -> &'static str {
+    if !loaded {
+        "Fix the component package path and ensure index.wxml/index.js are inside the Skill root."
+    } else if dynamic {
+        "Review dynamic component request/timer policy and Host production boundary before release."
+    } else {
+        "No repair required for the current validate gate."
+    }
+}
+
+fn api_uses_demo_only_metadata(api: &ApiDeclaration) -> bool {
+    api.meta.as_ref().is_some_and(|meta| {
+        meta.extra.contains_key("remoteLogin")
+            || meta.extra.contains_key("compatLoginEndpoint")
+            || meta
+                .extra
+                .get("requestAuthMode")
+                .and_then(Value::as_str)
+                .is_some_and(|mode| mode == "host-managed-bearer")
+    })
+}
+
+fn api_risk_requires_consent(api: &ApiDeclaration) -> bool {
+    api.meta
+        .as_ref()
+        .and_then(|meta| meta.anp.as_ref())
+        .and_then(|anp| anp.get("risk"))
+        .and_then(Value::as_str)
+        .is_some_and(|risk| matches!(risk, "order" | "payment" | "high" | "l3" | "l4"))
+}
+
+fn risk_severity(risk: Option<&str>) -> &'static str {
+    match risk {
+        Some("payment" | "l4") => "critical",
+        Some("order" | "high" | "l3") => "high",
+        Some("medium" | "location" | "media") => "medium",
+        _ => "low",
+    }
+}
+
+fn validate_repair_suggestions(
+    validation: &ValidationReport,
+    api_reports: &[Value],
+    component_reports: &[Value],
+    fallbacks: &[Value],
+    release_blockers: &[Value],
+) -> Vec<Value> {
+    let mut suggestions = Vec::new();
+
+    for blocker in release_blockers {
+        suggestions.push(json!({
+            "source": "releaseBlockers",
+            "code": blocker.get("code").cloned().unwrap_or_else(|| json!("release_blocker")),
+            "path": blocker.get("path").cloned(),
+            "suggestion": blocker.get("suggestion").cloned().unwrap_or_else(|| json!("Resolve this blocker before production release.")),
+            "severity": blocker.get("severity").cloned().unwrap_or_else(|| json!("blocker")),
+        }));
+    }
+
+    for warning in &validation.warnings {
+        if warning.category != ValidationIssueCategory::Production {
+            suggestions.push(json!({
+                "source": "validation",
+                "path": warning.path,
+                "suggestion": warning.suggestion.clone().unwrap_or_else(|| warning.message.clone()),
+                "severity": "warning",
+            }));
+        }
+    }
+
+    for api in api_reports {
+        if api.get("compatibilityStatus").and_then(Value::as_str) != Some("supported") {
+            suggestions.push(json!({
+                "source": "apis",
+                "api": api.get("name").cloned(),
+                "suggestion": api.get("suggestion").cloned().unwrap_or_else(|| json!("Review this API compatibility status.")),
+                "severity": api.get("severity").cloned().unwrap_or_else(|| json!("warning")),
+            }));
+        }
+    }
+
+    for component in component_reports {
+        if component.get("compatibilityStatus").and_then(Value::as_str) != Some("supported") {
+            suggestions.push(json!({
+                "source": "components",
+                "componentPath": component.get("path").cloned(),
+                "suggestion": component.get("suggestion").cloned().unwrap_or_else(|| json!("Review this component compatibility status.")),
+                "severity": component.get("severity").cloned().unwrap_or_else(|| json!("warning")),
+            }));
+        }
+    }
+
+    for fallback in fallbacks {
+        suggestions.push(json!({
+            "source": "fallbacks",
+            "api": fallback.get("api").cloned(),
+            "componentPath": fallback.get("componentPath").cloned(),
+            "suggestion": fallback.get("suggestion").cloned().unwrap_or_else(|| json!("Review this fallback before release.")),
+            "severity": fallback.get("severity").cloned().unwrap_or_else(|| json!("warning")),
+        }));
+    }
+
+    suggestions
+}
+
+fn validate_release_readiness(skill: &LoadedSkill, release_blockers: &[Value]) -> Value {
+    let checks = vec![
+        json!({
+            "code": "supply_chain",
+            "status": skill.integrity.status.as_str(),
+            "productionReady": skill.integrity.production_ready,
+            "issueCodes": skill.integrity.issue_codes,
+            "suggestion": if skill.integrity.production_ready {
+                "Supply-chain metadata passed the local validate gate."
+            } else {
+                "Attach trusted publisher DID, sha256 digest, signature, and publisher allowlist before production release."
+            },
+        }),
+        json!({
+            "code": "host_provider_policy",
+            "status": "not-evaluated-by-validate",
+            "productionReady": false,
+            "suggestion": "Run dock-cli doctor with the target Host/runtime config before production release.",
+        }),
+        json!({
+            "code": "persistence_backends",
+            "status": "not-evaluated-by-validate",
+            "productionReady": false,
+            "suggestion": "Use production Host secure token, storage, audit, and cache backends; local/in-memory backends remain dev-only.",
+        }),
+        json!({
+            "code": "render_ir_snapshots",
+            "status": "requires-fixture-gate",
+            "productionReady": Value::Null,
+            "suggestion": "Run fixture and snapshot gates for components that render user-visible cards.",
+        }),
+    ];
+
+    json!({
+        "status": if release_blockers.is_empty() { "requires-environment-gates" } else { "blocked" },
+        "checks": checks,
+    })
 }
 
 fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value, CliError> {
@@ -1854,8 +2161,18 @@ mod tests {
         let fixture = SkillFixture::new();
         let output = validate(&fixture.root).expect("validate reports compatibility");
 
-        assert_eq!(output["status"], "ok");
+        assert_eq!(output["schemaVersion"], VALIDATE_REPORT_SCHEMA_VERSION);
+        assert_eq!(output["status"], "warning");
+        assert_eq!(output["commandStatus"], "ok");
+        assert_eq!(output["reportStatus"], "warning");
         assert_eq!(output["compatibilityLevel"], "demo-only");
+        assert_eq!(
+            output["compatibilityReport"]["schemaVersion"],
+            VALIDATE_REPORT_SCHEMA_VERSION
+        );
+        assert_eq!(output["compatibilityReport"]["status"], "warning");
+        assert_eq!(output["skillRef"]["redacted"], true);
+        assert_eq!(output["skillRoot"], "[REDACTED]");
         assert!(output["compatibilityReport"]["apis"]
             .as_array()
             .expect("api reports")
@@ -1863,8 +2180,22 @@ mod tests {
             .any(|api| {
                 api["name"] == "missing"
                     && api["registered"] == false
+                    && api["compatibilityStatus"] == "unsupported"
                     && api["status"] == "registration-unverified"
+                    && api["suggestion"]
+                        .as_str()
+                        .is_some_and(|suggestion| suggestion.contains("Register this API"))
             }));
+        assert!(output["apis"]
+            .as_array()
+            .expect("top-level api reports")
+            .iter()
+            .any(|api| api["name"] == "missing" && api["compatibilityStatus"] == "unsupported"));
+        assert!(output["apiNames"]
+            .as_array()
+            .expect("api names")
+            .iter()
+            .any(|api| api == "declared"));
         assert!(output["compatibilityReport"]["releaseBlockers"]
             .as_array()
             .expect("release blockers")
@@ -1890,7 +2221,24 @@ mod tests {
             .any(
                 |blocker| blocker["code"] == "supply_chain" && blocker["status"] == "demo-unsigned"
             ));
+        assert_eq!(output["releaseReadiness"]["status"], "blocked");
+        assert!(output["releaseReadiness"]["checks"]
+            .as_array()
+            .expect("release checks")
+            .iter()
+            .any(|check| check["code"] == "persistence_backends"
+                && check["status"] == "not-evaluated-by-validate"
+                && check["productionReady"] == false));
+        assert!(output["repairSuggestions"]
+            .as_array()
+            .expect("repair suggestions")
+            .iter()
+            .any(|suggestion| suggestion["source"] == "releaseBlockers"
+                && suggestion["severity"] == "blocker"));
         assert!(!output.to_string().contains("fixture-signature-secret"));
+        assert!(!output
+            .to_string()
+            .contains(&fixture.root.display().to_string()));
     }
 
     #[test]
@@ -1943,6 +2291,11 @@ mod tests {
         let component = output["compatibilityReport"]["components"][0].clone();
 
         assert_eq!(component["loaded"], true);
+        assert_eq!(component["compatibilityStatus"], "host-boundary");
+        assert_eq!(
+            component["suggestion"],
+            "Review dynamic component request/timer policy and Host production boundary before release."
+        );
         assert_eq!(
             component["runtimeMetadata"]["componentPath"],
             "components/status-card/index"
@@ -1960,6 +2313,16 @@ mod tests {
         assert_eq!(
             component["runtimeMetadata"]["relatedPage"]["query"]["secretToken"],
             "[REDACTED]"
+        );
+        assert!(
+            output["compatibilityReport"]["permissions"]["requiredHostCapabilities"]
+                .as_array()
+                .expect("required host capabilities")
+                .iter()
+                .any(|capability| {
+                    capability["capability"] == "component.dynamic"
+                        && capability["componentPath"] == "components/status-card/index"
+                })
         );
         assert!(!component.to_string().contains("should-not-leak"));
     }
