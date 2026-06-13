@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-06
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 20:17:07 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-05 完成后，启动 scoped storage 持久化 |
+| Review evidence | 2026-06-13 20:33:19 +0800 commit 前 Review 已完成：修复 local file backend 对单条非法 persisted record 直接让整个 restore 失败、无法按脱敏 rejection 清理 snapshot 的问题；补充 `StoragePersistenceSnapshot` public re-export；确认 scope 覆盖 user DID、merchant DID、Skill id、namespace，persistent set/remove/clear/delete scope 先写 backend snapshot 再更新内存，quota fail closed，restore report/Debug 只输出 scope summary、key/value bytes、reason 和 redaction metadata，`localFileUnencrypted` 明确 dev/test/local evidence 且非 production-ready |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 72]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-06 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-05 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p wx-compat storage` 14 passed；`cargo test -p js-runtime-quickjs storage` 6 passed；`cargo test -p wx-compat` 16 component permission + 5 high-risk + 14 storage + doctests passed；`cargo test -p js-runtime-quickjs` 5 unit + 40 middleware + 3 register + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 断言和 dev/local backend 状态，未发现真实 storage 隐私 value、token、Authorization、signature、private key material 或生产凭据 |
+| Next action | 创建 04-06 focused commit，并回填 commit hash 与主 Plan 台账 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -29,7 +29,7 @@ Step index：04-06
 ## 3. 设计方法
 
 - 设计边界：storage 是 Skill 可见状态，必须按 DID/merchant/Skill scope 隔离，不能成为跨 session 隐私通道。
-- 核心决策：保留 in-memory dev backend；production candidate 使用 SQLite 或等价 backend，并通过 Step 04-04 config reference 注入。
+- 核心决策：保留 in-memory dev backend；当前提供未加密 local file JSON 作为 dev/test/local evidence backend；production profile 只允许 Host encrypted store 或 encrypted SQLite，并通过 Step 04-04 config reference 注入。
 - 契约 / API / 数据流：wx storage API -> scoped storage provider -> quota check -> persistent backend -> scope cleanup。
 - 兼容性：保持 Step 01-06 JS bridge 语义；sync/async storage fail shape 不漂移。
 - 风险控制：storage key/value diagnostics 默认 redacted 或 size-only；privacy deletion 必须能按 scope 清理。
@@ -65,12 +65,12 @@ Step index：04-06
 
 ## 7. 验收标准
 
-- [ ] scoped storage 有持久化 backend boundary、in-memory dev profile 和 production profile gate。
-- [ ] storage scope 至少包含 user DID、merchant DID、Skill id 和 namespace；跨 scope 读取/清理有 tests。
-- [ ] quota exceeded 返回稳定 fail shape，不泄露 value 原文。
-- [ ] restart restore、remove、clear、delete scope 行为有 tests。
-- [ ] API 矩阵、Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] scoped storage 有持久化 backend boundary、in-memory dev profile 和 production profile gate。
+- [x] storage scope 至少包含 user DID、merchant DID、Skill id 和 namespace；跨 scope 读取/清理有 tests。
+- [x] quota exceeded 返回稳定 fail shape，不泄露 value 原文。
+- [x] restart restore、remove、clear、delete scope 行为有 tests。
+- [x] API 矩阵、Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -92,11 +92,11 @@ Step index：04-06
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已处理 | local file backend 初版对单条 invalid persisted record 直接让整个 `restore()` 返回 `BackendCorrupt`/entry validation error，不能按 Step 要求记录 redacted rejection 并清理坏 entry；新增 `StoragePersistenceSnapshot` 是 public trait 返回类型但初版未从 crate root re-export。 |
+| 已修复问题 | 已修复 | 为 persistence backend 增加 `load_restore_snapshot()`，local file backend 先读取原始 JSON record，再把 invalid entry 转为 `StorageRestoreRejectionReason::InvalidEntry` 并由 restore 重写 snapshot；从 `wx-compat` crate root 导出 `StoragePersistenceSnapshot`；补充 namespace 隔离、invalid entry cleanup 和 report 不泄露原文测试。 |
+| 剩余风险 | 已记录 | 当前只提供 trait、profile gate、quota/restore/delete-scope 策略和未加密 `LocalFileScopedStorageBackend` dev/test/local evidence；真实 Host encrypted store 或 encrypted SQLite、migration、access control、backup/repair 和 privacy deletion 仍是后续 Phase 4/6 production release blocker。 |
+| 新增或缺失测试 | 已补齐 | 新增/扩展 storage persistence tests 覆盖 same-scope restore、user/namespace cross-scope isolation、remove/clear/delete scope 持久化、quota restore rejection、invalid entry cleanup、report/Debug key/value redaction、profile production-ready gate；`cargo test -p wx-compat storage` 实际命中 14 tests。 |
+| 已更新或缺失文档 | 已更新 | 已同步 wx API 兼容矩阵、Threat Model、Release Gates、local demo runbook、Phase 4 文档、本 Step 和主 Plan 台账；未修改 `dock-core` runtime wiring，因为本 Step 只冻结 provider/backend contract，不声明生产 Host storage provider 已接入。 |
 
 ## 10. Commit 要求
 

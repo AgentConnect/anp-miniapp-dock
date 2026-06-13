@@ -68,6 +68,8 @@ The DID challenge/login path is one-time by default: a login attempt consumes it
 
 Step 04-05 adds a token cache persistence contract and restart restore policy in `anp-adapter`: restored token entries must still be unexpired, signature/trust valid, scope-matching, not revoked, and not replay/consumed-once entries. The included in-memory token persistence backend is dev/test only and reports `productionReady = false`; production deployments still need a Host secure store or encrypted token backend, cross-process replay/revocation store, DID resolver rotation policy, and secret-store integration.
 
+Step 04-06 adds a scoped storage persistence contract in `wx-compat`: persisted storage scope includes user DID, merchant DID, Skill id, and namespace; restore rejects invalid or over-quota entries, cleanup supports remove/clear/delete scope, and reports/debug output redact raw keys and values. The included `LocalFileScopedStorageBackend` writes unencrypted JSON and reports `productionReady = false`; it is only for local/dev evidence. Production deployments still need a Host encrypted store or encrypted SQLite backend, migration/repair policy, access control, backup handling, and privacy deletion integration.
+
 ## Start The Rust Demo Server
 
 The Rust `demo-server` remains available as a test-compatible local merchant server. It exercises the newer ANP DID challenge proof and scoped capability token path, while still exposing the same localhost coffee business endpoints used by the Skill JavaScript.

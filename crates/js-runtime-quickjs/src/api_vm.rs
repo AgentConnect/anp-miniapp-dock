@@ -1366,15 +1366,25 @@ fn storage_error_json(api_name: &'static str, error: StorageError) -> String {
             "storage value is not JSON-safe",
             "Store only JSON-safe values.",
         ),
+        StorageError::InvalidScope => (
+            "provider_unavailable",
+            "storage scope is unavailable",
+            "Provide userDid, merchantDid, skillId, and namespace before using wx storage.",
+        ),
         StorageError::QuotaExceeded => (
             "quota_exceeded",
             "storage quota exceeded",
             "Remove unused keys before writing more data.",
         ),
-        StorageError::LockPoisoned => (
+        StorageError::LockPoisoned | StorageError::BackendUnavailable => (
             "provider_unavailable",
             "storage backend is unavailable",
             "Retry later or use Host-managed state.",
+        ),
+        StorageError::BackendCorrupt => (
+            "provider_unavailable",
+            "storage backend data is unavailable",
+            "Ask the Host to repair or reset scoped storage for this Skill.",
         ),
     };
     json!({

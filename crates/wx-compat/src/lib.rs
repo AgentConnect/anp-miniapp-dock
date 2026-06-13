@@ -29,9 +29,12 @@ pub use request::{
     RequestBroker, UnsupportedRequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
 };
 pub use storage::{
-    InMemoryScopedStorage, ScopedStorage, StorageError, StorageScope,
-    DEFAULT_MAX_STORAGE_KEY_BYTES, DEFAULT_MAX_STORAGE_SCOPE_BYTES,
-    DEFAULT_MAX_STORAGE_VALUE_BYTES,
+    InMemoryScopedStorage, LocalFileScopedStorageBackend, PersistentScopedStorage,
+    PersistentStorageEntry, ScopedStorage, ScopedStoragePersistenceBackend, StorageError,
+    StoragePersistenceProfile, StoragePersistenceSnapshot, StorageRedaction,
+    StorageRestoreRejection, StorageRestoreRejectionReason, StorageRestoreReport, StorageScope,
+    StorageScopeSummary, DEFAULT_MAX_STORAGE_KEY_BYTES, DEFAULT_MAX_STORAGE_SCOPE_BYTES,
+    DEFAULT_MAX_STORAGE_VALUE_BYTES, DEFAULT_STORAGE_NAMESPACE,
 };
 pub use unsupported::{
     unsupported_api, unsupported_api_registry, unsupported_api_registry_js_literal, UnsupportedApi,

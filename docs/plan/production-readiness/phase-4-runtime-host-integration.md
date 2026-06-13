@@ -198,10 +198,20 @@ close_session(session)
 | redacted report | `TokenCacheRestoreReport` 只输出 backend profile、production-ready flag、计数、rejection reason 和 redaction metadata | 不输出 raw token、Authorization、signature、private key path 或 secret。 |
 | failure policy | fallible `try_put()` / `try_clear()` 先写 persistence snapshot，成功后才更新内存 cache；`CapabilityTokenCache` trait 方法复用 fail-closed 路径 | 若 production backend 不可用，写入/清理不会先污染内存状态；调用方若需要错误详情应使用 fallible API。 |
 
+当前 Step 04-06 已在 `wx-compat` 冻结 scoped storage persistence contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| scope | `StorageScope = user DID + merchant DID + Skill id + namespace`，默认 namespace 为 `default` | Atomic API VM 当前仍使用默认 namespace；更多 Host-managed namespace 需后续显式 wiring。 |
+| persistence backend | `ScopedStoragePersistenceBackend` trait 支持 load/restore snapshot 和 replace entries；profile 区分 `inMemoryDev`、`localFileUnencrypted`、`hostEncryptedStore`、`encryptedSqlite` | 只有 Host encrypted store / encrypted SQLite profile 标记 production-ready；local file JSON backend 未加密，只能 dev/test/local evidence。 |
+| restart restore | `PersistentScopedStorage::restore()` 恢复合法 entry，拒绝 invalid 或超 quota entry，并重写 backend snapshot 清理 rejected entry | corrupt JSON snapshot 整体 fail closed，需 Host repair/reset；生产 repair/backup 策略后续补。 |
+| quota / cleanup | `try_set_storage()` 先校验 aggregate quota 并写 backend snapshot，成功后才更新内存；支持 remove、clear 和 delete scope 持久化 | 生产 privacy deletion 仍需 Host/ops runbook 串联 token/audit/cache 清理。 |
+| redacted report | `StorageRestoreReport` 只输出 backend profile、production-ready flag、计数、scope summary、key/value bytes、reason 和 redaction metadata | 不输出 raw key、raw value、token、Authorization、private path 或隐私原文。 |
+
 拆分顺序：
 
 1. token cache 持久化与恢复；已由 04-05 完成本地 contract 和 dev-only backend gate；
-2. scoped storage 持久化与 quota；
+2. scoped storage 持久化与 quota；已由 04-06 完成本地 contract、quota/restore/delete-scope gate 和 dev-only local file backend gate；
 3. persistent audit sink retention/export；
 4. Skill cache cleanup 与版本清理。
 
