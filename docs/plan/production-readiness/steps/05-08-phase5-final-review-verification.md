@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-08
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 03:30:37 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 05-01 至 05-07 完成后启动 Phase 5 最终 Review；完成后进入 Step 06-01 |
+| Review evidence | 2026-06-14 03:32:16 +0800 Phase 5 final Review 已记录：确认 05-01 至 05-07 台账和 Step 文档均为 `done`，commit hash、Review 证据和验证证据齐全；CLI schema 覆盖 validate/inspect/test-skill/import/doctor；coffee validate 仍为 `demo-only` warning，doctor 本地默认仍为 warning/skip，未被误标 production-ready；developer docs 与 API/组件矩阵使用同一状态枚举；未发现需要修改 Phase 5 代码的阻塞问题。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 100]`；已读取主 Plan、Step 05-08 文档、Phase 5 文档、release gates、API/组件兼容矩阵、developer docs、05-01 至 05-07 Step 文档和执行台账；05-01 至 05-07 implementation / closure commits `153027c`、`d8ae27f`、`ed5599f`、`31ac65c`、`aab9653`、`7d78aea`、`ac47ba2`、`4079220`、`9d19744`、`56daf6f`、`f3d97cc`、`a8df50f`、`72f00df`、`122adfb` 均能在 git history 解析；`cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/developer docs/security README.md AGENTS.md` 无输出；Phase 5 CLI JSON 抽样通过：validate `dock.validate-report.v1` / `warning` / `commandStatus = ok` / `compatibilityLevel = demo-only`，inspect `dock.inspect-report.v1` / `warning`，test-skill `dock.test-skill-report.v1` / `ok` / 3 passed / 0 failed，import `dock.import-wechat-mcp-report.v1` / `dry-run`，doctor `dock.doctor-report.v1` / `warning` / 5 pass / 7 warn / 1 skip / 0 fail；敏感串抽样仅命中文档红线、fixture mock 说明和安全说明，未发现真实 token、Authorization、signature、private key material、手机号、真实地址、文件内容、本机绝对路径或真实隐私原文输出。 |
+| Next action | 创建 Phase 5 final review commit 后回填 commit hash，并进入 05-08 closure |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,12 +63,12 @@ Step index：05-08
 
 ## 7. 验收标准
 
-- [ ] 主 Plan 执行台账中 Step 05-01 至 05-07 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
-- [ ] git history 能解析 Step 05-01 至 05-07 的 commit hash。
-- [ ] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
-- [ ] Review 覆盖 CLI validate/inspect/test-skill/import/doctor、示例 Skill、开发者文档、runbook、README、release blockers、redaction 和兼容矩阵漂移。
-- [ ] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
-- [ ] 主 Plan `2.3.8` 已追加 Phase 5 最终 Review 记录。
+- [x] 主 Plan 执行台账中 Step 05-01 至 05-07 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
+- [x] git history 能解析 Step 05-01 至 05-07 的 commit hash。
+- [x] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
+- [x] Review 覆盖 CLI validate/inspect/test-skill/import/doctor、示例 Skill、开发者文档、runbook、README、release blockers、redaction 和兼容矩阵漂移。
+- [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
+- [x] 主 Plan `2.3.8` 已追加 Phase 5 最终 Review 记录。
 - [ ] 本步骤在进入 Step 06-01 之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -93,18 +93,18 @@ Step index：05-08
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 未发现阻塞问题 | 05-01 至 05-07 的 Step 证据、CLI schema、developer docs、fixtures、README/runbook 和 release gates 一致；未发现需要修改 Phase 5 代码的 blocker。 |
+| 已修复问题 | 无新增修复 | 本 Step 未发现必须修复的问题；05-07 已修复导入指南 `/tmp` 示例、`runtime-json` token 示例和 Phase 5 状态枚举勾选漂移。 |
+| 剩余风险 | 已记录 | Phase 5 完成 developer tooling/docs/fixtures，不等于生产 Host、加密持久化、CI release automation、observability、privacy deletion 或真实 registry/Host provider 完成；这些继续进入 Phase 6 和后续生产接入。 |
+| 新增或缺失测试 | 整体验证已完成 | 本 Step 未新增代码测试；已重跑 metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check，并抽样 validate/inspect/test-skill/import/doctor JSON。 |
+| 已更新或缺失文档 | 已同步 | 主 Plan `2.3.8` 追加 Phase 5 final Review 记录；Step 05-08 回填 Review/验证证据；Phase 5 阶段完成检查已全勾选；无额外缺失文档。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：最终 Review、整体验证、必要修复和主 Plan 记录完成后。
 - Commit 范围：只包含 Phase 5 final review 记录、必要文档修复和直接关联证据更新。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
+- Commit 前状态：`git status --short` 显示主 Plan 和 Step 05-08 final Review 记录变更。
+- 纳入文件：`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-08-phase5-final-review-verification.md`。
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`docs: record phase5 final review`
