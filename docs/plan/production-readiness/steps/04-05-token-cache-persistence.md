@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-05
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 19:51:13 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-04 完成后，启动 token cache 持久化 |
+| Review evidence | 2026-06-13 20:12:35 +0800 commit 前 Review 已完成：修复 raw token entry 可被 JSON diagnostics 误序列化、fallible `try_put`/`try_clear` 先改内存后落盘导致失败后状态污染、entry metadata 未显式绑定 issuer/audience/jti、clippy bool assert warning；确认 restore policy fail closed，rejected entry 清出 backend snapshot，report 只含 scope summary/reason/redaction metadata，in-memory profile 明确 dev-only |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 70]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-05 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-04 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p anp-adapter token_cache` 9 unit + 1 integration under filter passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter token` 26 unit + 4 integration under filter passed；`cargo test -p anp-adapter` 53 unit + 11 integration + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/dock-core docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 代码和既有测试断言，未发现真实 token、Authorization、signature、private key material 或生产凭据 |
+| Next action | 创建 04-05 focused commit，并回填 commit hash 与主 Plan 台账 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：04-05
 
 ## 7. 验收标准
 
-- [ ] token cache backend 有明确 secure store / encrypted backend boundary 和 in-memory dev profile。
-- [ ] restart restore 只恢复未过期、未撤销、scope 匹配、trust anchor 有效的 token entry。
-- [ ] expired/revoked/replayed/scope mismatch token 不恢复且有脱敏错误或 audit summary。
-- [ ] raw token、Authorization、signature、private key path 不出现在 logs、CLI JSON、audit export 或 tests output。
-- [ ] Release Gates 标出 in-memory token backend 不能 production-ready。
-- [ ] Review 发现已经修复或明确记录。
+- [x] token cache backend 有明确 secure store / encrypted backend boundary 和 in-memory dev profile。
+- [x] restart restore 只恢复未过期、未撤销、scope 匹配、trust anchor 有效的 token entry。
+- [x] expired/revoked/replayed/scope mismatch token 不恢复且有脱敏错误或 audit summary。
+- [x] raw token、Authorization、signature、private key path 不出现在 logs、CLI JSON、audit export 或 tests output。
+- [x] Release Gates 标出 in-memory token backend 不能 production-ready。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -91,11 +91,11 @@ Step index：04-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已处理 | raw token entry 初版派生 Serialize/Deserialize，可能被误作 JSON diagnostics 输出；fallible persistence API 初版先改内存再写 backend，backend 失败时会留下状态污染；persisted entry 初版只含 scope/expiry/token，未显式绑定 issuer/audience/jti metadata；clippy 发现 bool assert warning。 |
+| 已修复问题 | 已修复 | 移除 entry 的公开 serde 派生，只保留 redacted Debug 和 secure-boundary `token()`；`try_put()`/`try_clear()` 先 replace backend snapshot，成功后才改内存；restore 校验 issuer/audience/jti metadata 与 claims 一致；测试断言改为 `assert!(!...)`。 |
+| 剩余风险 | 已记录 | 当前只提供 trait、restore policy 和 `inMemoryDev` dev/test backend；真实 Host secure store 或 encrypted backend、跨进程 replay/revocation store、真实 secret resolve 和 DID rotation 仍是后续 Phase 4/6 production release blocker。 |
+| 新增或缺失测试 | 已补齐 | 新增 `token_cache_persistence_*` 单元测试覆盖 valid restore/snapshot、expired、revoked、replayed、scope mismatch、metadata trust mismatch、redacted report/Debug、in-memory dev-only profile、backend failure 不污染内存；`cargo test -p anp-adapter token_cache` 实际命中 9 unit + 1 integration under filter。 |
+| 已更新或缺失文档 | 已更新 | 已同步 Phase 4 文档、Release Gates、Threat Model、local demo runbook、本 Step 和主 Plan 台账；未更新兼容矩阵，因为本 Step 不改变 wx API/组件兼容状态。 |
 
 ## 10. Commit 要求
 

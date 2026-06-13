@@ -188,9 +188,19 @@ close_session(session)
 | skill cache | digest-keyed directory，read-only after verify |
 | runtime config | 只由 3.4 负责 schema、secret boundary 和 provider reference |
 
+当前 Step 04-05 已在 `anp-adapter` 冻结 capability token cache persistence contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| persistence backend | `TokenCachePersistenceBackend` trait 支持 load/replace entry；profile 区分 `inMemoryDev`、`hostSecureStore`、`encryptedBackend` | 当前只提供 `InMemoryTokenCachePersistenceBackend` 作为 dev/test backend；生产必须接 Host secure store 或 encrypted backend。 |
+| persisted entry | entry 绑定 scope、issuer、audience、jti、expiry 和 raw token secure boundary | `PersistentCapabilityTokenEntry` Debug redacted，且不作为公开 JSON diagnostics 输出。 |
+| restart restore | `PersistentCapabilityTokenCache::restore()` 只恢复未过期、signature/trust 有效、metadata/claims/scope 匹配、未 revoked、未 consumed once 的 token | rejected entry 会从 backend snapshot 清掉，并只在 report 中暴露 scope summary 与 reason。 |
+| redacted report | `TokenCacheRestoreReport` 只输出 backend profile、production-ready flag、计数、rejection reason 和 redaction metadata | 不输出 raw token、Authorization、signature、private key path 或 secret。 |
+| failure policy | fallible `try_put()` / `try_clear()` 先写 persistence snapshot，成功后才更新内存 cache；`CapabilityTokenCache` trait 方法复用 fail-closed 路径 | 若 production backend 不可用，写入/清理不会先污染内存状态；调用方若需要错误详情应使用 fallible API。 |
+
 拆分顺序：
 
-1. token cache 持久化与恢复；
+1. token cache 持久化与恢复；已由 04-05 完成本地 contract 和 dev-only backend gate；
 2. scoped storage 持久化与 quota；
 3. persistent audit sink retention/export；
 4. Skill cache cleanup 与版本清理。

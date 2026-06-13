@@ -64,7 +64,9 @@ cargo run -p dock-cli -- run-demo --skill examples/coffee-skill --server http://
 
 During `run-demo`, the Skill JavaScript calls `wx.login()`, then uses `wx.request()` to access `/api/login`, `/api/drinks`, `/api/order/confirm`, and `/api/order/pay` on localhost. With Host DID credentials configured, the Atomic API VM keeps the capability token inside `DidAuthSessionManager`, returns only a code-like redacted receipt to Skill JS, and `wx.checkSession()` can validate the cached session without exposing the token.
 
-The DID challenge/login path is one-time by default: a login attempt consumes its challenge even when the signature is invalid, so the same `challengeId` cannot be retried with a later valid proof. The Rust demo server also checks bearer tokens against an in-memory lifecycle store for revoked jti values, while high-risk hosts can use the explicit one-time jti verification mode. This is a local Step 03-04 gate; production deployments still need the Phase 4 persistent token cache/revocation store, cross-process replay store, DID resolver rotation policy, and secret-store integration.
+The DID challenge/login path is one-time by default: a login attempt consumes its challenge even when the signature is invalid, so the same `challengeId` cannot be retried with a later valid proof. The Rust demo server also checks bearer tokens against an in-memory lifecycle store for revoked jti values, while high-risk hosts can use the explicit one-time jti verification mode.
+
+Step 04-05 adds a token cache persistence contract and restart restore policy in `anp-adapter`: restored token entries must still be unexpired, signature/trust valid, scope-matching, not revoked, and not replay/consumed-once entries. The included in-memory token persistence backend is dev/test only and reports `productionReady = false`; production deployments still need a Host secure store or encrypted token backend, cross-process replay/revocation store, DID resolver rotation policy, and secret-store integration.
 
 ## Start The Rust Demo Server
 
