@@ -5,8 +5,8 @@ use crate::host::{
     PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
 };
 use consent_audit::{
-    build_consent_request, consent_proof, parameter_digest, redact_value, AuditOutcome,
-    ConsentProof, ConsentRequestInput, RiskLevel, RiskPolicy,
+    build_consent_request, consent_proof_with_decision, parameter_digest, redact_value,
+    AuditOutcome, ConsentProof, ConsentRequestInput, RiskLevel, RiskPolicy,
 };
 use mcp_schema::{validate_api_result, validate_input, AtomicApiResult, TextContent};
 use serde_json::{Map, Value};
@@ -159,11 +159,29 @@ where
         });
         let mut proof = None;
         if risk_level.requires_consent() {
-            match self.consent.check_consent(&context, &consent_request)? {
-                ConsentDecision::Approved => {
-                    proof = Some(consent_proof(
+            let consent_decision = match self.consent.check_consent(&context, &consent_request) {
+                Ok(decision) => decision,
+                Err(error) => {
+                    self.record_audit(
+                        &context,
+                        risk_level,
+                        permission_summary,
+                        None,
+                        AuditOutcome::BlockedConsentRequired,
+                    )?;
+                    return Err(error);
+                }
+            };
+
+            match consent_decision {
+                ConsentDecision::Approved {
+                    provider,
+                    decision_actor,
+                } => {
+                    proof = Some(consent_proof_with_decision(
                         &consent_request,
-                        "dock-core-consent-gate",
+                        provider,
+                        decision_actor,
                         parameter_digest(&consent_request.parameter_summary),
                     ));
                 }

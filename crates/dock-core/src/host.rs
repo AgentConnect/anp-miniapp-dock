@@ -1,6 +1,10 @@
 use crate::error::DockCoreError;
+use crate::error::ErrorCode;
 use crate::orchestrator::{ApiCallContext, ComponentRenderInput};
-use consent_audit::{ConsentProof, ConsentRequest, RiskLevel};
+use consent_audit::RiskLevel;
+use consent_audit::{
+    ConsentError, ConsentProof, ConsentRequest, ConsentStatus, HostConsentAdapter,
+};
 use mcp_schema::AtomicApiResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -45,6 +49,53 @@ pub trait RenderRouter {
 
 pub trait AuditSink {
     fn record(&self, event: AuditEvent) -> Result<(), DockCoreError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct HostConsentGateAdapter<A> {
+    adapter: A,
+}
+
+impl<A> HostConsentGateAdapter<A> {
+    pub fn new(adapter: A) -> Self {
+        Self { adapter }
+    }
+
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
+}
+
+impl<A> ConsentGate for HostConsentGateAdapter<A>
+where
+    A: HostConsentAdapter,
+{
+    fn check_consent(
+        &self,
+        _context: &ApiCallContext,
+        request: &ConsentRequest,
+    ) -> Result<ConsentDecision, DockCoreError> {
+        match self.adapter.request_host_consent(request) {
+            Ok(decision) if decision.status == ConsentStatus::Approved => Ok(
+                ConsentDecision::approved(decision.provider, decision.decision_actor),
+            ),
+            Ok(decision) => Ok(ConsentDecision::Required(format!(
+                "consent denied by {}",
+                decision.provider
+            ))),
+            Err(ConsentError::Denied { .. }) => {
+                Ok(ConsentDecision::Required("consent denied".to_owned()))
+            }
+            Err(ConsentError::ProviderUnavailable { .. }) => Err(DockCoreError::core(
+                ErrorCode::ConsentRequired,
+                "host consent provider unavailable",
+            )),
+            Err(ConsentError::Provider(_)) => Err(DockCoreError::core(
+                ErrorCode::ConsentRequired,
+                "host consent provider failed",
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,8 +200,20 @@ pub struct PermissionDecisionSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsentDecision {
-    Approved,
+    Approved {
+        provider: String,
+        decision_actor: String,
+    },
     Required(String),
+}
+
+impl ConsentDecision {
+    pub fn approved(provider: impl Into<String>, decision_actor: impl Into<String>) -> Self {
+        Self::Approved {
+            provider: provider.into(),
+            decision_actor: decision_actor.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

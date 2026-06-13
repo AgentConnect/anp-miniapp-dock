@@ -8,8 +8,8 @@ pub mod orchestrator;
 pub use api_registry::{ApiRegistry, RegisteredApi};
 pub use error::{DockCoreError, ErrorCode};
 pub use host::{
-    ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, PermissionDecision,
-    PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
+    ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, HostConsentGateAdapter,
+    PermissionDecision, PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
 };
 pub use orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,

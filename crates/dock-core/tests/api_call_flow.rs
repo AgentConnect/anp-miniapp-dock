@@ -1,8 +1,11 @@
-use consent_audit::{ConsentRequest, RiskLevel};
+use consent_audit::{
+    ConsentRequest, DecisionConsentProvider, RiskLevel, UnavailableConsentProvider,
+    DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_DECISION_ACTOR,
+};
 use dock_core::{
     ApiCallContext, ApiExecutor, AuditEvent, AuditSink, ComponentAction, ComponentRenderInput,
-    ConsentDecision, ConsentGate, DockCoreError, ErrorCode, Orchestrator, PermissionDecision,
-    RenderOutcome, RenderRouter, RuntimeHost,
+    ConsentDecision, ConsentGate, DockCoreError, ErrorCode, HostConsentGateAdapter, Orchestrator,
+    PermissionDecision, RenderOutcome, RenderRouter, RuntimeHost,
 };
 use mcp_schema::{AtomicApiResult, TextContent};
 use serde_json::{json, Map, Value};
@@ -418,6 +421,11 @@ fn high_risk_payment_with_consent_records_proof() {
         .consent_proof
         .as_ref()
         .expect("high-risk approval records proof");
+    assert_eq!(proof.policy_version, consent_audit::CONSENT_POLICY_VERSION);
+    assert!(!proof.prompt_digest.is_empty());
+    assert_eq!(proof.provider, DEV_HEADLESS_CONSENT_PROVIDER);
+    assert_eq!(proof.decision_actor, DEV_HEADLESS_DECISION_ACTOR);
+    assert!(proof.granted_at_ms > 0);
     assert_eq!(proof.user_did.as_deref(), Some("did:wba:user.example"));
     assert_eq!(
         proof.merchant_did.as_deref(),
@@ -427,6 +435,124 @@ fn high_risk_payment_with_consent_records_proof() {
     assert_eq!(proof.api_name, "payOrder");
     assert_eq!(proof.parameter_summary["capabilityToken"], "[REDACTED]");
     assert_eq!(proof.parameter_summary["deliveryAddress"], "[REDACTED]");
+}
+
+#[test]
+fn host_consent_adapter_can_drive_core_consent_gate() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with(
+        executor,
+        MockRenderer::ok(),
+        HostConsentGateAdapter::new(DecisionConsentProvider::approved()),
+        audit,
+    );
+
+    orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect("approved Host adapter should execute");
+
+    assert_eq!(*executor_calls.borrow(), 1);
+    let proof = events.borrow()[0]
+        .consent_proof
+        .clone()
+        .expect("proof recorded");
+    assert_eq!(proof.provider, DEV_HEADLESS_CONSENT_PROVIDER);
+    assert_eq!(proof.decision_actor, DEV_HEADLESS_DECISION_ACTOR);
+}
+
+#[test]
+fn consent_provider_unavailable_fails_closed_and_records_audit() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("should not execute")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with(executor, MockRenderer::ok(), UnavailableConsent, audit);
+
+    let error = orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect_err("provider unavailable should fail closed");
+
+    assert_eq!(error.code(), ErrorCode::ConsentRequired);
+    assert_eq!(*executor_calls.borrow(), 0);
+    let events = events.borrow();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].api_name, "payOrder");
+    assert_eq!(events[0].outcome, "blocked_consent_required");
+    assert_eq!(events[0].permission_decision.decision, "allow");
+    assert!(events[0].consent_proof.is_none());
+}
+
+#[test]
+fn host_consent_adapter_unavailable_fails_closed_with_audit() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("should not execute")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with(
+        executor,
+        MockRenderer::ok(),
+        HostConsentGateAdapter::new(UnavailableConsentProvider::new("host-ui")),
+        audit,
+    );
+
+    let error = orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect_err("unavailable Host adapter should fail closed");
+
+    assert_eq!(error.code(), ErrorCode::ConsentRequired);
+    assert_eq!(*executor_calls.borrow(), 0);
+    assert_eq!(events.borrow()[0].outcome, "blocked_consent_required");
+}
+
+#[test]
+fn host_consent_adapter_denial_fails_closed_with_audit() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("should not execute")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with(
+        executor,
+        MockRenderer::ok(),
+        HostConsentGateAdapter::new(DecisionConsentProvider::denied()),
+        audit,
+    );
+
+    let error = orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect_err("denied Host adapter should fail closed");
+
+    assert_eq!(error.code(), ErrorCode::ConsentRequired);
+    assert_eq!(*executor_calls.borrow(), 0);
+    let events = events.borrow();
+    assert_eq!(events[0].outcome, "blocked_consent_required");
+    assert!(events[0].consent_proof.is_none());
 }
 
 #[test]
@@ -484,7 +610,26 @@ impl ConsentGate for ApproveConsent {
         _context: &ApiCallContext,
         _request: &ConsentRequest,
     ) -> Result<ConsentDecision, DockCoreError> {
-        Ok(ConsentDecision::Approved)
+        Ok(ConsentDecision::approved(
+            DEV_HEADLESS_CONSENT_PROVIDER,
+            DEV_HEADLESS_DECISION_ACTOR,
+        ))
+    }
+}
+
+#[derive(Clone)]
+struct UnavailableConsent;
+
+impl ConsentGate for UnavailableConsent {
+    fn check_consent(
+        &self,
+        _context: &ApiCallContext,
+        _request: &ConsentRequest,
+    ) -> Result<ConsentDecision, DockCoreError> {
+        Err(DockCoreError::core(
+            ErrorCode::ConsentRequired,
+            "host consent provider unavailable",
+        ))
     }
 }
 

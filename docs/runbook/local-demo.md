@@ -154,10 +154,14 @@ The same values can be supplied through `ANP_DOCK_DID_DOCUMENT`, `ANP_DOCK_PRIVA
 5. Skill-side `wx.login`, `wx.checkSession`, and `wx.request` calls to the localhost coffee service.
 6. Component VM rendering for `drink-list`, `order-confirm`, and `payment-result`.
 7. Component `api/call` action routing for `confirmOrder` and `payOrder`.
-8. Mock approval for high-risk consent and audit proof recording.
+8. Dev/headless mock approval for high-risk consent and audit proof recording.
 9. Payment-result card expiration handling.
 
 CLI output is JSON. Capability tokens, `Authorization`, HTTP signature headers, and DID private key paths are used internally and are printed only as `[REDACTED]` or omitted from JS-visible response headers.
+
+The local CLI harness uses the explicit dev/headless consent adapter (`dev-headless-consent`, actor `host.headless.dev`) so the coffee flow can run without a real Host UI. That adapter is not a production consent provider. Production Host integrations must provide their own `HostConsentAdapter` and must preserve fail-closed behavior for denied or unavailable consent providers.
+
+Step 03-05 also adds an append-only JSONL `FileAuditSink` in the `consent-audit` crate for production-candidate audit persistence tests. The local coffee demo still prints collected audit events in the run output for developer inspection; deployment-grade audit backend configuration, encryption, access control, migration, and privacy deletion are handled by the later production runtime phases.
 
 ## Run The Mac Chatbot Host
 

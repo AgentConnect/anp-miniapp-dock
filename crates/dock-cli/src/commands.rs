@@ -10,7 +10,7 @@ use component_runtime::{
     ComponentEvent, ComponentInput, ComponentInstance, ComponentMetadata, ComponentPackage,
     ComponentRenderOutput, ComponentVmAction, RenderEventKind, RenderNode,
 };
-use consent_audit::ConsentRequest;
+use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_DECISION_ACTOR};
 use dock_core::{
     ApiCallContext, AuditEvent, AuditSink, ComponentRenderInput, ConsentDecision, ConsentGate,
     DockCoreError, ErrorCode, Orchestrator, PermissionDecision, RenderOutcome, RenderRouter,
@@ -961,7 +961,10 @@ impl ConsentGate for ApproveConsent {
         _context: &ApiCallContext,
         _request: &ConsentRequest,
     ) -> Result<ConsentDecision, DockCoreError> {
-        Ok(ConsentDecision::Approved)
+        Ok(ConsentDecision::approved(
+            DEV_HEADLESS_CONSENT_PROVIDER,
+            DEV_HEADLESS_DECISION_ACTOR,
+        ))
     }
 }
 

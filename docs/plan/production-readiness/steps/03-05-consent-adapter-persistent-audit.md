@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-05
-状态：in_progress
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | in_progress |
+| Status | review |
 | Branch | `main` |
 | Started | 2026-06-13 15:11:49 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 正在阅读 consent-audit、dock-core consent flow、audit export 和 release gates，准备实现 Host consent adapter 与 persistent audit sink |
+| Review evidence | 2026-06-13 15:32:32 +0800 commit 前 Review 已记录：修复 `FileAuditSink` export 只信任已持久化 redacted record、可能导出 legacy/raw JSONL 的问题；补充 Host adapter denied fail-closed audit 测试；确认 ConsentGate 在 executor/provider 前、provider unavailable/denied fail closed 且可审计、dev/headless mock 有显式 provider/actor、JSONL audit record/export 默认脱敏 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p consent-audit consent` 3 unit + 3 integration passed；`cargo test -p consent-audit audit` 2 unit + 4 integration passed；`cargo test -p dock-core consent` 9 passed；`cargo test -p consent-audit` 5 unit + 7 integration passed；`cargo test -p dock-core` 15 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/consent-audit crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、文档安全说明、redaction 断言、`AuthMode::HttpSignatures` 常量和 demo-only secret placeholder，未发现真实 secret/token/proof/private key path 输出 |
+| Next action | 创建 03-05 focused commit，回填 commit hash 与 post-commit 状态后进入 03-06 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,13 +66,13 @@ Step index：03-05
 
 ## 7. 验收标准
 
-- [ ] Host consent adapter trait 支持 CLI/headless/mock 与未来 Host UI 分离。
-- [ ] ConsentProof 包含 policy version、prompt digest、decision actor、timestamp、parameter digest。
-- [ ] 无 consent、denied、provider unavailable 均 fail closed 且可审计。
-- [ ] persistent audit sink 至少有一个生产候选实现或明确 host-boundary，且有 restart/query tests。
-- [ ] audit query/export 默认脱敏，redaction regression 覆盖 token/signature/private/phone/address/file content。
-- [ ] Threat Model、Release Gates 和 runbook 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Host consent adapter trait 支持 CLI/headless/mock 与未来 Host UI 分离。
+- [x] ConsentProof 包含 policy version、prompt digest、decision actor、timestamp、parameter digest。
+- [x] 无 consent、denied、provider unavailable 均 fail closed 且可审计。
+- [x] persistent audit sink 至少有一个生产候选实现或明确 host-boundary，且有 restart/query tests。
+- [x] audit query/export 默认脱敏，redaction regression 覆盖 token/signature/private/phone/address/file content。
+- [x] Threat Model、Release Gates 和 runbook 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -95,11 +95,11 @@ Step index：03-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 有 | 初版 `FileAuditSink::export_redacted_json` 依赖查询出的记录已被脱敏，若读取 legacy/raw JSONL 或手工写入文件，export 仍可能输出 raw `parameterSummary`；Host adapter denied 路径缺少明确 focused test。 |
+| 已修复问题 | 已修复 | export 前再次调用 `AuditRecord::redacted()`；retention rewrite 也写入 redacted record；新增 `file_audit_export_redacts_legacy_raw_records` 和 `host_consent_adapter_denial_fails_closed_with_audit` 回归测试。 |
+| 剩余风险 | 已记录 | `FileAuditSink` 是 append-only JSONL 生产候选后端，默认脱敏并可 restart/query/export/retention；部署级 encryption、access control、backend config、migration、privacy deletion 和真实 Host consent UI/conformance 由 Phase 4/6 承接。 |
+| 新增或缺失测试 | 已补齐 | 新增 Host consent adapter provider/actor/unavailable tests、ConsentProof policy/prompt/actor/timestamp/digest assertions、provider unavailable audit、denied audit、JSONL restart/query/export/retention、legacy raw export redaction、token/signature/private/phone/address/file content redaction；未新增真实 Host UI tests，按非目标记录。 |
+| 已更新或缺失文档 | 已更新 | 已同步 Threat Model、Release Gates、local demo runbook、Phase 3 security hardening、Phase 3 threat model summary、主 Plan 和本 Step 文档；兼容矩阵未改，因为本 Step 不新增 `wx.*` 或 component API 状态。 |
 
 ## 10. Commit 要求
 
