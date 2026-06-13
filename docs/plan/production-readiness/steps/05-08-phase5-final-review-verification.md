@@ -12,7 +12,7 @@ Step index：05-08
 | Branch | `main` |
 | Started | 2026-06-14 03:30:37 +0800 |
 | Completed | 2026-06-14 03:35:46 +0800 |
-| Commit | `18ca5b2`；closure 待创建 |
+| Commit | `18ca5b2`；closure `ebec9b7` |
 | Review evidence | 2026-06-14 03:32:16 +0800 Phase 5 final Review 已记录：确认 05-01 至 05-07 台账和 Step 文档均为 `done`，commit hash、Review 证据和验证证据齐全；CLI schema 覆盖 validate/inspect/test-skill/import/doctor；coffee validate 仍为 `demo-only` warning，doctor 本地默认仍为 warning/skip，未被误标 production-ready；developer docs 与 API/组件矩阵使用同一状态枚举；未发现需要修改 Phase 5 代码的阻塞问题。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 100]`；已读取主 Plan、Step 05-08 文档、Phase 5 文档、release gates、API/组件兼容矩阵、developer docs、05-01 至 05-07 Step 文档和执行台账；05-01 至 05-07 implementation / closure commits `153027c`、`d8ae27f`、`ed5599f`、`31ac65c`、`aab9653`、`7d78aea`、`ac47ba2`、`4079220`、`9d19744`、`56daf6f`、`f3d97cc`、`a8df50f`、`72f00df`、`122adfb` 均能在 git history 解析；`cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/developer docs/security README.md AGENTS.md` 无输出；Phase 5 CLI JSON 抽样通过：validate `dock.validate-report.v1` / `warning` / `commandStatus = ok` / `compatibilityLevel = demo-only`，inspect `dock.inspect-report.v1` / `warning`，test-skill `dock.test-skill-report.v1` / `ok` / 3 passed / 0 failed，import `dock.import-wechat-mcp-report.v1` / `dry-run`，doctor `dock.doctor-report.v1` / `warning` / 5 pass / 7 warn / 1 skip / 0 fail；敏感串抽样仅命中文档红线、fixture mock 说明和安全说明，未发现真实 token、Authorization、signature、private key material、手机号、真实地址、文件内容、本机绝对路径或真实隐私原文输出。 |
 | Next action | 进入 Step 06-01。 |
@@ -115,7 +115,7 @@ Step index：05-08
 - 纳入文件：`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-08-phase5-final-review-verification.md`。
 - Final review commit：`18ca5b2 docs: record phase5 final review`。
 - Closure 前状态：`git status --short --branch` = `## main...origin/main [ahead 101]`，工作区无未提交变更。
-- Closure commit：待创建。
+- Closure commit：`ebec9b7 docs: close phase5 final review gate`。
 - 遗留未提交变更：无。
 
 ## 11. Blocked 处理
