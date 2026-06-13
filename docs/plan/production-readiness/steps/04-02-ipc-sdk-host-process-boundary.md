@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 18:54:30 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 19:08:57 +0800 |
+| Commit | `53e71be` |
 | Review evidence | 2026-06-13 19:07:40 +0800 commit 前 Review 已记录：确认 `dock-cli runtime-json` 只作为 `headless-cli-json` / `local-process-stdio` 传输层复用 `RuntimeService`，未绕过 permission、ConsentGate、audit、redaction 或 package integrity；修复 request envelope parse/schema error 可能走裸 CLI JSON error、缺少 IPC redaction envelope 的问题；确认当前未声明 HTTP/gRPC sidecar 或 production Host UI |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p dock-cli ipc` 4 passed；`cargo test -p dock-core runtime` 4 passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/demo-server docs/runbook docs/plan` 无输出；手工 `runtime-json` success/error 抽样输出 `headless-cli-json`、`local-process-stdio`、`[REDACTED]` 且敏感串扫描无命中 |
-| Next action | 创建 04-02 focused commit，随后回填 commit hash 并进入 04-03 |
+| Next action | 进入 04-03 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -105,8 +105,8 @@ Step index：04-02
 - Commit 范围：只包含 IPC/SDK transport、直接 tests 和相关文档。
 - Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 64]`，未提交文件均为 04-02 IPC/headless JSON 代码、测试和直接文档。
 - 纳入文件：`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/runbook/local-demo.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md`。
-- Commit 后证据：待提交后回填 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：待提交后确认。
+- Commit 后证据：主实现 commit `53e71be phase4: add runtime ipc boundary`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 65]`。
+- 遗留未提交变更：无；后续仅有本 Step closure 文档回填变更。
 - 建议消息：`phase4: add runtime ipc boundary`
 
 ## 11. Blocked 处理
