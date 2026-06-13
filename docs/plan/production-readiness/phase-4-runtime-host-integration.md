@@ -165,6 +165,17 @@ close_session(session)
 - secret material 只能来自 env、Secret Store 或 Host credential provider；
 - production profile 缺少 required provider 时 fail closed 或 release blocked。
 
+当前 Step 04-04 已在 `dock-core` 冻结 `dock.runtime.config.v1` contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| profile | `development`、`demo`、`production` 明确区分；默认是 development | production 缺少 required provider 时只产生 release blocker，不自动创建真实 provider。 |
+| config load priority | `builtInDefault -> configFile -> environment -> cliArgument -> hostOverride` | 本 Step 冻结优先级枚举，不实现完整文件/环境合并器。 |
+| secret reference | 只允许 `env`、`secretStore`、`hostCredentialProvider` reference | 不解析、不读取、不缓存真实 secret material。 |
+| provider/path handle | identity、resolver、allowlist、token issuer、storage、audit、cache、Host provider 均使用 reference/handle | storage/audit/cache 的实际 backend 由 04-05 至 04-08 分别实现。 |
+| diagnostics | `redactedDiagnostics()` 只输出 configured 状态、profile、capability summary 和 redaction metadata | 不输出 secret store key、private key path、本机绝对路径、token、Authorization、signature 或 raw secret。 |
+| production release blockers | 缺少 identity/resolver/allowlist/token issuer secret、使用 in-memory backend、缺少 render/consent Host provider、启用 mock/dev-only provider 均 block release | 不把 demo/mock/in-memory 配置写成 production-ready。 |
+
 ### 3.5 持久化
 
 持久化范围：

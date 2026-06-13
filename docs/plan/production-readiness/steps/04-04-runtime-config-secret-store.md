@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-04
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 19:33:40 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-03 完成后，启动 runtime config 与 secret boundary |
+| Review evidence | 2026-06-13 19:47:25 +0800 commit 前 Review 已记录：修复 diagnostics 未脱敏 `issuer` 中 `merchant secret` 文本、`schemaVersion` 可回显异常敏感串、`cargo test -p dock-core config` 初始只命中 2 个新增测试的问题；确认本 Step 只冻结 config/secret contract，不实现真实 secret resolve 或 token/storage/audit/cache 持久化 backend |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 68]`；`cargo fmt --check` 通过；`cargo test -p dock-core config` 8 passed；`cargo test -p dock-core` 27 passed；`cargo test -p dock-cli config` 2 passed under filter，CLI 未新增参数，仅复用既有 credential redaction/config tests；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/anp-adapter docs/runbook docs/security docs/plan` 无输出；敏感串扫描仅命中文档红线、redaction marker/test 假值和既有 redaction 回归测试 |
+| Next action | 准备创建 04-04 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,13 +66,13 @@ Step index：04-04
 
 ## 7. 验收标准
 
-- [ ] runtime config schema 覆盖 identity、resolver、allowlist、token issuer reference、storage/audit/cache path reference、Host providers、profile、mock provider flags 和 observability level。
-- [ ] config loader 有校验、默认值、unknown field 处理和 profile-specific release blocker。
-- [ ] config 文件不包含 secret；secret reference 只能指向 env、secret store key 或 Host credential provider handle。
-- [ ] private key material、raw token、Authorization、signature、merchant secret 和真实用户数据在 logs/CLI/audit/config diagnostics 中 redacted。
-- [ ] Release Gates 明确 production profile 缺少 required secret/provider 时 fail closed 或 release blocked。
-- [ ] Step 04-05 至 04-08 的持久化 backend scope 与本 Step 的 config/provider handle 对齐。
-- [ ] Review 发现已经修复或明确记录。
+- [x] runtime config schema 覆盖 identity、resolver、allowlist、token issuer reference、storage/audit/cache path reference、Host providers、profile、mock provider flags 和 observability level。
+- [x] config loader 有校验、默认值、unknown field 处理和 profile-specific release blocker。
+- [x] config 文件不包含 secret；secret reference 只能指向 env、secret store key 或 Host credential provider handle。
+- [x] private key material、raw token、Authorization、signature、merchant secret 和真实用户数据在 logs/CLI/audit/config diagnostics 中 redacted。
+- [x] Release Gates 明确 production profile 缺少 required secret/provider 时 fail closed 或 release blocked。
+- [x] Step 04-05 至 04-08 的持久化 backend scope 与本 Step 的 config/provider handle 对齐。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,11 +94,17 @@ Step index：04-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 1. `redacted_diagnostics()` 最初对 `tokenIssuer.issuer` 中的 `merchant secret` 文本未脱敏；2. `schemaVersion` 来自配置文件，异常敏感串不应原样出现在 diagnostics；3. `cargo test -p dock-core config` 初始只命中 2 个新增测试，过滤范围不够强。 |
+| 已修复问题 | 已修复 | `redact_runtime_config_text()` 增加 `secret` marker；diagnostics 对 `schemaVersion` 也走 redaction；新增测试命名统一 `runtime_config_*`，并补充结构化 secret reference JSON 反序列化测试。 |
+| 剩余风险 | 已记录 | 本 Step 只冻结 schema、validator、redactor、provider/path/secret reference 和 release blockers；不实现 config file/env/CLI merge、真实 secret resolve、token cache persistence、scoped storage persistence、audit backend 配置/retention/export、Skill cache cleanup 或 Host provider conformance。 |
+| 新增或缺失测试 | 已新增 focused tests | 新增 `crates/dock-core/tests/runtime_config.rs` 覆盖默认值、unknown field、结构化 secret reference、production release blockers、secret/path diagnostics redaction、mock/dev-only production blocker。未新增 CLI 参数，因此 `cargo test -p dock-cli config` 仅作为既有 CLI credential redaction/config 替代证据。 |
+| 已更新或缺失文档 | 已更新 | 已更新 Phase 4 文档、Release Gates、Threat Model、主 Plan 台账和本 Step 文档；未更新 `local-demo.md`，因为本 Step 没有新增 CLI/config 文件使用方式。 |
+
+### 9.1 Review 记录
+
+| 时间 | 范围 | 发现 / 处理 | 结论 |
+|---|---|---|---|
+| 2026-06-13 19:47:25 +0800 | `dock-core` runtime config schema/validator/redactor/tests，Phase 4 文档、Release Gates、Threat Model、执行台账 | 修复 diagnostics redaction 与测试过滤覆盖问题；确认 production profile blocker 覆盖 identity/resolver/allowlist/token issuer/storage/audit/cache/render/consent/mock/dev-only；确认文档没有把真实 secret resolve、持久化 backend 或 Host 能力写成已完成 | 无阻塞问题；可以创建 focused commit |
 
 ## 10. Commit 要求
 
