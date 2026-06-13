@@ -150,6 +150,8 @@ fn runtime_facade_call_render_action_expire_audit_and_close_are_versioned() {
         })
         .expect("component api/call routes through facade");
     assert!(action.data.handled);
+    assert_eq!(action.data.boundary, "runtime-orchestrator");
+    assert!(action.data.host_action.is_none());
     assert_eq!(
         action.data.call.as_ref().map(|call| call.api_name.as_str()),
         Some("confirmOrder")

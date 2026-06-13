@@ -1,5 +1,9 @@
 use crate::error::{DockCoreError, ErrorCode};
-use crate::host::{ApiExecutor, AuditEvent, AuditSink, ConsentGate, RenderOutcome, RenderRouter};
+use crate::host::{
+    canonicalize_open_detail_page_target, ApiExecutor, AuditEvent, AuditSink, ConsentGate,
+    HostActionOutcome, HostActionRequest, HostActionStatus, HostAdapterContract, RenderOutcome,
+    RenderRouter,
+};
 use crate::orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
 };
@@ -291,6 +295,12 @@ pub struct RuntimeLoadSkillResponse {
     pub skill: RuntimeSkillSummary,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeHostContractResponse {
+    pub contract: HostAdapterContract,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionContext {
@@ -448,6 +458,8 @@ pub struct RuntimeDispatchComponentActionResponse {
     pub handled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call: Option<RuntimeCallResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_action: Option<HostActionOutcome>,
     pub boundary: String,
 }
 
@@ -755,6 +767,12 @@ where
         })
     }
 
+    pub fn host_contract(&self) -> RuntimeResponse<RuntimeHostContractResponse> {
+        RuntimeResponse::ok(RuntimeHostContractResponse {
+            contract: self.orchestrator.host_contract(),
+        })
+    }
+
     pub fn call_api(&self, request: RuntimeCallRequest) -> RuntimeResult<RuntimeCallResponse> {
         let api_name = request.api_name.clone();
         self.orchestrator
@@ -796,29 +814,76 @@ where
         &self,
         request: RuntimeDispatchComponentActionRequest,
     ) -> RuntimeResult<RuntimeDispatchComponentActionResponse> {
-        let call_api_name = match &request.action {
-            RuntimeComponentAction::ApiCall { name, .. } => name.clone(),
-            RuntimeComponentAction::SendFollowUpMessage { .. }
-            | RuntimeComponentAction::OpenDetailPage { .. }
-            | RuntimeComponentAction::ExpirePreviousCards { .. } => request.source_api_name.clone(),
-        };
         let base_context = request.session.to_api_context(
             request.source_api_name.clone(),
             request.source_arguments,
             request.capability_token,
         );
-        let action = request.action;
-        self.orchestrator
-            .handle_component_action(&base_context, action.into())
-            .map(|outcome| {
-                RuntimeResponse::ok(RuntimeDispatchComponentActionResponse {
-                    handled: outcome.is_some(),
-                    call: outcome
-                        .map(|outcome| RuntimeCallResponse::from_outcome(call_api_name, outcome)),
-                    boundary: "orchestrator".to_owned(),
-                })
-            })
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())
+        match request.action {
+            RuntimeComponentAction::ApiCall { name, arguments } => {
+                let call_api_name = name.clone();
+                self.orchestrator
+                    .handle_component_action(
+                        &base_context,
+                        ComponentAction::ApiCall { name, arguments },
+                    )
+                    .map(|outcome| {
+                        RuntimeResponse::ok(RuntimeDispatchComponentActionResponse {
+                            handled: outcome.is_some(),
+                            call: outcome.map(|outcome| {
+                                RuntimeCallResponse::from_outcome(call_api_name, outcome)
+                            }),
+                            host_action: None,
+                            boundary: "runtime-orchestrator".to_owned(),
+                        })
+                    })
+                    .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())
+            }
+            RuntimeComponentAction::SendFollowUpMessage { content } => self.dispatch_host_action(
+                &base_context,
+                HostActionRequest::send_follow_up_message(request.source_api_name, &content),
+            ),
+            RuntimeComponentAction::OpenDetailPage { url } => {
+                let canonical_url = canonicalize_open_detail_page_target(&url)
+                    .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+                self.dispatch_host_action(
+                    &base_context,
+                    HostActionRequest::open_detail_page(request.source_api_name, canonical_url),
+                )
+            }
+            RuntimeComponentAction::ExpirePreviousCards {
+                component_paths,
+                match_policy,
+            } => self.dispatch_host_action(
+                &base_context,
+                HostActionRequest::expire_previous_cards(
+                    request.source_api_name,
+                    component_paths,
+                    match_policy,
+                ),
+            ),
+        }
+    }
+
+    fn dispatch_host_action(
+        &self,
+        context: &ApiCallContext,
+        request: HostActionRequest,
+    ) -> RuntimeResult<RuntimeDispatchComponentActionResponse> {
+        let outcome = self
+            .orchestrator
+            .handle_host_action(context, request)
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?
+            .redacted();
+        let handled = outcome.status == HostActionStatus::Accepted;
+        Ok(RuntimeResponse::ok(
+            RuntimeDispatchComponentActionResponse {
+                handled,
+                call: None,
+                boundary: outcome.boundary.clone(),
+                host_action: Some(outcome),
+            },
+        ))
     }
 
     pub fn expire_cards(
@@ -901,6 +966,9 @@ where
             }
             "runtime.loadSkill" => {
                 RuntimeIpcResponse::ok(request_id, method, self.load_skill_response())
+            }
+            "runtime.hostContract" => {
+                RuntimeIpcResponse::ok(request_id, method, self.host_contract())
             }
             "runtime.callApi" => runtime_ipc_response(
                 request_id,

@@ -47,8 +47,9 @@ close_session(session)
 | `validate_skill(path_or_package)` | `validate_skill_path()` / `RuntimeService::validate_skill()` 返回 `RuntimeResponse<RuntimeValidateSkillResponse>` | 不执行生产 registry download；真实 registry 来源由 04-03 接入。 |
 | `load_skill(skill_ref)` | `load_skill_path()` / `RuntimeService::load_skill_response()` 返回 `RuntimeResponse<RuntimeLoadSkillResponse>` | production policy、cache pin 和 rollback 由 04-03 继续收敛。 |
 | `call_api(session, skill_id, api_name, arguments)` | `RuntimeService::call_api(RuntimeCallRequest)`；返回 `RuntimeCallResponse`，内部仍走 Orchestrator、Permission、Consent、Audit、RenderRouter | `capabilityToken` 不序列化、不进入 Debug；Host/IPC 形态由 04-02 复用。 |
-| `render_component(session, component_path, input)` | `RuntimeService::render_component(RuntimeRenderComponentRequest)`；返回 `RenderOutcome` | 真实 Host renderer conformance 由 04-09 补齐。 |
-| `dispatch_component_action(session, render_id, action)` | `RuntimeService::dispatch_component_action(RuntimeDispatchComponentActionRequest)`；`api/call` 回 Orchestrator | unknown/high-risk action protocol 和 Host adapter conformance 由 04-09 补齐。 |
+| `render_component(session, component_path, input)` | `RuntimeService::render_component(RuntimeRenderComponentRequest)`；返回 `RenderOutcome` | 真实 Host renderer UI 由 Host adapter 实现；04-09 冻结 conformance contract。 |
+| `host_contract()` | `RuntimeService::host_contract()`；返回 `dock.host-adapter.v1` capability declaration | Host 必须声明 required/optional/unsupported-by-design capability；headless mock 明确 `productionReady = false`。 |
+| `dispatch_component_action(session, render_id, action)` | `RuntimeService::dispatch_component_action(RuntimeDispatchComponentActionRequest)`；`api/call` 回 Orchestrator，非 API action 返回 Host action outcome | unknown/high-risk action protocol 和 Host adapter conformance 由 04-09 补齐。 |
 | `expire_cards(session, filters)` | 返回稳定 `RuntimeExpireCardsResponse`，边界标记为 `host-managed-card-store` | 持久 card/session store 不在 04-01 实现，后续由 04-09/04-10 承接。 |
 | `get_audit_records(filters)` | 通过 `RuntimeAuditReader` 返回 `RuntimeAuditEvent`，参数和 proof summary 二次脱敏 | 持久化 retention/export 由 04-07 承接。 |
 | `close_session(session)` | 返回稳定 `RuntimeCloseSessionResponse`，边界标记为 `stateless-runtime-facade` | token/cache/session 清理由 04-05/04-10 承接。 |
@@ -104,6 +105,7 @@ close_session(session)
 | `runtime.negotiateVersion` | `negotiate_runtime_version()` |
 | `runtime.validateSkill` | `RuntimeService::validate_skill()` |
 | `runtime.loadSkill` | `RuntimeService::load_skill_response()` |
+| `runtime.hostContract` | `RuntimeService::host_contract()` |
 | `runtime.callApi` | `RuntimeService::call_api()` |
 | `runtime.renderComponent` | `RuntimeService::render_component()` |
 | `runtime.dispatchComponentAction` | `RuntimeService::dispatch_component_action()` |
@@ -246,6 +248,16 @@ Host 必须实现或声明不支持：
 - openDetailPage fallback；
 - event dispatch；
 - secure identity provider。
+
+当前 Step 04-09 已在 `dock-core` 冻结 `dock.host-adapter.v1` 本地 contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| capability declaration | `HostAdapterContract` 声明 required、optional 和 unsupported-by-design capability；`runtime.hostContract` 可通过 Runtime facade / IPC 查询 | `HeadlessHostAdapter` 只用于 headless/mock conformance，`productionReady = false`，不得冒充真实 Host。 |
+| action routing | `api/call` 固定走 `runtime-orchestrator`，重新经过 input validation、permission、ConsentGate、audit 和 executor；`sendFollowUpMessage`、`openDetailPage`、`expirePreviousCards` 进入 Host adapter outcome | Host 不允许把 `api/call`、payment、phone、address、location、file/media 等高风险动作直接执行成系统调用。 |
+| fail closed / unsupported | custom Host 未声明能力时默认 `Unsupported`；unknown Host action 返回 stable unsupported outcome | 不出现 silent success；真实 Host 支持新 action 前必须更新 contract、测试和矩阵。 |
+| detail page canonicalize | `openDetailPage` 只接受 safe relative path/query；拒绝外部 URL、`javascript:`、`file:`、`..`、encoded traversal 和敏感 query | 真实外链/详情页 UI 仍需 Host policy、consent 和 allowlist。 |
+| redaction | `HostActionOutcome` 带 `dock.host-action.redaction.v1` metadata；payload 默认脱敏 token、Authorization、signature、private、secret、credential 和本机路径 | 不声明完整 production Host renderer/provider 已完成。 |
 
 Host 不允许：
 

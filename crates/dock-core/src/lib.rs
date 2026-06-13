@@ -20,8 +20,12 @@ pub use config::{
 };
 pub use error::{DockCoreError, ErrorCode};
 pub use host::{
-    ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, HostConsentGateAdapter,
-    PermissionDecision, PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
+    canonicalize_open_detail_page_target, ApiExecutor, AuditEvent, AuditSink, ConsentDecision,
+    ConsentGate, HeadlessHostAdapter, HostActionOutcome, HostActionRedaction, HostActionRequest,
+    HostActionRoute, HostActionStatus, HostAdapterContract, HostCapabilityDeclaration,
+    HostCapabilityRequirement, HostCapabilityStatus, HostConsentGateAdapter, PermissionDecision,
+    PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
+    HOST_ACTION_REDACTION_POLICY, HOST_ADAPTER_CONTRACT_VERSION,
 };
 pub use orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
@@ -32,10 +36,10 @@ pub use runtime::{
     RuntimeCallRequest, RuntimeCallResponse, RuntimeCloseSessionRequest,
     RuntimeCloseSessionResponse, RuntimeComponentAction, RuntimeDispatchComponentActionRequest,
     RuntimeDispatchComponentActionResponse, RuntimeErrorDto, RuntimeErrorResponse,
-    RuntimeExpireCardsRequest, RuntimeExpireCardsResponse, RuntimeIpcRedaction, RuntimeIpcRequest,
-    RuntimeIpcResponse, RuntimeIpcTransport, RuntimeIpcVersionParams, RuntimeLoadSkillResponse,
-    RuntimePersistentAuditSink, RuntimeRenderComponentRequest, RuntimeRenderComponentResponse,
-    RuntimeResponse, RuntimeResult, RuntimeService, RuntimeSessionContext, RuntimeSkillSummary,
-    RuntimeValidateSkillResponse, RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING,
-    RUNTIME_IPC_TRANSPORT,
+    RuntimeExpireCardsRequest, RuntimeExpireCardsResponse, RuntimeHostContractResponse,
+    RuntimeIpcRedaction, RuntimeIpcRequest, RuntimeIpcResponse, RuntimeIpcTransport,
+    RuntimeIpcVersionParams, RuntimeLoadSkillResponse, RuntimePersistentAuditSink,
+    RuntimeRenderComponentRequest, RuntimeRenderComponentResponse, RuntimeResponse, RuntimeResult,
+    RuntimeService, RuntimeSessionContext, RuntimeSkillSummary, RuntimeValidateSkillResponse,
+    RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING, RUNTIME_IPC_TRANSPORT,
 };

@@ -1,8 +1,9 @@
 use crate::api_registry::ApiRegistry;
 use crate::error::{DockCoreError, ErrorCode};
 use crate::host::{
-    ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, PermissionDecision,
-    PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
+    ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, HostActionOutcome,
+    HostActionRequest, HostAdapterContract, PermissionDecision, PermissionDecisionSummary,
+    RenderOutcome, RenderRouter, RuntimeHost,
 };
 use consent_audit::{
     build_consent_request, consent_proof_with_decision, parameter_digest, redact_value,
@@ -279,6 +280,18 @@ where
         input: ComponentRenderInput,
     ) -> Result<RenderOutcome, DockCoreError> {
         self.renderer.render(context, &input)
+    }
+
+    pub fn host_contract(&self) -> HostAdapterContract {
+        self.host.adapter_contract()
+    }
+
+    pub fn handle_host_action(
+        &self,
+        context: &ApiCallContext,
+        request: HostActionRequest,
+    ) -> Result<HostActionOutcome, DockCoreError> {
+        self.host.handle_host_action(context, request)
     }
 
     pub fn registry(&self) -> &ApiRegistry {

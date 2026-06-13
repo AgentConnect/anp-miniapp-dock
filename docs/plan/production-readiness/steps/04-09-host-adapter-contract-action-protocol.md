@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-09
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 21:23:49 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-08 完成后，启动 Host adapter contract |
+| Review evidence | 2026-06-13 21:50:47 +0800 commit 前 Review 已完成：修复 Host action outcome 只依赖 custom Host 自行脱敏的问题，改为 Runtime 出口统一二次脱敏；修复 `openDetailPage` 初版只在 headless Host 内 canonicalize 的问题，改为 Runtime 先拒绝 external URL、protocol-relative、`javascript:`、`file:`、traversal、encoded slash/traversal 和敏感 query，再把 canonical relative target 交给 Host；确认 `api/call` 不进入 Host adapter，仍走 Orchestrator、permission、ConsentGate、audit 和 executor；确认 custom Host unknown action 默认 unsupported fail closed，headless mock `productionReady = false`。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 78]`，工作区无未提交变更；已读取主 Plan、Step 04-09 文档、Phase 4 Host Adapter Contract 章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 04-08 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p dock-core host` 11 matched tests passed（其中 `host_adapter_contract` filter 命中 5 个，`cargo test -p dock-core` 覆盖全部 7 个 Host contract tests）；`cargo test -p dock-core` 37 passed；`cargo test -p component-runtime action` 3 matched tests passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo clippy -p dock-core --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/component-runtime crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词扫描使用 fixed-string `rg`，仅命中文档红线、redaction marker、测试假值和既有安全计划文本，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
+| Next action | 创建 04-09 focused commit，然后关闭本 Step 并进入 04-10。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,13 +65,13 @@ Step index：04-09
 
 ## 7. 验收标准
 
-- [ ] Host adapter contract 明确 required/optional/unsupported capability。
-- [ ] Headless/mock adapter 通过 render/fallback/action/consent/provider conformance tests。
-- [ ] Unknown node/action fail closed 或 fallback，不静默执行。
-- [ ] `api/call`、payment、phone、address、location、file/media 等高风险 action 必须回 Runtime/Orchestrator。
-- [ ] openDetailPage、external URL/path 有 canonicalize 和 deny tests。
-- [ ] 组件矩阵、Release Gates 和 Phase 4 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Host adapter contract 明确 required/optional/unsupported capability。
+- [x] Headless/mock adapter 通过 render/fallback/action/consent/provider conformance tests。
+- [x] Unknown node/action fail closed 或 fallback，不静默执行。
+- [x] `api/call`、payment、phone、address、location、file/media 等高风险 action 必须回 Runtime/Orchestrator。
+- [x] openDetailPage、external URL/path 有 canonicalize 和 deny tests。
+- [x] 组件矩阵、Release Gates 和 Phase 4 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,11 +94,11 @@ Step index：04-09
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已处理 | 1. Host action outcome 初版只在 `HostActionOutcome::accepted()` helper 内脱敏，custom Host 可直接构造未脱敏 payload 返回 Runtime；2. `openDetailPage` 初版主要由 headless Host canonicalize，生产 Host 若实现自定义处理可能收到未规范化 raw URL；3. 需要确认 `api/call` 不经过 Host adapter，避免绕过 Orchestrator 安全链路。 |
+| 已修复问题 | 已修复 | Runtime `dispatch_host_action()` 对 Host outcome 执行 `.redacted()`，统一覆盖 custom Host；Runtime 在构造 `openDetailPage` Host request 前调用 `canonicalize_open_detail_page_target()`，只把 canonical relative target 交给 Host；新增 custom leaky Host 测试确认 Runtime 出口会脱敏，新增/更新测试确认 `api/call` boundary 为 `runtime-orchestrator` 且 `host_action = None`。 |
+| 剩余风险 | 已记录 | 本 Step 冻结 `dock.host-adapter.v1` contract、headless/mock conformance 和 Host action protocol；真实 production Host UI/provider、外链/详情页 policy、least-privilege provider field shape、真实设备 E2E 和 deployment config 仍未完成，不得声明 production-ready。 |
+| 新增或缺失测试 | 已补齐 | 新增 `crates/dock-core/tests/host_adapter_contract.rs`，覆盖 capability declaration、`api/call` Orchestrator routing、高风险 `payOrder` consent/audit、detail page canonicalize/deny、follow-up redaction、custom Host unsupported fail closed、custom Host leaky outcome 二次脱敏；未新增真实 Host UI/provider E2E，按本 Step 非目标和剩余风险记录。 |
+| 已更新或缺失文档 | 已同步 | 已更新 Phase 4 runtime/Host integration 文档、组件兼容矩阵、release gates、threat model 和本 Step/roadmap 台账；Phase 5 Host adapter developer guide 与 Phase 6 ops runbook 仍待后续 Step 引用本 contract。 |
 
 ## 10. Commit 要求
 
