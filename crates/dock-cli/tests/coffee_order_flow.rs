@@ -277,6 +277,67 @@ fn inspect_coffee_skill_reports_package_graph() {
 }
 
 #[test]
+fn test_skill_coffee_reports_fixture_passes() {
+    let report = cli_json([
+        "dock-cli".to_owned(),
+        "test-skill".to_owned(),
+        skill_root().display().to_string(),
+    ]);
+
+    assert_eq!(report["schemaVersion"], "dock.test-skill-report.v1");
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["commandStatus"], "ok");
+    assert_eq!(report["fixtureSet"], "coffee");
+    assert_eq!(report["summary"]["total"], 3);
+    assert_eq!(report["summary"]["failed"], 0);
+    assert_eq!(report["mockProvider"]["status"], "dev-only");
+    assert_eq!(report["mockProvider"]["productionReady"], false);
+    assert!(report["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .any(|case| case["name"] == "coffee.payOrder"
+            && case["status"] == "pass"
+            && case["expire"]["expired"] == true));
+
+    let rendered = report.to_string();
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
+    assert!(!rendered.contains("capabilityToken"));
+    assert!(!rendered.contains("/home/"));
+}
+
+#[test]
+fn test_skill_dynamic_fixture_compares_snapshot() {
+    let report = cli_json([
+        "dock-cli".to_owned(),
+        "test-skill".to_owned(),
+        fixture_skill_root("dynamic-status").display().to_string(),
+    ]);
+
+    assert_eq!(report["schemaVersion"], "dock.test-skill-report.v1");
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["skillId"], "dynamic-status");
+    assert_eq!(report["fixtureSet"], "dynamic-status");
+    assert_eq!(report["summary"]["total"], 1);
+    assert_eq!(report["cases"][0]["snapshotCompare"]["status"], "match");
+    assert_eq!(
+        report["cases"][0]["auditSummary"]["expected"]["boundary"],
+        "dynamic-request-timer-gated"
+    );
+    assert_eq!(report["cases"][0]["component"]["metadata"]["dynamic"], true);
+    assert_eq!(
+        report["cases"][0]["auditSummary"]["events"][0]["skillId"],
+        "dynamic-status"
+    );
+
+    let rendered = report.to_string();
+    assert!(!rendered.contains("fixture-token"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
+}
+
+#[test]
 fn call_api_reports_schema_errors_without_running_runtime() {
     let error = cli_json_result([
         "dock-cli".to_owned(),

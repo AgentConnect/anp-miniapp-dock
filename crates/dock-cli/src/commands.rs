@@ -8,7 +8,7 @@ use card_spec::{fallback_from_result, FallbackReason};
 use clap::{Parser, Subcommand};
 use component_runtime::{
     ComponentEvent, ComponentInput, ComponentInstance, ComponentMetadata, ComponentPackage,
-    ComponentRenderOutput, ComponentVmAction, RenderEventKind, RenderNode,
+    ComponentRenderOutput, ComponentVmAction, DynamicComponentConfig, RenderEventKind, RenderNode,
 };
 use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_DECISION_ACTOR};
 use dock_core::{
@@ -26,13 +26,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use skill_loader::{load_skill, resolve_component_path, LoadedSkill};
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::Duration;
 use thiserror::Error;
+use wx_compat::{CapabilityProfile, RequestBroker, WxRequest, WxRequestError, WxResponse};
 
 const DEFAULT_SESSION_ID: &str = "session-cli";
 const DEFAULT_SKILL_ID: &str = "coffee";
@@ -57,6 +59,9 @@ enum Command {
         skill: PathBuf,
     },
     Inspect {
+        skill: PathBuf,
+    },
+    TestSkill {
         skill: PathBuf,
     },
     CallApi {
@@ -119,6 +124,7 @@ impl Cli {
         match &self.command {
             Command::Validate { skill } => validate(skill),
             Command::Inspect { skill } => inspect(skill),
+            Command::TestSkill { skill } => test_skill(skill),
             Command::CallApi {
                 skill,
                 api_name,
@@ -1360,6 +1366,713 @@ fn parse_wx_api(input: &str) -> Option<(String, usize)> {
     }
 }
 
+fn test_skill(skill_path: &Path) -> Result<Value, CliError> {
+    let skill = load_skill(skill_path)?;
+    let fixture_plan = FixturePlan::from_skill(skill_path, &skill)?;
+    let mut cases = Vec::new();
+    for case in &fixture_plan.cases {
+        cases.push(run_fixture_case(skill_path, &skill, case)?);
+    }
+    let failed_count = cases
+        .iter()
+        .filter(|case| case.get("status").and_then(Value::as_str) != Some("pass"))
+        .count();
+
+    Ok(json!({
+        "schemaVersion": "dock.test-skill-report.v1",
+        "status": if failed_count == 0 { "ok" } else { "failed" },
+        "commandStatus": "ok",
+        "skillId": skill_id_for_path(&skill, skill_path),
+        "skillRef": validate_skill_ref(skill_path),
+        "fixtureSet": fixture_plan.name,
+        "mockProvider": {
+            "status": "dev-only",
+            "productionReady": false,
+            "provider": "dock-cli-headless-fixture",
+            "consentProvider": DEV_HEADLESS_CONSENT_PROVIDER,
+            "decisionActor": DEV_HEADLESS_DECISION_ACTOR,
+            "note": "test-skill uses headless/dev-only providers and does not certify production Host providers."
+        },
+        "summary": {
+            "total": cases.len(),
+            "passed": cases.len().saturating_sub(failed_count),
+            "failed": failed_count,
+        },
+        "cases": cases,
+    }))
+}
+
+struct FixturePlan {
+    name: String,
+    cases: Vec<FixtureCase>,
+}
+
+#[derive(Clone)]
+struct FixtureCase {
+    name: String,
+    api_name: String,
+    arguments: Value,
+    component_path: Option<String>,
+    snapshot_name: Option<String>,
+    action_method: Option<String>,
+    expire: bool,
+    audit_summary: Value,
+    expected_render_root_kind: Option<String>,
+}
+
+impl FixturePlan {
+    fn from_skill(skill_path: &Path, skill: &LoadedSkill) -> Result<Self, CliError> {
+        let fixture_name = skill_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(DEFAULT_SKILL_ID);
+        match fixture_name {
+            "address-form" => Ok(Self {
+                name: "address-form".to_owned(),
+                cases: vec![FixtureCase {
+                    name: "address-form.prepareAddressForm".to_owned(),
+                    api_name: "prepareAddressForm".to_owned(),
+                    arguments: json!({"addressHandle": "addr_handle_demo_001"}),
+                    component_path: Some("components/address-form/index".to_owned()),
+                    snapshot_name: Some("address-form.prepareAddressForm".to_owned()),
+                    action_method: Some("submit".to_owned()),
+                    expire: true,
+                    audit_summary: json!({
+                        "provider": "wx.chooseAddress",
+                        "riskLevel": "L4",
+                        "boundary": "host-provider-consent-required",
+                        "dataPolicy": "opaque-address-handle-only"
+                    }),
+                    expected_render_root_kind: Some("view".to_owned()),
+                }],
+            }),
+            "media-review" => Ok(Self {
+                name: "media-review".to_owned(),
+                cases: vec![FixtureCase {
+                    name: "media-review.reviewMedia".to_owned(),
+                    api_name: "reviewMedia".to_owned(),
+                    arguments: json!({
+                        "imageHandle": "image_handle_demo_001",
+                        "fileHandle": "file_handle_demo_001"
+                    }),
+                    component_path: Some("components/media-review/index".to_owned()),
+                    snapshot_name: Some("media-review.reviewMedia".to_owned()),
+                    action_method: Some("approve".to_owned()),
+                    expire: true,
+                    audit_summary: json!({
+                        "provider": "wx.chooseMedia",
+                        "riskLevel": "L4",
+                        "boundary": "host-media-provider-required",
+                        "dataPolicy": "opaque-file-and-image-handles-only"
+                    }),
+                    expected_render_root_kind: Some("view".to_owned()),
+                }],
+            }),
+            "dynamic-status" => Ok(Self {
+                name: "dynamic-status".to_owned(),
+                cases: vec![FixtureCase {
+                    name: "dynamic-status.refreshDynamicStatus".to_owned(),
+                    api_name: "refreshDynamicStatus".to_owned(),
+                    arguments: json!({"orderId": "order_demo_001"}),
+                    component_path: Some("components/dynamic-status/index".to_owned()),
+                    snapshot_name: Some("dynamic-status.refreshDynamicStatus".to_owned()),
+                    action_method: Some("refresh".to_owned()),
+                    expire: true,
+                    audit_summary: json!({
+                        "provider": "RequestBroker",
+                        "riskLevel": "L2",
+                        "boundary": "dynamic-request-timer-gated",
+                        "dataPolicy": "response-auth-headers-redacted"
+                    }),
+                    expected_render_root_kind: Some("view".to_owned()),
+                }],
+            }),
+            "location-map-preview" => Ok(Self {
+                name: "location-map-preview".to_owned(),
+                cases: vec![FixtureCase {
+                    name: "location-map-preview.prepareLocationMap".to_owned(),
+                    api_name: "prepareLocationMap".to_owned(),
+                    arguments: json!({"locationToken": "location_handle_demo_001"}),
+                    component_path: Some("components/location-map-preview/index".to_owned()),
+                    snapshot_name: Some("location-map-preview.prepareLocationMap".to_owned()),
+                    action_method: Some("requestLocation".to_owned()),
+                    expire: true,
+                    audit_summary: json!({
+                        "provider": "wx.getLocation",
+                        "riskLevel": "L4",
+                        "boundary": "host-location-provider-fail-closed",
+                        "dataPolicy": "opaque-location-token-only"
+                    }),
+                    expected_render_root_kind: Some("view".to_owned()),
+                }],
+            }),
+            "coffee-skill" | "coffee" => Ok(Self {
+                name: "coffee".to_owned(),
+                cases: vec![
+                    FixtureCase {
+                        name: "coffee.searchDrinks".to_owned(),
+                        api_name: "searchDrinks".to_owned(),
+                        arguments: json!({"query": "latte"}),
+                        component_path: Some("components/drink-list/index".to_owned()),
+                        snapshot_name: None,
+                        action_method: Some("confirmDrink".to_owned()),
+                        expire: false,
+                        audit_summary: json!({
+                            "provider": "mock-coffee",
+                            "riskLevel": "low",
+                            "boundary": "demo-only-local-fixture",
+                            "dataPolicy": "mock-merchant-data"
+                        }),
+                        expected_render_root_kind: Some("view".to_owned()),
+                    },
+                    FixtureCase {
+                        name: "coffee.confirmOrder".to_owned(),
+                        api_name: "confirmOrder".to_owned(),
+                        arguments: json!({
+                            "drinkId": "latte",
+                            "size": "medium",
+                            "sugar": "less"
+                        }),
+                        component_path: Some("components/order-confirm/index".to_owned()),
+                        snapshot_name: None,
+                        action_method: Some("payOrder".to_owned()),
+                        expire: false,
+                        audit_summary: json!({
+                            "provider": "mock-coffee",
+                            "riskLevel": "order",
+                            "boundary": "dev-headless-consent-approved",
+                            "dataPolicy": "mock-order-only"
+                        }),
+                        expected_render_root_kind: Some("view".to_owned()),
+                    },
+                    FixtureCase {
+                        name: "coffee.payOrder".to_owned(),
+                        api_name: "payOrder".to_owned(),
+                        arguments: json!({"orderId": "order_demo_001"}),
+                        component_path: Some("components/payment-result/index".to_owned()),
+                        snapshot_name: None,
+                        action_method: None,
+                        expire: true,
+                        audit_summary: json!({
+                            "provider": "mock-coffee",
+                            "riskLevel": "payment",
+                            "boundary": "dev-headless-consent-approved",
+                            "dataPolicy": "mock-payment-only"
+                        }),
+                        expected_render_root_kind: Some("view".to_owned()),
+                    },
+                ],
+            }),
+            _ => {
+                let cases = skill
+                    .manifest
+                    .apis
+                    .iter()
+                    .map(|api| FixtureCase {
+                        name: format!("{}.{}", skill_id_for_path(skill, skill_path), api.name),
+                        api_name: api.name.clone(),
+                        arguments: Value::Object(Map::new()),
+                        component_path: api.component_path().map(ToOwned::to_owned),
+                        snapshot_name: None,
+                        action_method: None,
+                        expire: false,
+                        audit_summary: json!({
+                            "provider": "unknown",
+                            "riskLevel": api.meta.as_ref().and_then(|meta| meta.anp.as_ref()).and_then(|anp| anp.get("risk")).cloned().unwrap_or_else(|| json!("unknown")),
+                            "boundary": "generated-empty-arguments",
+                            "dataPolicy": "developer-fixture-required"
+                        }),
+                        expected_render_root_kind: Some("view".to_owned()),
+                    })
+                    .collect::<Vec<_>>();
+                Ok(Self {
+                    name: skill_id_for_path(skill, skill_path),
+                    cases,
+                })
+            }
+        }
+    }
+}
+
+fn run_fixture_case(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    case: &FixtureCase,
+) -> Result<Value, CliError> {
+    let mut failures = Vec::new();
+    let runtime = RuntimeHarness::load(
+        skill_path,
+        RuntimeIdentity::default_for_skill(skill, skill_path),
+        Option::<&DemoAuthConfig>::None,
+    )?;
+    let call = match runtime.call(&case.api_name, case.arguments.clone()) {
+        Ok(call) => call,
+        Err(error) => {
+            failures.push(json!({
+                "stage": "api",
+                "message": redact_text(&error.to_string()),
+            }));
+            return Ok(fixture_case_report(
+                case,
+                FixtureCaseArtifacts {
+                    failures,
+                    api: Value::Null,
+                    component: Value::Null,
+                    event_actions: Value::Null,
+                    snapshot_compare: Value::Null,
+                    audit_events: Vec::new(),
+                    expire: Value::Null,
+                },
+            ));
+        }
+    };
+
+    if call.result.is_error {
+        failures.push(json!({
+            "stage": "api",
+            "message": "Atomic API returned isError = true",
+        }));
+    }
+
+    let mut event_actions = Vec::new();
+    let mut expire_summary = Value::Null;
+    let mut snapshot_compare = Value::Null;
+    let mut component_summary = Value::Null;
+    let component_path = case.component_path.as_deref().or_else(|| {
+        call.render
+            .as_ref()
+            .and_then(|render| render.component_path.as_deref())
+    });
+    if let Some(component_path) = component_path {
+        let mut mounted = mount_fixture_for_outcome(
+            skill_path,
+            skill,
+            &case.api_name,
+            case.arguments.clone(),
+            call.result.clone(),
+            component_path,
+        )?;
+        component_summary = json!({
+            "componentPath": component_path,
+            "render": component_render_json(&mounted.mount.render),
+            "actions": mounted.mount.actions,
+            "metadata": mounted.mount.metadata,
+            "state": mounted.mount.state,
+        });
+        if let Some(expected_kind) = &case.expected_render_root_kind {
+            let actual_kind = serde_json::to_value(&mounted.mount.render.root.kind)
+                .unwrap_or(Value::Null)
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            if actual_kind != *expected_kind {
+                failures.push(json!({
+                    "stage": "render",
+                    "path": "render.root.kind",
+                    "expected": expected_kind,
+                    "actual": actual_kind,
+                }));
+            }
+        }
+        if let Some(method) = &case.action_method {
+            match find_tap_event(&mounted.mount.render.root, method) {
+                Some(event) => {
+                    let outcome = mounted.instance.dispatch_event(&event)?;
+                    event_actions = outcome.actions;
+                    if !event_actions
+                        .iter()
+                        .any(|action| matches!(action, ComponentVmAction::ApiCall { .. }))
+                    {
+                        failures.push(json!({
+                            "stage": "action",
+                            "message": "event did not emit api/call",
+                            "method": method,
+                        }));
+                    }
+                }
+                None => failures.push(json!({
+                    "stage": "action",
+                    "message": "tap event not found",
+                    "method": method,
+                })),
+            }
+        }
+        if case.expire {
+            let expired = mounted.instance.expire(json!({"reason": "test-skill"}));
+            expire_summary = json!({
+                "ok": expired.is_ok(),
+                "expired": mounted.instance.is_expired(),
+            });
+            if expired.is_err() || !mounted.instance.is_expired() {
+                failures.push(json!({
+                    "stage": "expire",
+                    "message": "component did not expire cleanly",
+                }));
+            }
+        }
+        if let Some(snapshot_name) = &case.snapshot_name {
+            let actual_snapshot =
+                fixture_snapshot_value(case, &mounted, &event_actions, &expire_summary);
+            snapshot_compare =
+                compare_fixture_snapshot(skill_path, snapshot_name, &actual_snapshot)?;
+            if snapshot_compare.get("status").and_then(Value::as_str) != Some("match") {
+                failures.push(json!({
+                    "stage": "snapshot",
+                    "snapshot": snapshot_name,
+                    "diff": snapshot_compare,
+                }));
+            }
+        }
+    } else {
+        failures.push(json!({
+            "stage": "render",
+            "message": "fixture case has no component path",
+        }));
+    }
+
+    assert_fixture_report_has_no_sensitive_strings(&json!({
+        "result": call.result,
+        "render": component_summary,
+        "eventActions": event_actions,
+        "audit": audit_events_json(&runtime.audit_events()),
+        "snapshotCompare": snapshot_compare,
+    }))?;
+
+    Ok(fixture_case_report(
+        case,
+        FixtureCaseArtifacts {
+            failures,
+            api: json!({
+                "apiName": case.api_name,
+                "arguments": redact_metadata_value(&case.arguments),
+                "result": call.result,
+                "modelVisible": call.model_visible,
+            }),
+            component: component_summary,
+            event_actions: serde_json::to_value(&event_actions).unwrap_or(Value::Null),
+            snapshot_compare,
+            audit_events: runtime.audit_events(),
+            expire: expire_summary,
+        },
+    ))
+}
+
+struct FixtureCaseArtifacts {
+    failures: Vec<Value>,
+    api: Value,
+    component: Value,
+    event_actions: Value,
+    snapshot_compare: Value,
+    audit_events: Vec<AuditEvent>,
+    expire: Value,
+}
+
+fn fixture_case_report(case: &FixtureCase, artifacts: FixtureCaseArtifacts) -> Value {
+    json!({
+        "name": case.name,
+        "status": if artifacts.failures.is_empty() { "pass" } else { "fail" },
+        "api": artifacts.api,
+        "component": artifacts.component,
+        "eventActions": artifacts.event_actions,
+        "snapshotCompare": artifacts.snapshot_compare,
+        "auditSummary": {
+            "expected": case.audit_summary,
+            "events": audit_events_json(&artifacts.audit_events),
+            "eventCount": artifacts.audit_events.len(),
+        },
+        "expire": artifacts.expire,
+        "failures": artifacts.failures,
+    })
+}
+
+fn mount_fixture_for_outcome(
+    skill_path: &Path,
+    skill: &LoadedSkill,
+    api_name: &str,
+    arguments: Value,
+    result: AtomicApiResult,
+    component_path: &str,
+) -> Result<MountedComponent, CliError> {
+    let package = load_component_package(skill_path, component_path)?;
+    let metadata = manifest_component_metadata(&skill.manifest, component_path)?;
+    let broker = metadata.dynamic.then(FixtureRequestBroker::new);
+    let config = fixture_component_config(&metadata, broker.clone());
+    let mut instance = ComponentInstance::with_config(package, config)?;
+    let input = ComponentInput {
+        component_metadata: metadata,
+        ..component_input(api_name, arguments, &result)
+    };
+    let mount = instance.mount(input)?;
+    Ok(MountedComponent {
+        instance,
+        mount,
+        broker,
+    })
+}
+
+fn fixture_component_config(
+    metadata: &ComponentMetadata,
+    broker: Option<Rc<FixtureRequestBroker>>,
+) -> component_runtime::ComponentVmConfig {
+    if metadata.dynamic {
+        component_runtime::ComponentVmConfig {
+            dynamic: DynamicComponentConfig::default()
+                .with_request_broker(broker.unwrap_or_else(FixtureRequestBroker::new)),
+            ..component_runtime::ComponentVmConfig::default()
+        }
+    } else {
+        component_runtime::ComponentVmConfig::default()
+    }
+}
+
+#[derive(Debug)]
+struct FixtureRequestBroker {
+    calls: RefCell<Vec<WxRequest>>,
+}
+
+impl FixtureRequestBroker {
+    fn new() -> Rc<Self> {
+        Rc::new(Self {
+            calls: RefCell::new(Vec::new()),
+        })
+    }
+}
+
+impl RequestBroker for FixtureRequestBroker {
+    fn request(
+        &self,
+        profile: &CapabilityProfile,
+        request: WxRequest,
+    ) -> Result<WxResponse, WxRequestError> {
+        if !profile.check(wx_compat::Capability::Request).is_allowed() {
+            return Err(WxRequestError::Denied(
+                "fixture request capability denied".to_owned(),
+            ));
+        }
+        self.calls.borrow_mut().push(request);
+        let mut headers = BTreeMap::new();
+        headers.insert("x-fixture-safe".to_owned(), "broker-ok".to_owned());
+        headers.insert(
+            "Authorization".to_owned(),
+            "Bearer fixture-token".to_owned(),
+        );
+        headers.insert("x-token-id".to_owned(), "fixture-token".to_owned());
+        Ok(WxResponse {
+            status_code: 200,
+            headers,
+            data: json!({
+                "status": "ready",
+                "source": "fixture-broker"
+            }),
+        })
+    }
+}
+
+fn fixture_snapshot_value(
+    case: &FixtureCase,
+    mounted: &MountedComponent,
+    event_actions: &[ComponentVmAction],
+    expire: &Value,
+) -> Value {
+    let (fixture, _) = case
+        .snapshot_name
+        .as_deref()
+        .and_then(|name| name.split_once('.'))
+        .unwrap_or((case.name.as_str(), case.name.as_str()));
+    let component = case
+        .component_path
+        .as_deref()
+        .and_then(|path| {
+            path.strip_suffix("/index")
+                .unwrap_or(path)
+                .rsplit('/')
+                .next()
+        })
+        .unwrap_or(fixture);
+    let mut audit_summary = case.audit_summary.clone();
+    if let Some(broker) = &mounted.broker {
+        audit_summary["brokerCalls"] = json!(broker.calls.borrow().len());
+    }
+    let state = normalized_fixture_snapshot_state(case, &mounted.mount.state);
+    json!({
+        "fixture": fixture,
+        "component": component,
+        "render": mounted.mount.render,
+        "actions": mounted.mount.actions,
+        "eventActions": event_actions,
+        "warnings": mounted.mount.render.warnings,
+        "metadata": mounted.mount.metadata,
+        "state": state,
+        "auditSummary": audit_summary,
+        "expire": expire,
+    })
+}
+
+fn normalized_fixture_snapshot_state(case: &FixtureCase, state: &Value) -> Value {
+    let mut state = state.clone();
+    if let Value::Object(fields) = &mut state {
+        fields.insert(
+            "content".to_owned(),
+            json!([{
+                "type": "text",
+                "text": format!("{} fixture result", case.api_name),
+            }]),
+        );
+        let meta = fields
+            .entry("_meta".to_owned())
+            .or_insert_with(|| json!({}));
+        if let Value::Object(meta_fields) = meta {
+            meta_fields.insert("fixture".to_owned(), json!(case.api_name));
+            meta_fields.insert("mockOnly".to_owned(), json!(true));
+            meta_fields.remove("risk");
+        }
+    }
+    state
+}
+
+fn compare_fixture_snapshot(
+    skill_path: &Path,
+    snapshot_name: &str,
+    actual: &Value,
+) -> Result<Value, CliError> {
+    let snapshot_path = fixture_snapshot_path(skill_path, snapshot_name)?;
+    let expected = read_json_file(&snapshot_path)?;
+    if &expected == actual {
+        return Ok(json!({
+            "status": "match",
+            "snapshot": relative_display(&snapshot_path),
+        }));
+    }
+
+    Ok(json!({
+        "status": "mismatch",
+        "snapshot": relative_display(&snapshot_path),
+        "diff": first_json_diff("", &expected, actual).unwrap_or_else(|| json!({
+            "path": "",
+            "expected": expected,
+            "actual": actual,
+        })),
+    }))
+}
+
+fn fixture_snapshot_path(skill_path: &Path, snapshot_name: &str) -> Result<PathBuf, CliError> {
+    let project_root = find_project_root_from(skill_path)
+        .or_else(|| default_project_root().ok())
+        .ok_or_else(|| {
+            CliError::Demo("could not locate project root for fixture snapshots".to_owned())
+        })?;
+    Ok(project_root
+        .join("testdata/render-ir")
+        .join(format!("{snapshot_name}.json")))
+}
+
+fn first_json_diff(path: &str, expected: &Value, actual: &Value) -> Option<Value> {
+    if expected == actual {
+        return None;
+    }
+    match (expected, actual) {
+        (Value::Object(expected_map), Value::Object(actual_map)) => {
+            let mut keys = expected_map
+                .keys()
+                .chain(actual_map.keys())
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            for key in std::mem::take(&mut keys) {
+                let child_path = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                match (expected_map.get(&key), actual_map.get(&key)) {
+                    (Some(expected_child), Some(actual_child)) => {
+                        if let Some(diff) =
+                            first_json_diff(&child_path, expected_child, actual_child)
+                        {
+                            return Some(diff);
+                        }
+                    }
+                    (expected_child, actual_child) => {
+                        return Some(json!({
+                            "path": child_path,
+                            "expected": expected_child.cloned().unwrap_or(Value::Null),
+                            "actual": actual_child.cloned().unwrap_or(Value::Null),
+                        }));
+                    }
+                }
+            }
+            None
+        }
+        (Value::Array(expected_items), Value::Array(actual_items)) => {
+            for index in 0..expected_items.len().max(actual_items.len()) {
+                let child_path = format!("{path}[{index}]");
+                match (expected_items.get(index), actual_items.get(index)) {
+                    (Some(expected_child), Some(actual_child)) => {
+                        if let Some(diff) =
+                            first_json_diff(&child_path, expected_child, actual_child)
+                        {
+                            return Some(diff);
+                        }
+                    }
+                    (expected_child, actual_child) => {
+                        return Some(json!({
+                            "path": child_path,
+                            "expected": expected_child.cloned().unwrap_or(Value::Null),
+                            "actual": actual_child.cloned().unwrap_or(Value::Null),
+                        }));
+                    }
+                }
+            }
+            None
+        }
+        _ => Some(json!({
+            "path": path,
+            "expected": expected,
+            "actual": actual,
+        })),
+    }
+}
+
+fn read_json_file(path: &Path) -> Result<Value, CliError> {
+    let source = std::fs::read_to_string(path)?;
+    serde_json::from_str(&source).map_err(|source| CliError::Json {
+        label: relative_display(path),
+        source,
+    })
+}
+
+fn relative_display(path: &Path) -> String {
+    if let Some(project_root) = find_project_root_from(path) {
+        if let Ok(relative) = path.strip_prefix(&project_root) {
+            return relative
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/");
+        }
+    }
+    report_path(path).0
+}
+
+fn assert_fixture_report_has_no_sensitive_strings(value: &Value) -> Result<(), CliError> {
+    let rendered = value.to_string();
+    for forbidden in [
+        "Bearer ",
+        "Authorization",
+        "Signature",
+        "Signature-Input",
+        "capabilityToken",
+        "private key",
+        "fixture-token",
+        "/home/",
+        "/Users/",
+    ] {
+        if rendered.contains(forbidden) {
+            return Err(CliError::Demo(format!(
+                "fixture report contains forbidden string `{forbidden}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value, CliError> {
     let args = parse_json(json_args, "jsonArgs")?;
     let auth_config = if requires_remote_auth(&args) {
@@ -1373,6 +2086,7 @@ fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value,
             user_did: auth_config.user_did.clone(),
             agent_did: auth_config.agent_did.clone(),
             merchant_did: DEFAULT_MERCHANT_DID.to_owned(),
+            skill_id: DEFAULT_SKILL_ID.to_owned(),
         })
         .unwrap_or_else(RuntimeIdentity::default_demo);
     let runtime = RuntimeHarness::load(skill_path, identity, auth_config.as_ref())?;
@@ -1483,6 +2197,7 @@ fn run_demo(
             user_did: auth_config.user_did.clone(),
             agent_did: auth_config.agent_did.clone(),
             merchant_did: auth.merchant_did.clone(),
+            skill_id: DEFAULT_SKILL_ID.to_owned(),
         },
         Some(auth_config),
     )?;
@@ -1592,6 +2307,7 @@ struct RuntimeIdentity {
     user_did: String,
     agent_did: Option<String>,
     merchant_did: String,
+    skill_id: String,
 }
 
 impl RuntimeIdentity {
@@ -1600,6 +2316,14 @@ impl RuntimeIdentity {
             user_did: DEFAULT_USER_DID.to_owned(),
             agent_did: Some(DEFAULT_AGENT_DID.to_owned()),
             merchant_did: DEFAULT_MERCHANT_DID.to_owned(),
+            skill_id: DEFAULT_SKILL_ID.to_owned(),
+        }
+    }
+
+    fn default_for_skill(skill: &LoadedSkill, skill_path: &Path) -> Self {
+        Self {
+            skill_id: skill_id_for_path(skill, skill_path),
+            ..Self::default_demo()
         }
     }
 }
@@ -1654,7 +2378,7 @@ impl RuntimeHarness {
                     user_did: Some(self.identity.user_did.clone()),
                     agent_did: self.identity.agent_did.clone(),
                     merchant_did: Some(self.identity.merchant_did.clone()),
-                    skill_id: DEFAULT_SKILL_ID.to_owned(),
+                    skill_id: self.identity.skill_id.clone(),
                     session_id: DEFAULT_SESSION_ID.to_owned(),
                 },
                 api_name: api_name.into(),
@@ -1799,6 +2523,7 @@ impl RuntimeAuditReader for CollectAudit {
 struct MountedComponent {
     instance: ComponentInstance,
     mount: component_runtime::ComponentOperationOutcome,
+    broker: Option<Rc<FixtureRequestBroker>>,
 }
 
 fn mount_for_outcome(
@@ -1817,7 +2542,11 @@ fn mount_for_outcome(
         ..component_input(api_name, arguments, &result)
     };
     let mount = instance.mount(input)?;
-    Ok(MountedComponent { instance, mount })
+    Ok(MountedComponent {
+        instance,
+        mount,
+        broker: None,
+    })
 }
 
 fn component_input(api_name: &str, arguments: Value, result: &AtomicApiResult) -> ComponentInput {
@@ -2409,6 +3138,22 @@ fn skill_id(skill: &LoadedSkill) -> String {
         .to_owned()
 }
 
+fn skill_id_for_path(skill: &LoadedSkill, skill_path: &Path) -> String {
+    skill
+        .manifest
+        .extra
+        .get("id")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            skill_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| DEFAULT_SKILL_ID.to_owned())
+}
+
 fn fallback_reason_from_str(reason: &str) -> FallbackReason {
     FallbackReason::normalize(reason)
 }
@@ -2493,6 +3238,13 @@ mod tests {
         let cli = Cli::try_parse_from_args(["dock-cli", "inspect", "examples/coffee-skill"])
             .expect("args parse");
         assert!(matches!(cli.command, Command::Inspect { .. }));
+    }
+
+    #[test]
+    fn parses_test_skill_args() {
+        let cli = Cli::try_parse_from_args(["dock-cli", "test-skill", "examples/coffee-skill"])
+            .expect("args parse");
+        assert!(matches!(cli.command, Command::TestSkill { .. }));
     }
 
     #[test]
@@ -2719,6 +3471,20 @@ mod tests {
         assert!(!rendered.contains("Authorization header leaked"));
         assert!(!rendered.contains("secret"));
         assert!(rendered.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn first_json_diff_reports_stable_path() {
+        let diff = first_json_diff(
+            "",
+            &json!({"render": {"root": {"kind": "view"}}}),
+            &json!({"render": {"root": {"kind": "text"}}}),
+        )
+        .expect("diff");
+
+        assert_eq!(diff["path"], "render.root.kind");
+        assert_eq!(diff["expected"], "view");
+        assert_eq!(diff["actual"], "text");
     }
 
     #[test]

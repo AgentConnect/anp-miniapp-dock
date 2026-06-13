@@ -566,6 +566,7 @@ dependencies = [
  "skill-loader",
  "thiserror 1.0.69",
  "tokio",
+ "wx-compat",
 ]
 
 [[package]]

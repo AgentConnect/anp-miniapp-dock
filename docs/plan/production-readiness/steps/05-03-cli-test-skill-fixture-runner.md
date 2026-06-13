@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-03
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 00:16:15 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 05-02 完成后，启动 test-skill fixture runner |
+| Review evidence | 2026-06-14 02:15:15 +0800 commit 前 Review 已记录：修复 fixture report 参数过多的 clippy 风险、snapshot component 名称推导错误、golden snapshot 与实际 API 输出差异需要 normalization、dynamic `brokerCalls` 硬编码、fixture/audit `skillId` 使用默认 coffee、以及修复过程中 validate/inspect `skillId` 回归；确认 runner 复用 `RuntimeHarness` / `RuntimeService` 与 Component Runtime，headless provider 明确 `dev-only` / `productionReady = false`，report 不输出敏感 marker、本机路径或 fixture token。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 90]`；已读取主 Plan、Step 05-03 文档、Phase 5 文档、Release Gates fixture gate、现有 `dock-cli` command/runtime harness、coffee E2E、`examples/fixtures/*` 和 `testdata/render-ir/*.json`；已确认 05-02 implementation commit `ed5599f` 与 closure commit `31ac65c`；`cargo fmt --check` 通过；`cargo test -p dock-cli fixture` 通过，实际命中 `coffee_order_flow` 中 3 个 fixture/test-skill 集成用例；`cargo test -p dock-cli test_skill` 通过，1 unit + 2 integration under filter passed；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；手工执行 `dock-cli test-skill` 覆盖 `examples/coffee-skill`、`examples/fixtures/address-form`、`media-review`、`dynamic-status`、`location-map-preview`，JSON parse 全部通过；生成报告敏感串抽样未命中本机路径、Authorization、Signature、capabilityToken、private、secret、fixture-token、Bearer、手机号、真实地址或经纬度；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
+| Next action | 创建 05-03 focused implementation commit，随后回填 commit hash 并关闭本 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,13 +66,13 @@ Step index：05-03
 
 ## 7. 验收标准
 
-- [ ] `dock-cli test-skill` 可执行 fixture cases，并输出 JSON report。
-- [ ] Runner 覆盖 API call、component render、action dispatch、snapshot compare、audit summary。
-- [ ] Snapshot normalization 移除随机 id、时间戳和敏感字段。
-- [ ] Mock/dev-only provider 在 report 中显式标识，不误标 production-ready。
-- [ ] failure diff 可定位 API/result/render/action/audit 哪一层失败。
-- [ ] Release Gates 和 Phase 5 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] `dock-cli test-skill` 可执行 fixture cases，并输出 JSON report。
+- [x] Runner 覆盖 API call、component render、action dispatch、snapshot compare、audit summary。
+- [x] Snapshot normalization 移除随机 id、时间戳和敏感字段。
+- [x] Mock/dev-only provider 在 report 中显式标识，不误标 production-ready。
+- [x] failure diff 可定位 API/result/render/action/audit 哪一层失败。
+- [x] Release Gates 和 Phase 5 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -95,18 +95,18 @@ Step index：05-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 初版 `fixture_case_report` 参数过多；snapshot component 名称从 API 名称推导导致 mismatch；golden snapshot 需要对 API 输出中的 content / `_meta.fixture` / risk 做稳定 normalization；dynamic broker call count 不应硬编码；fixture/audit `skillId` 不应固定为 coffee；修复过程中 validate/inspect 顶层 `skillId` 曾回归为路径 fallback。 |
+| 已修复问题 | 已修复 | 引入 `FixtureCaseArtifacts`；按 `component_path` 推导 component 名称；新增 `normalized_fixture_snapshot_state`；通过 `MountedComponent` 携带 broker 并读取真实 `calls.len()`；新增 `RuntimeIdentity.skill_id` 与 `skill_id_for_path` 只用于 test-skill fixture；恢复 validate/inspect 使用 manifest `skill_id(&skill)`。 |
+| 剩余风险 | 已记录 | `test-skill` 当前内置覆盖 coffee 与既有 `examples/fixtures/*`，任意第三方 Skill 仍只能生成空参数 fallback case；显式 fixture case authoring 和生产 Host conformance 仍由后续 Phase 5/6 与 Host gate 承接。headless provider / RequestBroker 是 dev-only，不能解释为生产 Host 认证。 |
+| 新增或缺失测试 | 已补充 | 新增 `parses_test_skill_args`、`first_json_diff_reports_stable_path`、`test_skill_coffee_reports_fixture_passes`、`test_skill_dynamic_fixture_compares_snapshot`；并通过全 workspace 测试和 clippy。缺口：第三方 fixture case 文件格式与 authoring 工具仍待后续步骤。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `README.md`、Phase 5 developer experience 文档、Release Gates fixture gate、本 Step 与主 Plan 台账。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 test-skill fixture runner、直接 tests/fixtures 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 90]`；未提交文件均属于 05-03：`Cargo.lock`、`README.md`、`crates/dock-cli/Cargo.toml`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness/steps/05-03-cli-test-skill-fixture-runner.md`、`docs/runbook/release-gates.md`。
+- 纳入文件：上述 9 个文件。
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase5: add skill fixture runner`
@@ -115,7 +115,7 @@ Step index：05-03
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 不适用 | 不适用 | 无 | 创建 focused commit 后关闭本 Step |
 
 ## 12. Plan 变更记录
 

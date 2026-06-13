@@ -94,15 +94,45 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ### 3.3 `test-skill`
 
-输入：fixture cases。
+输出 `dock.test-skill-report.v1` JSON：
+
+```json
+{
+  "schemaVersion": "dock.test-skill-report.v1",
+  "status": "ok|failed",
+  "commandStatus": "ok",
+  "skillId": "...",
+  "skillRef": {},
+  "fixtureSet": "coffee|address-form|media-review|dynamic-status|location-map-preview|...",
+  "mockProvider": {
+    "status": "dev-only",
+    "productionReady": false
+  },
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0
+  },
+  "cases": []
+}
+```
 
 执行：
 
 - call API；
 - render component；
 - dispatch action；
-- compare snapshot；
+- compare Render IR snapshot；
 - output audit summary。
+
+要求：
+
+- 默认复用 `RuntimeService` / Component Runtime，不绕过生产 Runtime API facade；
+- coffee fixture 覆盖 search / confirm / pay 三个 API、组件 action 和 payment expire；
+- `examples/fixtures/address-form`、`media-review`、`dynamic-status`、`location-map-preview` 对比 `testdata/render-ir/*.json` golden snapshot；
+- dynamic fixture 使用受控 headless `RequestBroker`，report 必须显示 mock/dev-only 且 `productionReady = false`；
+- failure diff 必须指出 API/result/render/action/audit/snapshot 中的失败层和稳定 JSON path；
+- report 和 snapshot compare 不得包含 token、Authorization、signature、private key path、本机路径、真实手机号、真实地址或经纬度。
 
 ### 3.4 `import-wechat-mcp`
 
