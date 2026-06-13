@@ -2,6 +2,7 @@
 
 pub mod integrity;
 pub mod package;
+pub mod registry;
 pub mod resolver;
 
 pub use integrity::{
@@ -12,6 +13,11 @@ pub use integrity::{
 };
 pub use package::{
     load_skill, load_skill_with_integrity_policy, LoadedComponent, LoadedSkill, SourceFile,
+};
+pub use registry::{
+    load_registry_skill, CachedSkill, CachedSkillMetadata, LocalSkillRegistry,
+    PackageSourceSummary, RegistrySkillEntry, SkillCache, SkillCacheKey, SkillReference,
+    SkillReferenceKind, SkillRegistry, SkillVersionSelector,
 };
 pub use resolver::{
     resolve_api_module, resolve_component_path, resolve_package_path, resolve_skill_path,

@@ -131,6 +131,20 @@ close_session(session)
 - cache eviction；
 - package.zip 从 demo no-op 变为真实候选路径。
 
+当前 Step 04-03 已在 `skill-loader` 内冻结本地 registry/cache/version/rollback contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| Skill reference | `SkillReference` 支持 local path、package URL 和 registry id；保留 `skillId`、`publisherDid`、`version`、`digest` | 真实远端 marketplace/discovery 仍未接入。 |
+| Registry trait | `SkillRegistry::resolve_skill()` 和 `LocalSkillRegistry` 可用本地 manifest/fixture 模拟 merchant registry | 不执行生产 HTTP download；真实网络必须后续接入 allowlist/HTTPS/DID policy。 |
+| Cache key | `SkillCacheKey = publisher DID + skill id + version + digest`，目录名经过 sanitize | cache 命中也会重新用 registry digest 和 package integrity policy 验证。 |
+| Verified cache | `SkillCache::load_or_insert()` 先验证源包 digest、签名、publisher allowlist，再复制到 digest-keyed cache 并设置 readonly | readonly 是本地文件权限 gate，不等同部署级防篡改或加密存储。 |
+| Version selection | `Latest`、`Pinned(version)`、`Rollback { beforeVersion }`，默认不选 prerelease，显式 `registry_id_with_prerelease()` 才允许 | 版本比较为 semver-like numeric order，仍不替代生产 release policy。 |
+| Rollback / eviction | 支持 rollback pin，`evict_unpinned()` 不删除 retain set 或 rollback pin | cache cleanup、quarantine 生命周期和 privacy/delete hooks 后续由 04-08 承接。 |
+| Audit summary | `CachedSkillMetadata::audit_summary()` 输出 source type、package ref、publisher、skill、version、digest、supply-chain status、cache flags，并脱敏 package URL secret/query | 不输出本机 cache root 或 private path。 |
+
+04-03 不声明真实 ANP Agent registry、远端 zip 下载、生产签名算法 verifier 或生产 publisher trust policy 配置已完成；这些仍是 Phase 4/6 的后续 release blocker。
+
 ### 3.4 Runtime Config 与 Secret Store
 
 先冻结配置和 secret 边界，再分别实现具体持久化 backend，避免一个 Step 同时跨 token、storage、audit、cache 和 migration。

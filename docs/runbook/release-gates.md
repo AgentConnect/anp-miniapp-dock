@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 3 security gates 基线；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain 已有本地 release gate 证据
+> 状态：Phase 4 runtime/Host gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -76,6 +76,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 |---|---|
 | Skill package path escape / absolute path / outside symlink / zip slip deny | [`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs) |
 | Skill package digest/signature contract、trusted publisher allowlist、quarantine、validate supply-chain report | [`integrity.rs`](../../crates/skill-loader/src/integrity.rs)、[`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs)、[`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs)、[`commands.rs`](../../crates/dock-cli/src/commands.rs) |
+| Skill registry/cache contract：local/package URL/registry id reference、digest-keyed cache、source/cache digest verify、readonly cache、latest/pinned/prerelease/rollback、rollback pin eviction、cache audit redaction | [`registry.rs`](../../crates/skill-loader/src/registry.rs)、[`skill_registry_cache.rs`](../../crates/skill-loader/tests/skill_registry_cache.rs) |
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout、WebSocket/timer globals deny、Promise job drain、console/result size limit | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs) |
@@ -121,7 +122,8 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 | Gate | 启用阶段 | 当前处理 |
 |---|---|---|
-| production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；Step 02-05 已给 dynamic component request 接入 injected broker boundary；demo-only/unsupported transport 仍不得 production release |
+| production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；Step 02-05 已给 dynamic component request 接入 injected broker boundary；Step 04-03 已冻结本地 registry/cache contract，但真实远端 registry download、Host registry allowlist 和 request audit persistence 仍未完成；demo-only/unsupported transport 仍不得 production release |
+| 真实远端 registry download、生产签名 verifier、publisher trust policy 配置来源 | Phase 4/6 | Step 03-06 已完成 package integrity gate；Step 04-03 已完成本地 registry/cache/version/rollback gate。真实 HTTPS/DID registry discovery/download、生产签名算法 verifier、publisher allowlist 配置来源、CI release report 仍是 production release blocker。 |
 | Host provider conformance：phone/address/location/file/payment/scan/phone call/share/detail page | Phase 4 | 当前只有 host-boundary/fail closed 策略和 mock/dev-only fixtures；真实 provider UI 与 least-privilege field shape 待 Host adapter contract |
 | secret store、token cache 持久化、scoped storage 持久化、audit retention/export 配置化 | Phase 4 | Phase 3 已冻结 consent/audit contract 并提供 append-only JSONL audit 初版后端；部署级 backend、migration、encryption、access control、cleanup 由 Phase 4 拆分 Step 承接 |
 | CLI compatibility / inspect / import 报告 schema、developer self-certification | Phase 5 | 当前 `dock-cli validate` 已输出 demo-only compatibility report；完整 migration/import/report schema 待 Phase 5 |

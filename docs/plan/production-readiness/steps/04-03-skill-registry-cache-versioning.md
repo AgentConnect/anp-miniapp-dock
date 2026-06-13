@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-03
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 19:10:50 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-02 完成后，启动 Skill registry/cache |
+| Review evidence | 2026-06-13 19:28:30 +0800 commit 前 Review 已记录：修复 cache 命中未重新强制 readonly、unknown publisher 可能先复制进 cache、版本字符串排序不符合 `1.10.0 > 1.2.0`、package URL query/token 可能进入 audit summary、测试 readonly cache 目录清理不完整的问题；确认本 Step 只冻结本地 registry/cache contract，不声明真实远端 registry download、生产签名 verifier 或 deployment cache hardening 已完成 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p skill-loader cache` 3 passed；`cargo test -p skill-loader registry` 5 passed；`cargo test -p skill-loader package` 1 coffee package test + 3 registry-related tests under filter passed；`cargo test -p skill-loader` 14 package + 7 registry/cache tests passed；`cargo test -p dock-cli validate` 4 unit + 1 integration passed；`cargo test --workspace` 通过；`cargo clippy -p skill-loader --all-targets -- -D warnings` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/anp-adapter crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感串抽样仅命中测试假值和安全文档规则，未命中本机绝对路径 |
+| Next action | 创建 04-03 focused commit，随后回填 commit hash 并进入 04-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -43,6 +43,14 @@ Step index：04-03
 5. 增加 tests：same digest cache reuse、digest mismatch reject、unknown publisher quarantine、version pin、rollback、cache eviction、audit redaction。
 6. 更新 Phase 4 文档、Threat Model、Release Gates 和 developer validate 计划。
 7. 回填本 Step 和主 Plan 执行台账。
+
+当前实现决策：
+
+- 本 Step 先在 `skill-loader` 内冻结可测试 contract：`SkillReference`、`SkillRegistry`、`LocalSkillRegistry`、`SkillCache`、`CachedSkillMetadata`、`SkillVersionSelector`。
+- 本 Step 不做真实远端 marketplace 或 HTTP download；package URL 只作为 reference/source metadata，真实 download 必须在后续 Step 经过 allowlist、HTTPS、DID policy 和 request audit gate。
+- cache 写入前先校验 registry entry digest，并用 `PackageIntegrityPolicy` 验证源包；cache 命中后再次校验 cached package digest 和 integrity。
+- cache key 固定为 publisher DID + skill id + version + digest，cache metadata audit summary 不输出本机 cache root，并脱敏 URL query/secret。
+- rollback pin 和 eviction 只覆盖本地 cache 生命周期；quarantine 生命周期、privacy/delete hooks 和部署级 cache 防篡改由 04-08/Phase 6 承接。
 
 ## 5. 路径
 
@@ -95,20 +103,20 @@ Step index：04-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录并处理 | cache 命中路径初版只报告 `readonly`，未重新强制 readonly；源包 unknown publisher 初版可能在后续 integrity 校验失败前被复制进 cache；版本排序初版使用字符串排序；package URL query/token 初版可能进入 audit summary；测试 cache 临时目录初版缺少 Drop 清理。 |
+| 已修复问题 | 已修复 | cache 写入前先用 `PackageIntegrityPolicy` 验证源包，cache 命中和写入后均校验 digest/integrity 并重新设置 readonly；新增 semver-like numeric order；audit summary 对 URL secret/query 脱敏；测试 cache 目录 Drop 时恢复权限并删除。 |
+| 剩余风险 | 已记录 | 本 Step 不执行真实 HTTP/ANP registry download，不提供生产签名算法 verifier、publisher trust policy 配置来源、deployment cache 防篡改、cache quarantine 生命周期或 privacy/delete hooks；这些仍由后续 Phase 4/6 Step 承接。 |
+| 新增或缺失测试 | 已新增 | 新增 `skill_registry_cache.rs` 覆盖 local/package URL/registry ref shape、same digest cache reuse、digest mismatch、unknown publisher quarantine、latest/pinned/prerelease/rollback、rollback pin eviction、URL secret redaction；未新增真实网络测试，因为本 Step 非目标是不实现远端 download。 |
+| 已更新或缺失文档 | 已更新 | 更新 Phase 4 runtime/Host 文档、Threat Model、Release Gates 和本 Step 文档；没有修改 Phase 5 developer validate 计划的 CLI schema，因为本 Step 未改变 `dock-cli validate` 输出 contract。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 Skill registry/cache/versioning、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 66]`，未提交文件均为 04-03 registry/cache 代码、测试和直接文档。
+- 纳入文件：`crates/skill-loader/src/lib.rs`、`crates/skill-loader/src/registry.rs`、`crates/skill-loader/tests/skill_registry_cache.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-03-skill-registry-cache-versioning.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
+- Commit 后证据：待提交后回填 commit hash 和 commit 后 `git status --short --branch`。
+- 遗留未提交变更：待提交后确认。
 - 建议消息：`phase4: add skill registry cache`
 
 ## 11. Blocked 处理
