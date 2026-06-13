@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 19:33:40 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 19:49:21 +0800 |
+| Commit | `189ad87` |
 | Review evidence | 2026-06-13 19:47:25 +0800 commit 前 Review 已记录：修复 diagnostics 未脱敏 `issuer` 中 `merchant secret` 文本、`schemaVersion` 可回显异常敏感串、`cargo test -p dock-core config` 初始只命中 2 个新增测试的问题；确认本 Step 只冻结 config/secret contract，不实现真实 secret resolve 或 token/storage/audit/cache 持久化 backend |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 68]`；`cargo fmt --check` 通过；`cargo test -p dock-core config` 8 passed；`cargo test -p dock-core` 27 passed；`cargo test -p dock-cli config` 2 passed under filter，CLI 未新增参数，仅复用既有 credential redaction/config tests；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/anp-adapter docs/runbook docs/security docs/plan` 无输出；敏感串扫描仅命中文档红线、redaction marker/test 假值和既有 redaction 回归测试 |
-| Next action | 准备创建 04-04 focused commit |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 68]`；`cargo fmt --check` 通过；`cargo test -p dock-core config` 8 passed；`cargo test -p dock-core` 27 passed；`cargo test -p dock-cli config` 2 passed under filter，CLI 未新增参数，仅复用既有 credential redaction/config tests；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/anp-adapter docs/runbook docs/security docs/plan` 无输出；敏感串扫描仅命中文档红线、redaction marker/test 假值和既有 redaction 回归测试；post-commit `git status --short --branch` = `## main...origin/main [ahead 69]` |
+| Next action | 进入 04-05 Token Cache 持久化与恢复 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -73,7 +73,7 @@ Step index：04-04
 - [x] Release Gates 明确 production profile 缺少 required secret/provider 时 fail closed 或 release blocked。
 - [x] Step 04-05 至 04-08 的持久化 backend scope 与本 Step 的 config/provider handle 对齐。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
