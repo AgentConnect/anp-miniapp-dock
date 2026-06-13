@@ -177,12 +177,30 @@ impl DidAuthSessionManager {
     }
 
     pub fn clear_session(&self, key: &DidAuthSessionKey) -> Result<(), DidAuthSessionError> {
+        self.revoke_session(key)
+    }
+
+    pub fn revoke_session(&self, key: &DidAuthSessionKey) -> Result<(), DidAuthSessionError> {
         let mut sessions = self
             .sessions
             .lock()
             .map_err(|_| DidAuthSessionError::Unavailable)?;
         sessions.remove(key);
         Ok(())
+    }
+
+    pub fn logout(&self, key: &DidAuthSessionKey) -> Result<(), DidAuthSessionError> {
+        self.revoke_session(key)
+    }
+
+    pub fn evict_expired_sessions(&self) -> Result<usize, DidAuthSessionError> {
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| DidAuthSessionError::Unavailable)?;
+        let before = sessions.len();
+        sessions.retain(|_, session| !session.is_expired());
+        Ok(before.saturating_sub(sessions.len()))
     }
 
     fn active_session(
@@ -341,6 +359,56 @@ mod tests {
 
         assert_eq!(
             manager.check_session(&key),
+            Err(DidAuthSessionError::Missing)
+        );
+    }
+
+    #[test]
+    fn logout_alias_revokes_cached_session() {
+        let manager = DidAuthSessionManager::new();
+        let key = key("coffee", "session-1");
+        manager
+            .put_session(
+                key.clone(),
+                DidAuthSession::new("active-token", None, ["coffee:read"]),
+            )
+            .expect("session caches");
+
+        manager.logout(&key).expect("logout clears");
+
+        assert_eq!(
+            manager.check_session(&key),
+            Err(DidAuthSessionError::Missing)
+        );
+    }
+
+    #[test]
+    fn evict_expired_sessions_reports_removed_count() {
+        let manager = DidAuthSessionManager::new();
+        let active = key("coffee", "session-1");
+        let expired = key("coffee", "session-2");
+        manager
+            .put_session(
+                active.clone(),
+                DidAuthSession::new("active-token", None, ["coffee:read"]),
+            )
+            .expect("active session caches");
+        manager
+            .put_session(
+                expired.clone(),
+                DidAuthSession::new("expired-token", Some(1), ["coffee:read"]),
+            )
+            .expect("expired session caches");
+
+        assert_eq!(
+            manager
+                .evict_expired_sessions()
+                .expect("expired sessions evict"),
+            1
+        );
+        assert!(manager.check_session(&active).is_ok());
+        assert_eq!(
+            manager.check_session(&expired),
             Err(DidAuthSessionError::Missing)
         );
     }

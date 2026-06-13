@@ -8,6 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 pub const CAPABILITY_TOKEN_VERSION: &str = "dock.capability.v1";
+pub const CAPABILITY_TOKEN_SCOPE_DERIVATION_SOURCE: &str =
+    "CapabilityTokenRequest merchant_did/user_did/agent_did/skill_id/session_id/scopes";
 pub const DEFAULT_CAPABILITY_TOKEN_TTL_MS: u64 = 300_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -80,6 +82,90 @@ pub trait CapabilityTokenCache: Clone {
     fn get(&self, scope: &CapabilityTokenScope) -> Option<CapabilityToken>;
     fn put(&self, scope: CapabilityTokenScope, token: CapabilityToken);
     fn clear(&self, scope: &CapabilityTokenScope);
+}
+
+pub trait CapabilityTokenLifecycleStore {
+    fn revoke_jti(&self, jti: &str, expires_at_ms: u64) -> Result<(), CapabilityTokenError>;
+    fn is_revoked(&self, jti: &str, now_ms: u64) -> Result<bool, CapabilityTokenError>;
+    fn consume_jti_once(
+        &self,
+        jti: &str,
+        expires_at_ms: u64,
+        now_ms: u64,
+    ) -> Result<(), CapabilityTokenError>;
+    fn prune_expired(&self, now_ms: u64) -> Result<usize, CapabilityTokenError>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryTokenLifecycleStore {
+    state: Arc<Mutex<TokenLifecycleState>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct TokenLifecycleState {
+    revoked: BTreeMap<String, u64>,
+    seen_once: BTreeMap<String, u64>,
+}
+
+impl InMemoryTokenLifecycleStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl CapabilityTokenLifecycleStore for InMemoryTokenLifecycleStore {
+    fn revoke_jti(&self, jti: &str, expires_at_ms: u64) -> Result<(), CapabilityTokenError> {
+        if jti.trim().is_empty() {
+            return Err(CapabilityTokenError::InvalidClaims);
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CapabilityTokenError::LifecycleUnavailable)?;
+        state.revoked.insert(jti.to_owned(), expires_at_ms);
+        Ok(())
+    }
+
+    fn is_revoked(&self, jti: &str, now_ms: u64) -> Result<bool, CapabilityTokenError> {
+        if jti.trim().is_empty() {
+            return Err(CapabilityTokenError::InvalidClaims);
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CapabilityTokenError::LifecycleUnavailable)?;
+        prune_state(&mut state, now_ms);
+        Ok(state.revoked.contains_key(jti))
+    }
+
+    fn consume_jti_once(
+        &self,
+        jti: &str,
+        expires_at_ms: u64,
+        now_ms: u64,
+    ) -> Result<(), CapabilityTokenError> {
+        if jti.trim().is_empty() {
+            return Err(CapabilityTokenError::InvalidClaims);
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CapabilityTokenError::LifecycleUnavailable)?;
+        prune_state(&mut state, now_ms);
+        if state.seen_once.contains_key(jti) {
+            return Err(CapabilityTokenError::Replayed);
+        }
+        state.seen_once.insert(jti.to_owned(), expires_at_ms);
+        Ok(())
+    }
+
+    fn prune_expired(&self, now_ms: u64) -> Result<usize, CapabilityTokenError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CapabilityTokenError::LifecycleUnavailable)?;
+        Ok(prune_state(&mut state, now_ms))
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -503,6 +589,33 @@ impl CapabilityTokenVerifier {
         validate_expected_claims(&claims, &self.config, expected)?;
         Ok(claims)
     }
+
+    pub fn verify_with_lifecycle_at<S>(
+        &self,
+        token: &str,
+        expected: &ExpectedCapability,
+        lifecycle: &S,
+        mode: CapabilityTokenLifecycleMode,
+        now_ms: u64,
+    ) -> Result<CapabilityTokenClaims, CapabilityTokenError>
+    where
+        S: CapabilityTokenLifecycleStore,
+    {
+        let claims = self.verify_at(token, expected, now_ms)?;
+        if lifecycle.is_revoked(&claims.jti, now_ms)? {
+            return Err(CapabilityTokenError::Revoked);
+        }
+        if mode == CapabilityTokenLifecycleMode::ConsumeOnce {
+            lifecycle.consume_jti_once(&claims.jti, claims.expires_at_ms(), now_ms)?;
+        }
+        Ok(claims)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapabilityTokenLifecycleMode {
+    CheckOnly,
+    ConsumeOnce,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -539,6 +652,15 @@ pub enum CapabilityTokenError {
 
     #[error("capability token version is unsupported")]
     UnsupportedVersion,
+
+    #[error("capability token has been revoked")]
+    Revoked,
+
+    #[error("capability token replay was detected")]
+    Replayed,
+
+    #[error("capability token lifecycle store is unavailable")]
+    LifecycleUnavailable,
 }
 
 pub fn bearer_token_expiry_ms(token: &str) -> Option<u64> {
@@ -660,6 +782,17 @@ fn generate_jti() -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>()
+}
+
+fn prune_state(state: &mut TokenLifecycleState, now_ms: u64) -> usize {
+    let before = state.revoked.len() + state.seen_once.len();
+    state
+        .revoked
+        .retain(|_, expires_at_ms| *expires_at_ms > now_ms);
+    state
+        .seen_once
+        .retain(|_, expires_at_ms| *expires_at_ms > now_ms);
+    before.saturating_sub(state.revoked.len() + state.seen_once.len())
 }
 
 #[cfg(test)]
@@ -1000,6 +1133,93 @@ mod tests {
             bearer_token_expiry_ms(&outcome.token.value),
             outcome.token.expires_at_ms
         );
+    }
+
+    #[test]
+    fn token_claims_record_version_and_scope_derivation_source() {
+        let issuer = issuer();
+        let outcome = issuer
+            .issue_at(request(), 1_780_000_000_000)
+            .expect("token issues");
+
+        assert_eq!(outcome.claims.version, CAPABILITY_TOKEN_VERSION);
+        assert_eq!(
+            CAPABILITY_TOKEN_SCOPE_DERIVATION_SOURCE,
+            "CapabilityTokenRequest merchant_did/user_did/agent_did/skill_id/session_id/scopes"
+        );
+        assert_eq!(outcome.claims.scopes, request().scopes);
+    }
+
+    #[test]
+    fn lifecycle_store_rejects_revoked_token() {
+        let issuer = issuer();
+        let verifier = verifier();
+        let lifecycle = InMemoryTokenLifecycleStore::new();
+        let outcome = issuer
+            .issue_at(request(), 1_780_000_000_000)
+            .expect("token issues");
+
+        lifecycle
+            .revoke_jti(&outcome.claims.jti, outcome.claims.expires_at_ms())
+            .expect("jti revokes");
+
+        let error = verifier
+            .verify_with_lifecycle_at(
+                &outcome.token.value,
+                &expected("coffee:drinks:read"),
+                &lifecycle,
+                CapabilityTokenLifecycleMode::CheckOnly,
+                1_780_000_001_000,
+            )
+            .expect_err("revoked token fails");
+
+        assert_eq!(error, CapabilityTokenError::Revoked);
+    }
+
+    #[test]
+    fn lifecycle_store_can_consume_jti_once_for_replay_sensitive_routes() {
+        let issuer = issuer();
+        let verifier = verifier();
+        let lifecycle = InMemoryTokenLifecycleStore::new();
+        let outcome = issuer
+            .issue_at(request(), 1_780_000_000_000)
+            .expect("token issues");
+
+        verifier
+            .verify_with_lifecycle_at(
+                &outcome.token.value,
+                &expected("coffee:order:confirm"),
+                &lifecycle,
+                CapabilityTokenLifecycleMode::ConsumeOnce,
+                1_780_000_001_000,
+            )
+            .expect("first use verifies");
+        let error = verifier
+            .verify_with_lifecycle_at(
+                &outcome.token.value,
+                &expected("coffee:order:confirm"),
+                &lifecycle,
+                CapabilityTokenLifecycleMode::ConsumeOnce,
+                1_780_000_002_000,
+            )
+            .expect_err("replay fails");
+
+        assert_eq!(error, CapabilityTokenError::Replayed);
+    }
+
+    #[test]
+    fn lifecycle_store_prunes_expired_revocation_and_replay_entries() {
+        let lifecycle = InMemoryTokenLifecycleStore::new();
+        lifecycle.revoke_jti("revoked-jti", 1_000).expect("revokes");
+        lifecycle
+            .consume_jti_once("seen-jti", 2_000, 500)
+            .expect("consumes");
+
+        assert_eq!(lifecycle.prune_expired(2_000).expect("prunes"), 2);
+        assert!(!lifecycle
+            .is_revoked("revoked-jti", 2_000)
+            .expect("checks revoked"));
+        assert_eq!(lifecycle.consume_jti_once("seen-jti", 3_000, 2_000), Ok(()));
     }
 
     fn issuer() -> CapabilityTokenIssuer {

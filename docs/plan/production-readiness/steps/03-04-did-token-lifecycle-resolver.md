@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-04
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 14:49:53 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 03-03 完成后，启动 DID/token 生命周期生产化 |
+| Review evidence | 2026-06-13 15:10:32 +0800 commit 前 Review 已记录：修复 `TrustedDidDocumentResolver` 仅校验 DID document `id`、未校验完整 trust anchor 内容的问题；确认 token 仍只在 Host/runtime 边界，`verify()` 兼容普通 JWT 校验，新增 lifecycle API 显式处理 revoke / high-risk `ConsumeOnce` jti gate，challenge 登录尝试即消费且 resolver/cache/replay failure 均 fail closed |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p anp-adapter token` 18 passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter challenge` 15 unit + 1 integration passed；`cargo test -p anp-adapter` 44 unit + 11 integration passed；`cargo test -p demo-server token` 5 unit + 1 integration passed；`cargo test -p demo-server` 7 lib + 4 main + 6 integration passed；`cargo test -p demo-server demo_signature_and_replayed_challenge_are_rejected` 1 passed；`cargo test -p js-runtime-quickjs wx_login` 3 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/demo-server crates/js-runtime-quickjs docs/security docs/runbook docs/plan` 无输出；敏感信息抽样命中测试假值、文档安全说明、redaction 断言和 `AuthMode::HttpSignatures` 常量，未发现真实 token/proof/Authorization/private key path 输出 |
+| Next action | 创建 focused commit 并回填 commit hash，然后进入 03-05 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,12 +66,12 @@ Step index：03-04
 
 ## 7. 验收标准
 
-- [ ] token claims version 和 scope derivation 来源稳定记录。
-- [ ] refresh、revoke/logout、cache eviction 和 expired token 行为有测试。
-- [ ] challenge nonce 一次性、TTL、audience、method/url、DID document binding 有测试。
-- [ ] DID resolver cache、TTL、trust anchor 和 failure policy 有 trait / tests / 文档证据。
-- [ ] raw token、proof、Authorization、private key path 不进入 JS result、CLI JSON、日志、audit export 或 Render IR。
-- [ ] Threat Model、Release Gates 和 runbook 与实现状态同步。
+- [x] token claims version 和 scope derivation 来源稳定记录。
+- [x] refresh、revoke/logout、cache eviction 和 expired token 行为有测试。
+- [x] challenge nonce 一次性、TTL、audience、method/url、DID document binding 有测试。
+- [x] DID resolver cache、TTL、trust anchor 和 failure policy 有 trait / tests / 文档证据。
+- [x] raw token、proof、Authorization、private key path 不进入 JS result、CLI JSON、日志、audit export 或 Render IR。
+- [x] Threat Model、Release Gates 和 runbook 与实现状态同步。
 - [ ] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
@@ -96,11 +96,11 @@ Step index：03-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 有 | 初版 `TrustedDidDocumentResolver` 只检查上游文档和 trust anchor 的 DID `id`，同 DID 但内容漂移的文档可能被接受，trust anchor 语义偏弱。 |
+| 已修复问题 | 已修复 | 改为完整 DID document 必须与 trust anchor 匹配，并新增 `trusted_resolver_rejects_document_drift_for_same_did` 回归测试。 |
+| 剩余风险 | 已记录 | 当前 lifecycle/replay/resolver store 是本地内存 gate；跨进程 revocation/replay 恢复、生产 DID network/rotation、secret store 和 token cache 持久化由 Phase 4/6 承接。 |
+| 新增或缺失测试 | 已补齐 | 新增 token version/scope derivation、revoked token、jti `ConsumeOnce` replay、lifecycle prune、session logout/expired eviction、challenge nonce replay/prune、resolver trust anchor/cache TTL/unknown/mismatch/document drift、demo-server revoked/replayed token 和 failed-login challenge consumption tests；未新增生产 DID network tests，按非目标记录。 |
+| 已更新或缺失文档 | 已更新 | 已同步 Threat Model、Release Gates、local demo runbook、Phase 3 security hardening、Phase 3 threat model summary、主 Plan 和本 Step 文档。 |
 
 ## 10. Commit 要求
 

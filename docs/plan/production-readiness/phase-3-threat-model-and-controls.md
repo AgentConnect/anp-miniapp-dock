@@ -1,6 +1,6 @@
 # Phase 3 子文档：Threat Model 与安全控制
 
-本文是 `docs/security/threat-model.md` 的 Phase 3 摘要。完整风险等级、L3/L4 控制矩阵、owner、required gate、残余风险和 release blocker 以 `docs/security/threat-model.md` 为准；Step 03-02 sandbox/resource 本地 release gate 和 Step 03-03 permission/allowlist/decision audit 本地 release gate 已补齐，Step 03-04 至 03-06 的 planned gate 仍不得写成已完成。
+本文是 `docs/security/threat-model.md` 的 Phase 3 摘要。完整风险等级、L3/L4 控制矩阵、owner、required gate、残余风险和 release blocker 以 `docs/security/threat-model.md` 为准；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist/decision audit、Step 03-04 DID/token lifecycle 本地 release gate 已补齐，Step 03-05 至 03-06 的 planned gate 仍不得写成已完成。
 
 ## 0. 风险等级
 
@@ -95,10 +95,10 @@
 | JS escape | 禁用 eval/Function/prototype constructor/process/fetch/WebSocket，限制 timer/result/console/resource | Step 03-02 本地 gate：Atomic API VM sandbox/limit/console/pending job tests，Component VM sandbox/dynamic/snapshot size tests | CI 自动化和 resource metrics 待 Phase 6 |
 | Path traversal | canonicalize + validate inside root | skill-loader path tests | Step 03-06 symlink/zip slip/remote require/digest/signature gate |
 | Unauthorized network | allowlist + broker only | RequestBroker deny-by-default、auth header deny tests、scheme/host/port/path/method/scope mismatch tests | Step 03-03 本地 gate 已完成；生产 Host transport、registry 配置和 persistent request audit 待 Phase 4/03-05 |
-| Token leakage | host-only token + redaction | CLI/log/audit redaction tests | Step 03-04 lifecycle redaction + Step 03-05 audit export redaction |
+| Token leakage | host-only token + redaction | CLI/log/audit redaction tests；Step 03-04 token/session Debug redaction、JS `wx.login` receipt redaction 和 coffee E2E redaction 仍通过 | Step 03-04 lifecycle redaction 本地 gate 已完成；Step 03-05 audit export redaction 待完成 |
 | Consent bypass | Orchestrator enforcement order | dock-core / consent-audit tests | Step 03-05 Host consent adapter + persistent audit |
-| Replay challenge | nonce one-time + TTL | demo-server/anp-adapter challenge tests | Step 03-04 challenge replay + jti replay + resolver trust anchor |
-| Scope mismatch | token verifier expected capability | demo API tests | Step 03-04 token claims version + scope derivation source |
+| Replay challenge | nonce one-time + TTL | demo-server/anp-adapter challenge tests；登录尝试开始即消费 challenge；`ChallengeNonceStore` 和 `TrustedDidDocumentResolver` 覆盖 replay、TTL、trust anchor 和 resolver mismatch | Step 03-04 本地 gate 已完成；跨进程 replay store 和 DID network/rotation 待 Phase 4/6 |
+| Scope mismatch | token verifier expected capability | demo API tests；token claims version、scope derivation source、revoke/logout、expired eviction 和 high-risk `ConsumeOnce` jti gate 已测 | Step 03-04 本地 gate 已完成；持久化 token cache/revocation restore 待 Phase 4 |
 | Permission drift | manifest、Host override、mock/dev-only、merchant trust policy 分散 | high-risk provider fail closed tests；`wx-compat::PermissionPolicyEngine`、`dock-core::permissionDecision` audit tests | Step 03-03 unified PermissionDecision audit 本地 gate 已完成；生产 Host policy UI/config 待 Phase 4 |
 | Package tamper | digest/signature/publisher DID/trusted allowlist/quarantine | 当前只有 path/manifest validation | Step 03-06 package integrity tests |
 

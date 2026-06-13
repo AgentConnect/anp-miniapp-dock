@@ -8,10 +8,12 @@ pub mod token;
 
 pub use challenge::{
     sign_challenge_proof, verify_challenge_proof, verify_challenge_proof_at,
-    verify_challenge_proof_at_with_resolver, verify_challenge_proof_with_resolver,
-    ChallengeLoginRequest, ChallengeLoginResponse, ChallengeProofError, ChallengeProofKind,
-    ChallengeProofPayload, DidChallenge, DidDocumentResolver, DockDidChallengeProof,
-    StaticDidDocumentResolver, VerifiedChallengeProof, CHALLENGE_PROOF_METHOD,
+    verify_challenge_proof_at_with_resolver,
+    verify_challenge_proof_at_with_resolver_and_nonce_store, verify_challenge_proof_with_resolver,
+    ChallengeLoginRequest, ChallengeLoginResponse, ChallengeNonceStore, ChallengeProofError,
+    ChallengeProofKind, ChallengeProofPayload, DidChallenge, DidDocumentResolver,
+    DockDidChallengeProof, InMemoryChallengeNonceStore, StaticDidDocumentResolver,
+    TrustedDidDocumentResolver, VerifiedChallengeProof, CHALLENGE_PROOF_METHOD,
     CHALLENGE_PROOF_TYPE,
 };
 pub use did::{
@@ -30,8 +32,9 @@ pub use signed_request::{
 pub use token::{
     bearer_token_expiry_ms, CapabilityToken, CapabilityTokenCache, CapabilityTokenClaims,
     CapabilityTokenError, CapabilityTokenIssueOutcome, CapabilityTokenIssuer,
-    CapabilityTokenIssuerConfig, CapabilityTokenRequest, CapabilityTokenScope,
-    CapabilityTokenVerifier, CapabilityTokenVerifierConfig, ExpectedCapability,
-    ExpectedCapabilitySubject, InMemoryTokenCache, CAPABILITY_TOKEN_VERSION,
-    DEFAULT_CAPABILITY_TOKEN_TTL_MS,
+    CapabilityTokenIssuerConfig, CapabilityTokenLifecycleMode, CapabilityTokenLifecycleStore,
+    CapabilityTokenRequest, CapabilityTokenScope, CapabilityTokenVerifier,
+    CapabilityTokenVerifierConfig, ExpectedCapability, ExpectedCapabilitySubject,
+    InMemoryTokenCache, InMemoryTokenLifecycleStore, CAPABILITY_TOKEN_SCOPE_DERIVATION_SOURCE,
+    CAPABILITY_TOKEN_VERSION, DEFAULT_CAPABILITY_TOKEN_TTL_MS,
 };

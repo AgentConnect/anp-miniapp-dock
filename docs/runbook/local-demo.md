@@ -64,6 +64,8 @@ cargo run -p dock-cli -- run-demo --skill examples/coffee-skill --server http://
 
 During `run-demo`, the Skill JavaScript calls `wx.login()`, then uses `wx.request()` to access `/api/login`, `/api/drinks`, `/api/order/confirm`, and `/api/order/pay` on localhost. With Host DID credentials configured, the Atomic API VM keeps the capability token inside `DidAuthSessionManager`, returns only a code-like redacted receipt to Skill JS, and `wx.checkSession()` can validate the cached session without exposing the token.
 
+The DID challenge/login path is one-time by default: a login attempt consumes its challenge even when the signature is invalid, so the same `challengeId` cannot be retried with a later valid proof. The Rust demo server also checks bearer tokens against an in-memory lifecycle store for revoked jti values, while high-risk hosts can use the explicit one-time jti verification mode. This is a local Step 03-04 gate; production deployments still need the Phase 4 persistent token cache/revocation store, cross-process replay store, DID resolver rotation policy, and secret-store integration.
+
 ## Start The Rust Demo Server
 
 The Rust `demo-server` remains available as a test-compatible local merchant server. It exercises the newer ANP DID challenge proof and scoped capability token path, while still exposing the same localhost coffee business endpoints used by the Skill JavaScript.
@@ -87,6 +89,8 @@ examples/identity/key-1-private.pem
 ```
 
 The CLI derives `userDid` from the DID document `id`. The checked-in files are test fixtures only; production DID credentials must not be committed.
+
+`demo-server` trusts only DID documents registered with `--trusted-did-document`. Resolver mismatch, unknown DID, expired challenge, wrong audience/scope, expired token, revoked token, and replay-sensitive jti reuse fail closed with stable auth error codes and without printing raw token, proof, signature, or private key paths.
 
 ## Run CLI Commands
 
@@ -211,6 +215,8 @@ This avoids port conflicts in CI-like local runs. The FastAPI runbook uses fixed
 - `connection refused`: confirm the FastAPI or Rust demo server is running and use the exact printed URL.
 - `ModuleNotFoundError: fastapi`: activate the venv and run `pip install -r examples/coffee-fastapi-server/requirements.txt`.
 - `unknown_did` or `invalid_signature`: verify that `--trusted-did-document` uses the DID document `id` and that the CLI signs with the matching private key.
+- `unknown_challenge`: the challenge is unknown, expired, or already consumed. Request a new challenge before retrying login; do not reuse a `challengeId` after any failed login attempt.
+- `revoked_token` or `replayed_token`: clear the local session and run `wx.login` / `dock-cli run-demo` again so the host obtains a fresh capability token.
 - `token_issuer_unavailable`: start `demo-server` with `--token-issuer-secret`.
 - `validation_failed`: inspect the `inputSchema` requirements in `examples/coffee-skill/mcp.json`.
 - `component VM failed`: run `cargo test -p component-runtime` and inspect the component `index.js`, `index.wxml`, and `index.wxss`.
