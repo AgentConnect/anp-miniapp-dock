@@ -181,17 +181,52 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ### 3.5 `doctor`
 
+输出 `dock.doctor-report.v1` JSON：
+
+```json
+{
+  "schemaVersion": "dock.doctor-report.v1",
+  "status": "ok|warning|error",
+  "commandStatus": "ok|failed",
+  "reportStatus": "ok|warning|error",
+  "ci": false,
+  "runtimeConfig": {},
+  "summary": {
+    "total": 0,
+    "pass": 0,
+    "warn": 0,
+    "fail": 0,
+    "skip": 0,
+    "skipCountsAsPass": false
+  },
+  "humanSummary": [],
+  "checks": [],
+  "redaction": {}
+}
+```
+
 检查：
 
 - Rust toolchain；
-- DID document/private key；
-- private key permissions；
+- workspace layout；
+- runtime config contract；
+- Skill package；
+- DID document / signing credential；
+- signing credential permissions；
 - trusted DID resolver；
 - allowlist；
 - storage/audit path；
 - Host providers；
 - sandbox gates；
 - remote server health。
+
+要求：
+
+- 默认 `dock-cli doctor` 不访问外部 server；未提供 `--server` 时 remote server health 为 `skip`，且 `skipCountsAsPass = false`。
+- 可传 `--runtime-config <path>`、DID identity flags、`--skill <path>` 和 `--server <url>` 做目标环境诊断。
+- `--ci` 只在存在 `fail` 时让 `commandStatus = "failed"` 并返回非零；warning/skip 仍需要人工或 CI policy 判断。
+- doctor 不执行高风险业务 API，不读取或输出 signing credential material，不输出 raw token、Authorization、signature、secret、本机绝对路径或隐私原文。
+- 默认 development config、unsigned/demo Skill、in-memory storage/audit、缺 Host provider 和缺 allowlist 只能报告为 warning/skip，不能写成 production-ready。
 
 ## 4. 示例 Skill 体系
 

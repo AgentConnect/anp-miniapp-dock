@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-05
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 02:43:16 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 05-04 完成后，启动 CLI doctor |
+| Review evidence | 2026-06-14 02:57:06 +0800 commit 前 Review 已记录：修复 `doctor` 在仓库子目录运行时 toolchain/sandbox gate 使用相对路径可能误报的问题；确认 `dock.doctor-report.v1` 覆盖 toolchain/workspace/runtime config/Skill/DID/signing credential permission/resolver/allowlist/storage/audit/Host provider/sandbox/server health，默认 warning/skip 不被误标 production-ready，`--ci` 只在 fail 时返回非零且先输出 JSON。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 94]`；已读取主 Plan、Step 05-05 文档、Phase 5 文档、Release Gates、local demo runbook、README、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；`cargo fmt --check` 通过；`cargo test -p dock-cli doctor` 4 passed；`cargo run -p dock-cli -- doctor` 输出 `dock.doctor-report.v1`、`status = warning`、`commandStatus = ok`、summary 为 5 pass / 7 warn / 1 skip / 0 fail；`python3 -m json.tool /tmp/dock-doctor.json` 通过；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-cli crates/anp-adapter crates/dock-core docs/runbook docs/plan README.md` 无输出；doctor JSON 敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、Bearer、raw token、private key material、PEM header 或 secret。 |
+| Next action | 创建 05-05 focused implementation commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -92,11 +92,11 @@ Step index：05-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 初版 toolchain 和 sandbox gate 文件存在性检查使用当前工作目录相对路径；从仓库子目录执行 doctor 时可能误报。 |
+| 已修复问题 | 已修复 | toolchain 和 sandbox gate 文件检查改为优先基于 `default_project_root()` 定位项目根目录；`--ci` failure 路径仍先输出 JSON 再返回非零。 |
+| 剩余风险 | 已记录 | doctor 只记录 sandbox gate surface，不执行重型 sandbox tests；默认 development config、unsigned/demo Skill、in-memory storage/audit、缺 Host provider、缺 allowlist 和无 `--server` 只能作为 warning/skip evidence，不是 production-ready evidence。 |
+| 新增或缺失测试 | 已补充 | 新增 doctor 参数解析、完整 report/check 覆盖、production runtime config backend 通过、CI fail 输出 JSON 和脱敏断言；缺真实 production Host/server health E2E，因本 Step 只提供 CLI 诊断面。 |
+| 已更新或缺失文档 | 已同步 | 更新 README、local demo runbook、release gates 和 Phase 5 文档；无额外缺失文档。 |
 
 ## 10. Commit 要求
 

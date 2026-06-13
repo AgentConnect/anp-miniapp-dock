@@ -29,6 +29,16 @@ cargo test -p demo-server
 cargo test -p js-runtime-quickjs
 ```
 
+Run local environment diagnostics before debugging DID, Host provider, persistence, or remote server issues:
+
+```bash
+cargo run -p dock-cli -- doctor
+```
+
+The command emits `dock.doctor-report.v1` JSON. It checks Rust toolchain, workspace layout, runtime config contract, Skill package, DID identity, signing credential file permissions, trusted resolver, allowlist, storage/audit backend profile, Host providers, sandbox gate surface, and optional remote server health. By default it does not contact a server; pass `--server http://127.0.0.1:3000` or another demo URL to check `/health`. Use `--ci` when a failing check should return a non-zero exit code after the JSON report is printed.
+
+Expected local defaults are not production-ready: unsigned/demo Skills, missing resolver/allowlist, in-memory storage/audit, missing production Host providers, skipped server health, and sandbox gates that doctor records but does not execute should be treated as warning/skip evidence. Real signing credential material, raw tokens, Authorization values, signatures, secrets, and absolute local paths must not appear in the report.
+
 ## Start The FastAPI Coffee Service
 
 The current demo can use a Python/FastAPI localhost service to simulate the remote merchant HTTP server. The Skill package is still loaded from `examples/coffee-skill` on disk; only login and business calls go over HTTP.

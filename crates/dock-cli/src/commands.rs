@@ -14,8 +14,8 @@ use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_
 use dock_core::{
     ApiCallContext, AuditEvent, AuditSink, ComponentRenderInput, ConsentDecision, ConsentGate,
     DockCoreError, ErrorCode, PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
-    RuntimeCallRequest, RuntimeErrorResponse, RuntimeHost, RuntimeIpcRequest, RuntimeIpcResponse,
-    RuntimeService, RuntimeSessionContext,
+    RuntimeCallRequest, RuntimeConfig, RuntimeErrorResponse, RuntimeHost, RuntimeIpcRequest,
+    RuntimeIpcResponse, RuntimeService, RuntimeSessionContext,
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
 use mcp_schema::{
@@ -46,6 +46,7 @@ const DEFAULT_DID_DOCUMENT_FILE: &str = "did_document.json";
 const DEFAULT_PRIVATE_KEY_FILE: &str = "key-1-private.pem";
 const VALIDATE_REPORT_SCHEMA_VERSION: &str = "dock.validate-report.v1";
 const IMPORT_REPORT_SCHEMA_VERSION: &str = "dock.import-wechat-mcp-report.v1";
+const DOCTOR_REPORT_SCHEMA_VERSION: &str = "dock.doctor-report.v1";
 
 #[derive(Debug, Parser)]
 #[command(name = "dock-cli", about = "MiniApp MCP Skill runtime developer CLI")]
@@ -79,6 +80,28 @@ enum Command {
         generate_patch: bool,
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         include_fixtures: bool,
+    },
+    Doctor {
+        #[arg(long)]
+        skill: Option<PathBuf>,
+        #[arg(long)]
+        server: Option<String>,
+        #[arg(long)]
+        runtime_config: Option<PathBuf>,
+        #[arg(long)]
+        did_document: Option<PathBuf>,
+        #[arg(long)]
+        private_key: Option<PathBuf>,
+        #[arg(long)]
+        user_did: Option<String>,
+        #[arg(long)]
+        agent_did: Option<String>,
+        #[arg(long)]
+        identity_handle: Option<String>,
+        #[arg(long)]
+        identity_root: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        ci: bool,
     },
     CallApi {
         skill: PathBuf,
@@ -124,7 +147,17 @@ pub fn run() -> Result<(), CliError> {
 
 pub fn run_with_writer(mut cli: Cli, writer: &mut impl Write) -> Result<(), CliError> {
     let output = cli.execute()?;
-    write_json(writer, &output)
+    write_json(writer, &output)?;
+    if output
+        .get("commandStatus")
+        .and_then(Value::as_str)
+        .is_some_and(|status| status == "failed")
+    {
+        return Err(CliError::Demo(
+            "command completed with failing checks".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 impl Cli {
@@ -156,6 +189,29 @@ impl Cli {
                 overwrite: *overwrite,
                 generate_patch: *generate_patch,
                 include_fixtures: *include_fixtures,
+            }),
+            Command::Doctor {
+                skill,
+                server,
+                runtime_config,
+                did_document,
+                private_key,
+                user_did,
+                agent_did,
+                identity_handle,
+                identity_root,
+                ci,
+            } => doctor(DoctorOptions {
+                skill: skill.as_deref(),
+                server: server.as_deref(),
+                runtime_config: runtime_config.as_deref(),
+                did_document: did_document.as_deref(),
+                private_key: private_key.as_deref(),
+                user_did: user_did.as_deref(),
+                agent_did: agent_did.as_deref(),
+                identity_handle: identity_handle.as_deref(),
+                identity_root: identity_root.as_deref(),
+                ci: *ci,
             }),
             Command::CallApi {
                 skill,
@@ -589,6 +645,743 @@ struct ImportOptions<'a> {
     overwrite: bool,
     generate_patch: bool,
     include_fixtures: bool,
+}
+
+struct DoctorOptions<'a> {
+    skill: Option<&'a Path>,
+    server: Option<&'a str>,
+    runtime_config: Option<&'a Path>,
+    did_document: Option<&'a Path>,
+    private_key: Option<&'a Path>,
+    user_did: Option<&'a str>,
+    agent_did: Option<&'a str>,
+    identity_handle: Option<&'a str>,
+    identity_root: Option<&'a Path>,
+    ci: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DoctorCheckStatus {
+    Pass,
+    Warn,
+    Fail,
+    Skip,
+}
+
+impl DoctorCheckStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+            Self::Skip => "skip",
+        }
+    }
+}
+
+struct DoctorCheck {
+    id: &'static str,
+    title: &'static str,
+    status: DoctorCheckStatus,
+    severity: &'static str,
+    evidence: Value,
+    suggestion: &'static str,
+}
+
+fn doctor(options: DoctorOptions<'_>) -> Result<Value, CliError> {
+    let mut checks = Vec::new();
+    let (runtime_config, config_source) =
+        doctor_runtime_config(options.runtime_config, &mut checks);
+    checks.push(doctor_toolchain_check());
+    checks.push(doctor_workspace_check());
+    checks.push(doctor_runtime_config_check(
+        &runtime_config,
+        config_source
+            .get("loaded")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    ));
+    checks.push(doctor_skill_check(options.skill)?);
+    checks.extend(doctor_identity_checks(&options));
+    checks.push(doctor_resolver_check(&runtime_config));
+    checks.push(doctor_allowlist_check(&runtime_config));
+    checks.push(doctor_backend_check(
+        "storage_backend",
+        "Scoped storage backend",
+        &runtime_config.storage,
+    ));
+    checks.push(doctor_backend_check(
+        "audit_backend",
+        "Audit backend",
+        &runtime_config.audit,
+    ));
+    checks.push(doctor_host_provider_check(&runtime_config));
+    checks.push(doctor_sandbox_gate_check());
+    checks.push(doctor_server_health_check(options.server));
+
+    let summary = doctor_summary(&checks);
+    let status = if summary["fail"].as_u64().unwrap_or_default() > 0 {
+        "error"
+    } else if summary["warn"].as_u64().unwrap_or_default() > 0
+        || summary["skip"].as_u64().unwrap_or_default() > 0
+    {
+        "warning"
+    } else {
+        "ok"
+    };
+    let command_status = if options.ci && status == "error" {
+        "failed"
+    } else {
+        "ok"
+    };
+    let check_values = checks.iter().map(doctor_check_json).collect::<Vec<_>>();
+
+    Ok(json!({
+        "schemaVersion": DOCTOR_REPORT_SCHEMA_VERSION,
+        "status": status,
+        "commandStatus": command_status,
+        "reportStatus": status,
+        "ci": options.ci,
+        "runtimeConfig": config_source,
+        "summary": summary,
+        "humanSummary": doctor_human_summary(&checks),
+        "checks": check_values,
+        "redaction": {
+            "appliedByDefault": true,
+            "policy": "dock.doctor-redaction.v1",
+            "localPaths": "redacted",
+            "credentialMaterial": "omitted"
+        },
+    }))
+}
+
+fn doctor_runtime_config(
+    path: Option<&Path>,
+    checks: &mut Vec<DoctorCheck>,
+) -> (RuntimeConfig, Value) {
+    let Some(path) = path else {
+        return (
+            RuntimeConfig::default(),
+            json!({
+                "source": "built-in-default",
+                "path": Value::Null,
+                "loaded": true,
+            }),
+        );
+    };
+    let (display_path, redacted) = report_path(path);
+    match std::fs::read_to_string(path) {
+        Ok(content) => match RuntimeConfig::from_json_str(&content) {
+            Ok(config) => (
+                config,
+                json!({
+                    "source": "file",
+                    "path": display_path,
+                    "redacted": redacted,
+                    "loaded": true,
+                }),
+            ),
+            Err(error) => {
+                checks.push(DoctorCheck {
+                    id: "runtime_config",
+                    title: "Runtime config",
+                    status: DoctorCheckStatus::Fail,
+                    severity: "high",
+                    evidence: json!({
+                        "source": "file",
+                        "path": display_path,
+                        "redacted": redacted,
+                        "loaded": false,
+                        "message": redact_text(&error.to_string()),
+                    }),
+                    suggestion:
+                        "Fix the runtime config JSON before using it for release diagnostics.",
+                });
+                (
+                    RuntimeConfig::default(),
+                    json!({
+                        "source": "file",
+                        "path": display_path,
+                        "redacted": redacted,
+                        "loaded": false,
+                    }),
+                )
+            }
+        },
+        Err(error) => {
+            checks.push(DoctorCheck {
+                id: "runtime_config",
+                title: "Runtime config",
+                status: DoctorCheckStatus::Fail,
+                severity: "high",
+                evidence: json!({
+                    "source": "file",
+                    "path": display_path,
+                    "redacted": redacted,
+                    "loaded": false,
+                    "message": redact_text(&error.to_string()),
+                }),
+                suggestion: "Provide a readable runtime config file or omit --runtime-config to inspect defaults.",
+            });
+            (
+                RuntimeConfig::default(),
+                json!({
+                    "source": "file",
+                    "path": display_path,
+                    "redacted": redacted,
+                    "loaded": false,
+                }),
+            )
+        }
+    }
+}
+
+fn doctor_toolchain_check() -> DoctorCheck {
+    let toolchain_path = default_project_root()
+        .map(|root| root.join("rust-toolchain.toml"))
+        .unwrap_or_else(|_| PathBuf::from("rust-toolchain.toml"));
+    let expected = std::fs::read_to_string(toolchain_path)
+        .ok()
+        .and_then(|content| {
+            content
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("channel = "))
+                .map(|value| value.trim_matches('"').to_owned())
+        });
+    let rustc = std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| {
+            output
+                .status
+                .success()
+                .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        });
+    let matches_expected = expected
+        .as_ref()
+        .zip(rustc.as_ref())
+        .is_some_and(|(expected, rustc)| rustc.contains(expected));
+    let status = match (&expected, &rustc) {
+        (Some(_), Some(_)) if matches_expected => DoctorCheckStatus::Pass,
+        (Some(_), Some(_)) => DoctorCheckStatus::Warn,
+        _ => DoctorCheckStatus::Fail,
+    };
+    DoctorCheck {
+        id: "rust_toolchain",
+        title: "Rust toolchain",
+        status,
+        severity: if status == DoctorCheckStatus::Fail {
+            "high"
+        } else {
+            "medium"
+        },
+        evidence: json!({
+            "expectedChannel": expected,
+            "rustc": rustc.map(|value| redact_text(&value)),
+            "matchesPinnedToolchain": matches_expected,
+        }),
+        suggestion: "Install the pinned Rust toolchain and run the repository gates from the workspace root.",
+    }
+}
+
+fn doctor_runtime_config_check(config: &RuntimeConfig, loaded: bool) -> DoctorCheck {
+    if !loaded {
+        return DoctorCheck {
+            id: "runtime_config_contract",
+            title: "Runtime config contract",
+            status: DoctorCheckStatus::Skip,
+            severity: "high",
+            evidence: json!({
+                "reason": "Runtime config file was not loaded.",
+            }),
+            suggestion: "Fix runtime config loading first, then rerun doctor.",
+        };
+    }
+    let validation = config.validate();
+    let issue_codes = validation
+        .issues
+        .iter()
+        .map(|issue| redact_text(&issue.code))
+        .collect::<Vec<_>>();
+    let release_blocker_codes = validation
+        .release_blockers
+        .iter()
+        .map(|blocker| redact_text(&blocker.code))
+        .collect::<Vec<_>>();
+    DoctorCheck {
+        id: "runtime_config_contract",
+        title: "Runtime config contract",
+        status: if validation.valid && !validation.release_blocked {
+            DoctorCheckStatus::Pass
+        } else {
+            DoctorCheckStatus::Fail
+        },
+        severity: "high",
+        evidence: json!({
+            "profile": validation.profile,
+            "valid": validation.valid,
+            "releaseBlocked": validation.release_blocked,
+            "issueCount": validation.issues.len(),
+            "releaseBlockerCount": validation.release_blockers.len(),
+            "issueCodes": issue_codes,
+            "releaseBlockerCodes": release_blocker_codes,
+        }),
+        suggestion:
+            "Resolve runtime config errors and production release blockers before CI certification.",
+    }
+}
+
+fn doctor_workspace_check() -> DoctorCheck {
+    match default_project_root() {
+        Ok(root) => {
+            let coffee = root.join("examples/coffee-skill").is_dir();
+            let cargo = root.join("Cargo.toml").is_file();
+            DoctorCheck {
+                id: "workspace",
+                title: "Workspace layout",
+                status: if coffee && cargo {
+                    DoctorCheckStatus::Pass
+                } else {
+                    DoctorCheckStatus::Fail
+                },
+                severity: "high",
+                evidence: json!({
+                    "cargoToml": cargo,
+                    "coffeeSkillFixture": coffee,
+                    "root": "[REDACTED]",
+                }),
+                suggestion:
+                    "Run doctor from the anp-miniapp-dock workspace or provide explicit paths.",
+            }
+        }
+        Err(error) => DoctorCheck {
+            id: "workspace",
+            title: "Workspace layout",
+            status: DoctorCheckStatus::Fail,
+            severity: "high",
+            evidence: json!({
+                "message": redact_text(&error.to_string()),
+            }),
+            suggestion: "Run doctor from the anp-miniapp-dock workspace or provide explicit paths.",
+        },
+    }
+}
+
+fn doctor_skill_check(skill_path: Option<&Path>) -> Result<DoctorCheck, CliError> {
+    let path = match skill_path {
+        Some(path) => path.to_path_buf(),
+        None => match default_project_root() {
+            Ok(root) => root.join("examples/coffee-skill"),
+            Err(_) => {
+                return Ok(DoctorCheck {
+                    id: "skill_package",
+                    title: "Skill package",
+                    status: DoctorCheckStatus::Skip,
+                    severity: "low",
+                    evidence: json!({
+                        "reason": "No --skill was provided and the workspace default could not be located.",
+                    }),
+                    suggestion: "Pass --skill <path> when diagnosing a specific Skill package.",
+                });
+            }
+        },
+    };
+    let skill_ref = validate_skill_ref(&path);
+    match load_skill(&path) {
+        Ok(skill) => {
+            let release_blockers =
+                validate_release_blockers(&skill, validate_api_registration(&skill).as_ref());
+            Ok(DoctorCheck {
+                id: "skill_package",
+                title: "Skill package",
+                status: if release_blockers.is_empty() {
+                    DoctorCheckStatus::Pass
+                } else {
+                    DoctorCheckStatus::Warn
+                },
+                severity: "medium",
+                evidence: json!({
+                    "skillRef": skill_ref,
+                    "skillId": skill_id(&skill),
+                    "releaseBlockerCount": release_blockers.len(),
+                    "supplyChainStatus": skill.integrity.status.as_str(),
+                    "productionReady": skill.integrity.production_ready,
+                }),
+                suggestion:
+                    "Run validate and test-skill for a full compatibility and fixture report.",
+            })
+        }
+        Err(error) => Ok(DoctorCheck {
+            id: "skill_package",
+            title: "Skill package",
+            status: DoctorCheckStatus::Fail,
+            severity: "high",
+            evidence: json!({
+                "skillRef": skill_ref,
+                "message": redact_text(&error.to_string()),
+            }),
+            suggestion: "Fix the Skill package before running runtime or release diagnostics.",
+        }),
+    }
+}
+
+fn doctor_identity_checks(options: &DoctorOptions<'_>) -> Vec<DoctorCheck> {
+    let has_explicit_identity = options.did_document.is_some()
+        || options.private_key.is_some()
+        || options.user_did.is_some()
+        || options.identity_handle.is_some()
+        || options.identity_root.is_some();
+    let did_document = options.did_document.map(Path::to_path_buf);
+    let private_key = options.private_key.map(Path::to_path_buf);
+    let user_did = options.user_did.map(ToOwned::to_owned);
+    let agent_did = options.agent_did.map(ToOwned::to_owned);
+    let identity_handle = options.identity_handle.map(ToOwned::to_owned);
+    let identity_root = options.identity_root.map(Path::to_path_buf);
+    let auth = DemoAuthConfig::from_inputs(
+        did_document,
+        private_key,
+        user_did,
+        agent_did,
+        identity_handle,
+        identity_root,
+        EnvConfigSource,
+    );
+
+    match auth {
+        Ok(config) => {
+            let did_document_valid = did_from_document_path(&config.credential.did_document_path)
+                .map(|did| did == config.user_did)
+                .unwrap_or(false);
+            let readable = config
+                .credential
+                .clone()
+                .without_private_key_permission_check()
+                .validate()
+                .is_ok();
+            let mut strict = config.credential.clone();
+            strict.check_private_key_permissions = true;
+            let permission_result = strict.validate();
+            vec![
+                DoctorCheck {
+                    id: "did_identity",
+                    title: "DID identity",
+                    status: if readable && did_document_valid {
+                        DoctorCheckStatus::Pass
+                    } else {
+                        DoctorCheckStatus::Fail
+                    },
+                    severity: "high",
+                    evidence: json!({
+                        "didDocument": "configured",
+                        "credential": "configured-redacted",
+                        "userDid": config.user_did,
+                        "agentDid": config.agent_did,
+                        "documentMatchesUserDid": did_document_valid,
+                    }),
+                    suggestion: "Provide a readable DID document and matching signing credential for local ANP auth.",
+                },
+                DoctorCheck {
+                    id: "credential_permissions",
+                    title: "Credential file permissions",
+                    status: if permission_result.is_ok() {
+                        DoctorCheckStatus::Pass
+                    } else {
+                        DoctorCheckStatus::Fail
+                    },
+                    severity: "high",
+                    evidence: json!({
+                        "checked": true,
+                        "mode": "owner-only-required",
+                        "message": permission_result.err().map(|error| redact_text(&error.to_string())),
+                    }),
+                    suggestion: "Restrict the signing credential file to owner-only permissions before use.",
+                },
+            ]
+        }
+        Err(error) if !has_explicit_identity && error == DidCredentialError::Unavailable => vec![
+            DoctorCheck {
+                id: "did_identity",
+                title: "DID identity",
+                status: DoctorCheckStatus::Skip,
+                severity: "medium",
+                evidence: json!({
+                    "reason": "No DID identity was configured and no default project identity was found.",
+                }),
+                suggestion: "Pass DID identity flags or configure ANP_DOCK_DID_DOCUMENT and ANP_DOCK_PRIVATE_KEY for auth diagnostics.",
+            },
+            DoctorCheck {
+                id: "credential_permissions",
+                title: "Credential file permissions",
+                status: DoctorCheckStatus::Skip,
+                severity: "medium",
+                evidence: json!({
+                    "reason": "No signing credential was configured.",
+                }),
+                suggestion: "Configure a local signing credential to enable permission diagnostics.",
+            },
+        ],
+        Err(error) => vec![
+            DoctorCheck {
+                id: "did_identity",
+                title: "DID identity",
+                status: DoctorCheckStatus::Fail,
+                severity: "high",
+                evidence: json!({
+                    "message": redact_text(&error.to_string()),
+                }),
+                suggestion: "Provide a complete DID identity configuration or identity store handle.",
+            },
+            DoctorCheck {
+                id: "credential_permissions",
+                title: "Credential file permissions",
+                status: DoctorCheckStatus::Skip,
+                severity: "medium",
+                evidence: json!({
+                    "reason": "DID identity did not resolve, so signing credential permissions were not checked.",
+                }),
+                suggestion: "Fix DID identity configuration first, then rerun doctor.",
+            },
+        ],
+    }
+}
+
+fn doctor_resolver_check(config: &RuntimeConfig) -> DoctorCheck {
+    let configured = config.resolver.provider.is_some() || config.resolver.trust_anchor.is_some();
+    DoctorCheck {
+        id: "trusted_resolver",
+        title: "Trusted DID resolver",
+        status: if configured {
+            DoctorCheckStatus::Pass
+        } else {
+            DoctorCheckStatus::Warn
+        },
+        severity: "high",
+        evidence: json!({
+            "provider": config.resolver.provider.is_some(),
+            "trustAnchor": config.resolver.trust_anchor.is_some(),
+            "cacheTtlSeconds": config.resolver.cache_ttl_seconds,
+            "productionReady": configured,
+        }),
+        suggestion:
+            "Configure a trusted resolver provider or trust anchor before production release.",
+    }
+}
+
+fn doctor_allowlist_check(config: &RuntimeConfig) -> DoctorCheck {
+    let count = config.allowlist.network_rules.len();
+    DoctorCheck {
+        id: "network_allowlist",
+        title: "Network allowlist",
+        status: if count > 0 {
+            DoctorCheckStatus::Pass
+        } else {
+            DoctorCheckStatus::Warn
+        },
+        severity: "high",
+        evidence: json!({
+            "networkRuleCount": count,
+            "productionReady": count > 0,
+        }),
+        suggestion: "Configure explicit network allowlist rules for Host-managed request brokers.",
+    }
+}
+
+fn doctor_backend_check(
+    id: &'static str,
+    title: &'static str,
+    backend: &dock_core::RuntimeDataBackendConfig,
+) -> DoctorCheck {
+    let backend_name = match backend.backend {
+        dock_core::RuntimeDataBackendKind::InMemory => "inMemory",
+        dock_core::RuntimeDataBackendKind::File => "file",
+        dock_core::RuntimeDataBackendKind::Sqlite => "sqlite",
+        dock_core::RuntimeDataBackendKind::EncryptedSqlite => "encryptedSqlite",
+        dock_core::RuntimeDataBackendKind::HostProvider => "hostProvider",
+    };
+    let production_ready = matches!(
+        backend.backend,
+        dock_core::RuntimeDataBackendKind::EncryptedSqlite
+            | dock_core::RuntimeDataBackendKind::HostProvider
+    );
+    DoctorCheck {
+        id,
+        title,
+        status: if production_ready {
+            DoctorCheckStatus::Pass
+        } else {
+            DoctorCheckStatus::Warn
+        },
+        severity: "high",
+        evidence: json!({
+            "backend": backend_name,
+            "pathRef": backend.path_ref.is_some(),
+            "provider": backend.provider.is_some(),
+            "quotaBytes": backend.quota_bytes,
+            "retentionDays": backend.retention_days,
+            "productionReady": production_ready,
+        }),
+        suggestion: "Use a Host provider or encrypted backend for production persistence.",
+    }
+}
+
+fn doctor_host_provider_check(config: &RuntimeConfig) -> DoctorCheck {
+    let provider_count = config.host_providers.len();
+    let has_mock_or_dev = config
+        .host_providers
+        .iter()
+        .any(|provider| provider.mock || provider.dev_only);
+    let capabilities = config
+        .host_providers
+        .iter()
+        .flat_map(|provider| provider.capabilities.iter().map(|item| redact_text(item)))
+        .collect::<Vec<_>>();
+    DoctorCheck {
+        id: "host_providers",
+        title: "Host providers",
+        status: if provider_count == 0 || has_mock_or_dev {
+            DoctorCheckStatus::Warn
+        } else {
+            DoctorCheckStatus::Pass
+        },
+        severity: "high",
+        evidence: json!({
+            "count": provider_count,
+            "capabilities": capabilities,
+            "hasMockOrDevOnly": has_mock_or_dev,
+            "productionReady": provider_count > 0 && !has_mock_or_dev,
+        }),
+        suggestion:
+            "Configure production Host providers for render, consent, high-risk APIs, and actions.",
+    }
+}
+
+fn doctor_sandbox_gate_check() -> DoctorCheck {
+    let files = [
+        "crates/js-runtime-quickjs/tests/middleware_chain.rs",
+        "crates/component-runtime/tests/component_lifecycle.rs",
+        "crates/wx-compat/tests/component_permissions.rs",
+    ];
+    let root = default_project_root().ok();
+    let present = files
+        .iter()
+        .filter(|path| {
+            root.as_ref()
+                .map(|root| root.join(path).is_file())
+                .unwrap_or_else(|| Path::new(path).is_file())
+        })
+        .count();
+    DoctorCheck {
+        id: "sandbox_gates",
+        title: "Sandbox gates",
+        status: if present == files.len() {
+            DoctorCheckStatus::Warn
+        } else {
+            DoctorCheckStatus::Fail
+        },
+        severity: "high",
+        evidence: json!({
+            "gateFilesPresent": present,
+            "gateFilesExpected": files.len(),
+            "executedByDoctor": false,
+            "commands": [
+                "cargo test -p js-runtime-quickjs sandbox",
+                "cargo test -p component-runtime sandbox",
+                "cargo test -p wx-compat permission"
+            ],
+        }),
+        suggestion: "Run the sandbox and permission gates before release; doctor records the gate surface but does not execute heavy tests.",
+    }
+}
+
+fn doctor_server_health_check(server: Option<&str>) -> DoctorCheck {
+    let Some(server) = server.filter(|server| !server.trim().is_empty()) else {
+        return DoctorCheck {
+            id: "server_health",
+            title: "Remote server health",
+            status: DoctorCheckStatus::Skip,
+            severity: "medium",
+            evidence: json!({
+                "reason": "No --server was provided.",
+            }),
+            suggestion: "Pass --server http://host:port to check a local or remote merchant health endpoint.",
+        };
+    };
+    match DemoHttpClient::new(server).get_json("/health", None) {
+        Ok(value) => DoctorCheck {
+            id: "server_health",
+            title: "Remote server health",
+            status: DoctorCheckStatus::Pass,
+            severity: "medium",
+            evidence: json!({
+                "server": "[REDACTED]",
+                "reachable": true,
+                "health": redact_metadata_value(&value),
+            }),
+            suggestion: "No action required for the health endpoint.",
+        },
+        Err(error) => DoctorCheck {
+            id: "server_health",
+            title: "Remote server health",
+            status: DoctorCheckStatus::Fail,
+            severity: "medium",
+            evidence: json!({
+                "server": "[REDACTED]",
+                "reachable": false,
+                "message": redact_text(&error.to_string()),
+            }),
+            suggestion: "Start the merchant server or check the server URL before running demo or release checks.",
+        },
+    }
+}
+
+fn doctor_summary(checks: &[DoctorCheck]) -> Value {
+    let mut pass = 0_u64;
+    let mut warn = 0_u64;
+    let mut fail = 0_u64;
+    let mut skip = 0_u64;
+    for check in checks {
+        match check.status {
+            DoctorCheckStatus::Pass => pass += 1,
+            DoctorCheckStatus::Warn => warn += 1,
+            DoctorCheckStatus::Fail => fail += 1,
+            DoctorCheckStatus::Skip => skip += 1,
+        }
+    }
+    json!({
+        "total": checks.len(),
+        "pass": pass,
+        "warn": warn,
+        "fail": fail,
+        "skip": skip,
+        "skipCountsAsPass": false,
+    })
+}
+
+fn doctor_human_summary(checks: &[DoctorCheck]) -> Vec<String> {
+    checks
+        .iter()
+        .map(|check| {
+            format!(
+                "{}: {} - {}",
+                check.id,
+                check.status.as_str(),
+                check.suggestion
+            )
+        })
+        .map(|line| redact_text(&line))
+        .collect()
+}
+
+fn doctor_check_json(check: &DoctorCheck) -> Value {
+    json!({
+        "id": check.id,
+        "title": check.title,
+        "status": check.status.as_str(),
+        "severity": check.severity,
+        "evidence": check.evidence,
+        "suggestion": check.suggestion,
+    })
 }
 
 fn import_wechat_mcp(options: ImportOptions<'_>) -> Result<Value, CliError> {
@@ -3924,6 +4717,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_doctor_args() {
+        let cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "doctor",
+            "--skill",
+            "examples/coffee-skill",
+            "--server",
+            "http://127.0.0.1:3000",
+            "--ci",
+        ])
+        .expect("args parse");
+        assert!(matches!(cli.command, Command::Doctor { ci: true, .. }));
+    }
+
+    #[test]
     fn parses_runtime_json_args() {
         let cli = Cli::try_parse_from_args([
             "dock-cli",
@@ -3954,6 +4762,161 @@ mod tests {
     fn redacts_http_errors() {
         let redacted = redact_text(r#"{"capabilityToken":"demo-token"}"#);
         assert_eq!(redacted, "[REDACTED]");
+    }
+
+    #[test]
+    fn doctor_reports_required_checks_and_redacts_default_fixture_paths() {
+        let credential = CredentialFixture::new();
+        let skill = SkillFixture::new();
+        let output = doctor(DoctorOptions {
+            skill: Some(&skill.root),
+            server: None,
+            runtime_config: None,
+            did_document: Some(&credential.did_path),
+            private_key: Some(&credential.key_path),
+            user_did: Some("did:wba:user.example"),
+            agent_did: Some("did:wba:agent.example"),
+            identity_handle: None,
+            identity_root: None,
+            ci: false,
+        })
+        .expect("doctor report");
+
+        assert_eq!(output["schemaVersion"], DOCTOR_REPORT_SCHEMA_VERSION);
+        assert_eq!(output["commandStatus"], "ok");
+        assert_eq!(output["summary"]["skipCountsAsPass"], false);
+        assert!(doctor_has_check(&output, "rust_toolchain"));
+        assert!(doctor_has_check(&output, "did_identity"));
+        assert!(doctor_has_check(&output, "credential_permissions"));
+        assert!(doctor_has_check(&output, "trusted_resolver"));
+        assert!(doctor_has_check(&output, "network_allowlist"));
+        assert!(doctor_has_check(&output, "storage_backend"));
+        assert!(doctor_has_check(&output, "audit_backend"));
+        assert!(doctor_has_check(&output, "host_providers"));
+        assert!(doctor_has_check(&output, "sandbox_gates"));
+        assert!(doctor_has_check(&output, "server_health"));
+        assert_eq!(doctor_check_status(&output, "server_health"), Some("skip"));
+
+        let rendered = output.to_string();
+        assert!(!rendered.contains(&credential.dir_path().display().to_string()));
+        assert!(!rendered.contains(&skill.root.display().to_string()));
+        assert!(!rendered.contains("test-only-key"));
+        assert!(!rendered.contains("Authorization"));
+        assert!(!rendered.contains("Bearer "));
+        assert!(!rendered.contains("capabilityToken"));
+    }
+
+    #[test]
+    fn doctor_runtime_config_file_reports_production_ready_backends() {
+        let dir = TempDir::new("dock-cli-doctor-config").expect("temp dir");
+        let config_path = dir.path().join("runtime.json");
+        fs::write(
+            &config_path,
+            r#"{
+              "schemaVersion": "dock.runtime.config.v1",
+              "profile": "production",
+              "identity": {
+                "provider": {"handle": "host-identity"}
+              },
+              "resolver": {
+                "provider": {"handle": "host-resolver"}
+              },
+              "allowlist": {
+                "networkRules": [{
+                  "name": "coffee-api",
+                  "source": {"kind": "runtimeData", "path": "allowlist/coffee.json"}
+                }]
+              },
+              "tokenIssuer": {
+                "issuer": "did:wba:issuer.example",
+                "secretRef": {"kind": "secretStore", "key": "dock/token-issuer"}
+              },
+              "storage": {
+                "backend": "encryptedSqlite",
+                "pathRef": {"kind": "runtimeData", "path": "state/storage.sqlite3"}
+              },
+              "audit": {
+                "backend": "hostProvider",
+                "provider": {"handle": "host-audit"},
+                "retentionDays": 30
+              },
+              "cache": {
+                "backend": "hostProvider",
+                "provider": {"handle": "host-cache"}
+              },
+              "hostProviders": [{
+                "handle": "host-runtime",
+                "capabilities": ["render", "consent", "payment"]
+              }]
+            }"#,
+        )
+        .expect("write config");
+
+        let output = doctor(DoctorOptions {
+            skill: None,
+            server: None,
+            runtime_config: Some(&config_path),
+            did_document: None,
+            private_key: None,
+            user_did: None,
+            agent_did: None,
+            identity_handle: None,
+            identity_root: None,
+            ci: false,
+        })
+        .expect("doctor report");
+
+        assert_eq!(
+            doctor_check_status(&output, "trusted_resolver"),
+            Some("pass")
+        );
+        assert_eq!(
+            doctor_check_status(&output, "network_allowlist"),
+            Some("pass")
+        );
+        assert_eq!(
+            doctor_check_status(&output, "storage_backend"),
+            Some("pass")
+        );
+        assert_eq!(doctor_check_status(&output, "audit_backend"), Some("pass"));
+        assert_eq!(doctor_check_status(&output, "host_providers"), Some("pass"));
+        let rendered = output.to_string();
+        assert!(!rendered.contains(&dir.path().display().to_string()));
+        assert!(!rendered.contains("secretStore"));
+    }
+
+    #[test]
+    fn doctor_ci_reports_failed_command_status_without_hiding_json() {
+        let mut cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "doctor",
+            "--did-document",
+            "missing-did.json",
+            "--private-key",
+            "missing-key.pem",
+            "--ci",
+        ])
+        .expect("args parse");
+        let output = cli.execute().expect("doctor executes");
+        assert_eq!(output["schemaVersion"], DOCTOR_REPORT_SCHEMA_VERSION);
+        assert_eq!(output["commandStatus"], "failed");
+        assert_eq!(doctor_check_status(&output, "did_identity"), Some("fail"));
+
+        let cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "doctor",
+            "--did-document",
+            "missing-did.json",
+            "--private-key",
+            "missing-key.pem",
+            "--ci",
+        ])
+        .expect("args parse");
+        let mut writer = Vec::new();
+        let error = run_with_writer(cli, &mut writer).expect_err("ci failure exits non-zero");
+        assert!(error.to_string().contains("failing checks"));
+        let rendered = String::from_utf8(writer).expect("utf8 output");
+        assert!(rendered.contains(DOCTOR_REPORT_SCHEMA_VERSION));
     }
 
     #[test]
@@ -4500,6 +5463,19 @@ mod tests {
         assert_eq!(event.dataset["id"], "latte");
     }
 
+    fn doctor_has_check(report: &Value, id: &str) -> bool {
+        doctor_check_status(report, id).is_some()
+    }
+
+    fn doctor_check_status<'a>(report: &'a Value, id: &str) -> Option<&'a str> {
+        report["checks"]
+            .as_array()?
+            .iter()
+            .find(|check| check["id"] == id)?
+            .get("status")?
+            .as_str()
+    }
+
     #[test]
     fn parses_run_demo_explicit_credential_config() {
         let fixture = CredentialFixture::new();
@@ -4665,6 +5641,10 @@ mod tests {
                 did_path,
                 key_path,
             }
+        }
+
+        fn dir_path(&self) -> &Path {
+            self._dir.path()
         }
     }
 
