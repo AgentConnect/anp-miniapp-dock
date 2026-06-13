@@ -13,8 +13,8 @@ use component_runtime::{
 use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_DECISION_ACTOR};
 use dock_core::{
     ApiCallContext, AuditEvent, AuditSink, ComponentRenderInput, ConsentDecision, ConsentGate,
-    DockCoreError, ErrorCode, Orchestrator, PermissionDecision, RenderOutcome, RenderRouter,
-    RuntimeHost,
+    DockCoreError, ErrorCode, PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
+    RuntimeCallRequest, RuntimeErrorResponse, RuntimeHost, RuntimeService, RuntimeSessionContext,
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
 use mcp_schema::{
@@ -162,6 +162,9 @@ pub enum CliError {
 
     #[error("runtime call failed: {0}")]
     Core(#[from] DockCoreError),
+
+    #[error("runtime call failed: {0}")]
+    Runtime(#[from] Box<RuntimeErrorResponse>),
 
     #[error("invalid JSON for {label}: {source}")]
     Json {
@@ -798,7 +801,7 @@ fn run_demo(
     let search = runtime.call("searchDrinks", search_args.clone())?;
     let mut drink_component = mount_for_outcome(
         skill_path,
-        runtime.orchestrator.skill(),
+        runtime.skill(),
         "searchDrinks",
         search_args,
         search.result.clone(),
@@ -812,7 +815,7 @@ fn run_demo(
     let confirm = runtime.call("confirmOrder", confirm_args.clone())?;
     let mut order_component = mount_for_outcome(
         skill_path,
-        runtime.orchestrator.skill(),
+        runtime.skill(),
         "confirmOrder",
         confirm_args,
         confirm.result.clone(),
@@ -826,7 +829,7 @@ fn run_demo(
     let payment = runtime.call("payOrder", pay_args.clone())?;
     let mut payment_component = mount_for_outcome(
         skill_path,
-        runtime.orchestrator.skill(),
+        runtime.skill(),
         "payOrder",
         pay_args,
         payment.result.clone(),
@@ -882,11 +885,12 @@ fn run_demo(
 }
 
 struct RuntimeHarness {
-    orchestrator: Orchestrator<
+    service: RuntimeService<
         AllowHost,
         ApproveConsent,
         js_runtime_quickjs::QuickJsApiExecutor,
         ComponentRenderRouter,
+        CollectAudit,
         CollectAudit,
     >,
     audit: CollectAudit,
@@ -929,7 +933,7 @@ impl RuntimeHarness {
             );
         }
         let audit = CollectAudit::default();
-        let orchestrator = Orchestrator::load_skill(
+        let service = RuntimeService::load_skill(
             skill.clone(),
             AllowHost,
             ApproveConsent,
@@ -939,9 +943,10 @@ impl RuntimeHarness {
                 manifest: skill.manifest,
             },
             audit.clone(),
+            audit.clone(),
         );
         Ok(Self {
-            orchestrator,
+            service,
             audit,
             identity,
         })
@@ -952,18 +957,26 @@ impl RuntimeHarness {
         api_name: impl Into<String>,
         arguments: Value,
     ) -> Result<dock_core::CallOutcome, CliError> {
-        self.orchestrator
-            .call_api(ApiCallContext {
-                user_did: Some(self.identity.user_did.clone()),
-                agent_did: self.identity.agent_did.clone(),
-                merchant_did: Some(self.identity.merchant_did.clone()),
-                skill_id: DEFAULT_SKILL_ID.to_owned(),
-                session_id: DEFAULT_SESSION_ID.to_owned(),
+        let response = self
+            .service
+            .call_api(RuntimeCallRequest {
+                session: RuntimeSessionContext {
+                    user_did: Some(self.identity.user_did.clone()),
+                    agent_did: self.identity.agent_did.clone(),
+                    merchant_did: Some(self.identity.merchant_did.clone()),
+                    skill_id: DEFAULT_SKILL_ID.to_owned(),
+                    session_id: DEFAULT_SESSION_ID.to_owned(),
+                },
                 api_name: api_name.into(),
                 arguments,
                 capability_token: None,
             })
-            .map_err(Into::into)
+            .map_err(CliError::Runtime)?;
+        Ok(response.data.into_call_outcome())
+    }
+
+    fn skill(&self) -> &LoadedSkill {
+        self.service.skill()
     }
 
     fn audit_events(&self) -> Vec<AuditEvent> {
@@ -1079,6 +1092,12 @@ impl AuditSink for CollectAudit {
     fn record(&self, event: AuditEvent) -> Result<(), DockCoreError> {
         self.events.borrow_mut().push(event);
         Ok(())
+    }
+}
+
+impl RuntimeAuditReader for CollectAudit {
+    fn runtime_audit_records(&self) -> Vec<AuditEvent> {
+        self.events.borrow().clone()
     }
 }
 

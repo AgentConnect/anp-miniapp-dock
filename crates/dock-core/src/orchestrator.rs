@@ -266,6 +266,14 @@ where
         }
     }
 
+    pub fn render_component(
+        &self,
+        context: &ApiCallContext,
+        input: ComponentRenderInput,
+    ) -> Result<RenderOutcome, DockCoreError> {
+        self.renderer.render(context, &input)
+    }
+
     pub fn registry(&self) -> &ApiRegistry {
         &self.registry
     }

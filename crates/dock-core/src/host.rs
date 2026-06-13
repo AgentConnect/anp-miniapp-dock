@@ -216,7 +216,8 @@ impl ConsentDecision {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RenderOutcome {
     pub renderer: String,
     pub component_path: Option<String>,

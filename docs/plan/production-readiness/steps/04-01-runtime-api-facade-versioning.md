@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-01
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 18:28:18 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Phase 3 完成后，启动 Runtime API Facade 稳定化 |
+| Review evidence | 2026-06-13 18:43:02 +0800 commit 前 Review：发现并修复 `RuntimeSkillSummary` 输出本机 skill root 绝对路径的问题，改为 digest `packageRef` 或 `local-dev-package`；发现含 `capability_token` 的 request DTO 派生 `Debug` 会扩大日志泄露风险，已移除 `RuntimeCallRequest` / `RuntimeDispatchComponentActionRequest` 的 `Debug` derive；发现 runtime validation report 可能回显本机路径、Authorization、token、private key 路径或 secret suggestion，已对 error message、validation issue path/message/suggestion 做二次 redaction 并补回归测试；确认 `expire_cards` / `close_session` 仅冻结稳定边界，不冒充生产 card/session store。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p dock-core runtime` 4 passed，覆盖 runtime version negotiation、validate/load/call/render/action/expire/audit/close、error JSON serialization、token/Authorization/path redaction；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/component-runtime crates/skill-loader docs/runbook docs/plan` 无输出；手工运行 `cargo run -q -p dock-cli -- call-api examples/coffee-skill searchDrinks '{}'` 和 `cargo run -q -p dock-cli -- call-api examples/coffee-skill confirmOrder '{}'` 抽样，CLI JSON 保持兼容且 validation error 为 stable code；敏感词抽样只命中 `crates/dock-core/tests/runtime_facade.rs` 中的刻意测试假值，未命中 Runtime API / CLI 输出样本。 |
+| Next action | 创建 `phase4: add runtime api facade` focused commit，随后回填 commit hash 并关闭本 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,12 +65,12 @@ Step index：04-01
 
 ## 7. 验收标准
 
-- [ ] Runtime facade 覆盖 validate/load/call/render/action/expire/audit/close session 的最小 stable API。
-- [ ] Runtime API 有 version 字段或版本协商策略。
-- [ ] Error code stable、JSON 可序列化、敏感字段 redacted。
-- [ ] CLI 至少一个关键路径调用 facade，且 coffee E2E 不回归。
-- [ ] Phase 4 文档记录 API contract 和 migration 影响。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Runtime facade 覆盖 validate/load/call/render/action/expire/audit/close session 的最小 stable API。
+- [x] Runtime API 有 version 字段或版本协商策略。
+- [x] Error code stable、JSON 可序列化、敏感字段 redacted。
+- [x] CLI 至少一个关键路径调用 facade，且 coffee E2E 不回归。
+- [x] Phase 4 文档记录 API contract 和 migration 影响。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -93,20 +93,20 @@ Step index：04-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 3 项需修复问题 | 1. `RuntimeSkillSummary` 初版输出本机 skill root 绝对路径，不适合作为 public Runtime DTO；2. 含 `capability_token` 的 request DTO 派生 `Debug`，未来日志中可能泄露 host-only token；3. `RuntimeErrorResponse` 初版只脱敏 message，validation report 的 path/message/suggestion 仍可能回显本机路径、Authorization、token 或 private key 路径。 |
+| 已修复问题 | 已修复 | `RuntimeSkillSummary` 改为 `packageRef`，优先使用 `sha256:<digest>`，本地开发包为 `local-dev-package`；移除 `RuntimeCallRequest` / `RuntimeDispatchComponentActionRequest` 的 `Debug` derive；新增 validation report 二次脱敏并补 `runtime_facade_validation_errors_redact_reports`。 |
+| 剩余风险 | 已记录，非本 Step 阻塞 | `expire_cards` 当前只返回 `host-managed-card-store` 边界，真实 card/session store、取消/幂等由 04-09/04-10 承接；`close_session` 当前为 `stateless-runtime-facade`，token/cache/session 清理由 04-05/04-10 承接；CLI JSON 保持兼容但不是 04-02 的 IPC/Host production protocol。 |
+| 新增或缺失测试 | 已补 focused tests | 新增 `crates/dock-core/tests/runtime_facade.rs`，覆盖 version negotiation、validate/load summary、call/render/action/expire/audit/close、error JSON serialization、token/Authorization/path redaction；未新增 HTTP/gRPC sidecar 或真实 Host UI tests，按本 Step 非目标留给 04-02/04-09。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `docs/plan/production-readiness/phase-4-runtime-host-integration.md` 的 Runtime API contract、版本策略、CLI migration 和后续边界；`docs/runbook/local-demo.md` 未改，因为 `dock-cli call-api` / `run-demo` 用户可见 JSON 未改变。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 Runtime API facade、直接 tests、CLI 接入和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` 只包含 04-01 Runtime facade 代码、测试和文档变更。
+- 纳入文件：`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-core/src/host.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/tests/runtime_facade.rs`、`crates/dock-cli/src/commands.rs`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness-roadmap.md`、本 Step 文档。
+- Commit 后证据：待 commit 后回填。
+- 遗留未提交变更：待 commit 后确认；若只有 closure 文档回填，将作为单独提交记录。
 - 建议消息：`phase4: add runtime api facade`
 
 ## 11. Blocked 处理
