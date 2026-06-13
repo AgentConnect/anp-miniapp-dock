@@ -304,8 +304,8 @@ Host 不允许：
 
 ## 5. 阶段完成检查
 
-- [ ] CLI 使用同一 Runtime API。
-- [ ] 至少一个 Host 通过稳定协议接入。
-- [ ] Skill package 可下载/缓存/校验/回滚。
-- [ ] runtime config 与 secret store 边界冻结，且 storage/token/audit/cache 分别有 focused production candidate 或 release blocker。
-- [ ] 多 session 隔离和高风险串行策略有测试。
+- [x] CLI 使用同一 Runtime API。
+- [x] Headless/local process Host boundary 通过稳定 JSON envelope 和 `dock.host-adapter.v1` contract 接入；真实 production Host UI/provider 仍是 release blocker，不能写成已完成。
+- [x] Skill package 本地 registry/cache 支持 digest-keyed cache、校验、version pin、rollback、cleanup 和 quarantine；真实远端 registry download、生产签名 verifier、publisher trust policy 配置和部署级 cache hardening 仍是 release blocker。
+- [x] runtime config 与 secret store 边界冻结，且 storage/token/audit/cache 分别有 focused local contract、dev/test backend 或明确 release blocker；未加密 local backend 不得 production-ready。
+- [x] 多 session 隔离、高风险串行、pre-dispatch cancellation/timeout、idempotency key forward/replay 和非幂等 no-retry 策略有测试；分布式 lock、耐久幂等和 provider 抢占式取消仍是 release blocker。

@@ -70,7 +70,7 @@
 | Phase 1 | 接口对齐与 wx Capability Broker | 补齐原子接口环境中关键 `wx.modelContext` / `wx.*` 能力，对齐小程序 MCP 接口语义 | wx API 兼容层、权限映射、JS bridge、测试矩阵 | 核心交易型 Skill 可不改或少改运行 |
 | Phase 2 | 组件运行时对齐 | 补齐小程序 MCP 原子组件核心能力，保持 Render IR 主线 | 组件兼容矩阵、更多 WXML/WXSS/内置组件、动态组件受控能力 | 多个真实交易型组件 fixture 通过快照和交互测试 |
 | Phase 3 | 安全增强与可信执行 | 让容器默认满足线上安全边界 | threat model、沙箱加固、权限策略、token 生命周期、审计落盘、包签名 | 安全审计 checklist 全部通过，高风险动作无法绕过 |
-| Phase 4 | 生产运行时与 Host 接入 | 从 CLI demo 变成可集成、可部署、可升级的容器 | Runtime API、进程/SDK 形态、持久化、Skill registry/cache、Host adapter contract | 至少一个真实 Host 能通过稳定协议接入 |
+| Phase 4 | 生产运行时与 Host 接入 | 从 CLI demo 变成可集成、可部署、可升级的容器 | Runtime API、进程/SDK 形态、持久化、Skill registry/cache、Host adapter contract | Runtime/Host contract、headless conformance、持久化边界和 release blockers 可审计；真实 production Host 仍需后续接入 |
 | Phase 5 | 开发者体验与生态兼容 | 让 Skill 开发者能迁移、调试、认证兼容性 | CLI/SDK、导入工具、示例 Skill、兼容报告、文档站 | 外部 Skill 可自助完成本地验证 |
 | Phase 6 | 观测、性能与发布运营 | 达到线上可运维、可回滚、可持续发布 | metrics/logs/traces、性能基线、CI/CD gates、runbook | 可灰度发布并定位线上问题 |
 
@@ -90,7 +90,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.1 Resume From Here
 
-当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 04-11 [`production-readiness/steps/04-11-phase4-final-review-verification.md`](production-readiness/steps/04-11-phase4-final-review-verification.md)，状态为 `pending`。如果 Codex Goal 明确限定只执行 Phase 4，则完成 Step 04-11 后停止，不进入 05-01。
+当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 04-11 [`production-readiness/steps/04-11-phase4-final-review-verification.md`](production-readiness/steps/04-11-phase4-final-review-verification.md)，状态为 `review`。如果 Codex Goal 明确限定只执行 Phase 4，则完成 Step 04-11 后停止，不进入 05-01。
 
 恢复规则：
 
@@ -142,7 +142,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 04-08 | Skill Cache cleanup 与版本清理 | 04-03, 04-04 | digest cache cleanup、eviction、privacy/delete scope hooks | [production-readiness/steps/04-08-skill-cache-cleanup.md](production-readiness/steps/04-08-skill-cache-cleanup.md) | 必须 | done |
 | 04-09 | Host Adapter Contract 与 Action Protocol | 01-08, 02-06, 03-05, 04-01 | Host renderer/provider/action conformance、headless adapter | [production-readiness/steps/04-09-host-adapter-contract-action-protocol.md](production-readiness/steps/04-09-host-adapter-contract-action-protocol.md) | 必须 | done |
 | 04-10 | 并发、取消、重试与幂等策略 | 02-05, 03-03, 03-05, 04-01, 04-05, 04-06, 04-07, 04-09 | session manager、cancellation、retry policy、idempotency key | [production-readiness/steps/04-10-concurrency-cancellation-idempotency.md](production-readiness/steps/04-10-concurrency-cancellation-idempotency.md) | 必须 | done |
-| 04-11 | Phase 4 最终 Review 与整体验证 | 04-01, 04-02, 04-03, 04-04, 04-05, 04-06, 04-07, 04-08, 04-09, 04-10 | Phase 4 全局 Review 记录、整体验证证据、Phase 5 启动 gate | [production-readiness/steps/04-11-phase4-final-review-verification.md](production-readiness/steps/04-11-phase4-final-review-verification.md) | 必须 | pending |
+| 04-11 | Phase 4 最终 Review 与整体验证 | 04-01, 04-02, 04-03, 04-04, 04-05, 04-06, 04-07, 04-08, 04-09, 04-10 | Phase 4 全局 Review 记录、整体验证证据、Phase 5 启动 gate | [production-readiness/steps/04-11-phase4-final-review-verification.md](production-readiness/steps/04-11-phase4-final-review-verification.md) | 必须 | review |
 | 05-01 | CLI validate 兼容报告增强 | 01-05, 02-06, 03-06, 04-01, 04-11 | JSON compatibility report、releaseBlockers、修复建议 | [production-readiness/steps/05-01-cli-validate-compatibility-report.md](production-readiness/steps/05-01-cli-validate-compatibility-report.md) | 必须 | pending |
 | 05-02 | CLI inspect Skill package | 05-01 | package 文件、API/registration 对照、组件/权限/risk/wx usage | [production-readiness/steps/05-02-cli-inspect-skill-package.md](production-readiness/steps/05-02-cli-inspect-skill-package.md) | 必须 | pending |
 | 05-03 | CLI test-skill 与 Fixture Runner | 02-06, 04-01, 05-01 | fixture runner、snapshot compare、action/audit report | [production-readiness/steps/05-03-cli-test-skill-fixture-runner.md](production-readiness/steps/05-03-cli-test-skill-fixture-runner.md) | 必须 | pending |
@@ -201,7 +201,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 04-08 | done | `main` | 2026-06-13 21:01:51 +0800 | 2026-06-13 21:22:02 +0800 | `01a0cec` | 2026-06-13 21:20:37 +0800 commit 前 Review 已记录：确认 sidecar metadata 写在 cache root 下而非 Skill 包目录内，不影响包 digest；dry-run/report 不输出 cache root、本机绝对路径或 package URL secret/query；delete scope 只删除匹配 package dir 与对应 sidecar；rollback pin 与 active retain 会保留；quarantined sidecar 会让后续 reload fail closed；legacy cache 无 sidecar 时只被全量 cleanup 匹配；本 Step 未新增 CLI 命令，CLI/ops cleanup surface 留给 Phase 5/6 | 启动前 `git status --short --branch` = `## main...origin/main [ahead 76]`，工作区无未提交变更；已读取主 Plan、Step 04-08 文档、Phase 4 章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-07 closure evidence；`cargo fmt --check` 通过；`cargo test -p skill-loader cache` 7 passed；`cargo test -p skill-loader` 14 package/path tests + 11 registry/cache tests + doctests passed；`cargo test -p dock-cli cache` 通过但 filter 命中 0 tests，本 Step 未触及 CLI surface；`cargo clippy -p skill-loader --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感词扫描仅命中文档红线、测试假值、redaction 断言和既有计划文本，未发现真实 token、Authorization、signature、private key material、本机绝对路径或生产凭据进入 cleanup report；implementation commit 后 `git status --short --branch` = `## main...origin/main [ahead 77]` | 进入 04-09 |
 | 04-09 | done | `main` | 2026-06-13 21:23:49 +0800 | 2026-06-13 21:53:01 +0800 | `b6120cc` | 2026-06-13 21:50:47 +0800 commit 前 Review 已记录：修复 Host action outcome 只依赖 custom Host 自行脱敏的问题，改为 Runtime 出口统一二次脱敏；修复 `openDetailPage` 初版只在 headless Host 内 canonicalize 的问题，改为 Runtime 先拒绝 unsafe target，再把 canonical relative target 交给 Host；确认 `api/call` 不进入 Host adapter，仍走 Orchestrator、permission、ConsentGate、audit 和 executor；确认 custom Host unknown action 默认 unsupported fail closed，headless mock `productionReady = false` | `cargo fmt --check` 通过；`cargo test -p dock-core host` 11 matched tests passed；`cargo test -p dock-core` 37 passed；`cargo test -p component-runtime action` 3 matched tests passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo clippy -p dock-core --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/component-runtime crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/security docs/plan` 无输出；fixed-string 敏感词扫描仅命中文档红线、redaction marker、测试假值和既有安全计划文本，未发现真实凭据泄露；实现 commit 后 `git status --short --branch` = `## main...origin/main [ahead 79]` | 进入 04-10 |
 | 04-10 | done | `main` | 2026-06-13 21:54:25 +0800 | 2026-06-13 22:28:04 +0800 | `932e2e5` | 2026-06-13 22:22:30 +0800 commit 前 Review 已记录：修复 `requiredForHighRisk` 公开 policy 与实现不一致、session close 未清理本地 replay cache、`concurrency` filter 覆盖不足的问题；确认剩余风险为本地内存级串行/replay、pre-dispatch cancellation/deadline、无分布式 lock 或 provider 侧耐久幂等，均已同步到文档 | 启动前 `git status --short --branch` = `## main...origin/main [ahead 80]`，工作区无未提交变更；已读取主 Plan、Step 04-10 文档、Phase 4 并发/取消/重试与幂等章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-09 closure evidence；`cargo fmt --check` 通过；`cargo test -p dock-core concurrency` 初次在测试重命名前只命中 1 test，已重跑后 5 passed；`cargo test -p anp-adapter retry` 1 passed；`cargo test -p component-runtime cleanup` 1 passed；`cargo test -p dock-core` 43 passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo clippy -p dock-core --all-targets -- -D warnings` 通过；`cargo clippy -p anp-adapter --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/anp-adapter crates/component-runtime crates/consent-audit crates/dock-cli docs/security docs/runbook docs/plan docs/architecture` 无输出；敏感词抽样仅命中源码 redaction 逻辑、测试假值和安全/计划文档条目，未发现真实凭据泄露；实现 commit 后 `git status --short --branch` = `## main...origin/main [ahead 81]` | 进入 04-11 |
-| 04-11 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-10 完成 |
+| 04-11 | review | `main` | 2026-06-13 22:29:59 +0800 | 待记录 | 待记录 | 2026-06-13 22:38:26 +0800 Phase 4 最终 Review 已记录：修复 roadmap 顶层 Phase 4 完成标志误导为真实 production Host 已接入的问题，修复 Phase 4 阶段完成检查仍全部未勾选的问题，修复通用 Codex Goal 提示词硬编码 04-01 起点的问题；确认 04-01 至 04-10 的 Runtime API、IPC/headless、registry/cache、config/secret、token/storage/audit/cache、Host adapter/action、concurrency/cancellation/idempotency 证据齐全，未发现需要修改 Phase 4 代码的阻塞问题。 | 启动前 `git status --short --branch` = `## main...origin/main [ahead 82]`，工作区无未提交变更；已读取主 Plan、Step 04-11 文档、Phase 4 章节、Phase 4 详细计划、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-10 closure evidence；04-01 至 04-10 在主台账均为 `done`；04-01 至 04-10 implementation/closure commit hash 均可解析；`cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；敏感词扫描仅命中源码 redaction 逻辑、测试假值、安全/计划文档和 demo-only 示例，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 | 等待创建 04-11 final review commit 和 closure commit；完成后本 Goal 停止，不进入 05-01 |
 | 05-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-11 完成 |
 | 05-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-01 完成 |
 | 05-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 05-02 完成 |
@@ -348,12 +348,23 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 | 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 `compatibilityLevel: demo-only`、`supplyChain.status = demo-unsigned`、releaseBlockers 含 `supply_chain`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；Phase 3 commit hash 审计通过。 |
 | 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 58]`，未提交变更仅为 03-07 final Review 文档回填；final review commit 为 `e888b24 docs: record phase3 final review`；ledger closure commit 为 `9f884ac docs: close phase3 final review gate`；closure 后 `git status --short --branch` = `## main...origin/main [ahead 60]`，工作区无未提交变更。 |
 
+| 项目 | 记录 |
+|---|---|
+| 执行时间 | 2026-06-13 22:38:26 +0800 |
+| 范围 | Roadmap 执行台账、Step 04-01 至 04-11 文档、Phase 4 子文档、Runtime/Host contract 文档、Threat Model、Release Gates、component 兼容矩阵、相关源码/测试和 git history。 |
+| Step/ledger 审计 | 执行台账中 04-01 至 04-10 均为 `done`，且有 commit hash、Review 证据和验证证据；04-11 是进入 05-01 前可追踪 final Review gate。台账记录的 implementation / closure commit `1b470d5`、`2f299db`、`53e71be`、`fb2d36d`、`81c32c9`、`f004bb4`、`189ad87`、`3713899`、`f742304`、`db9f457`、`67237ba`、`6b09301`、`c8f4a96`、`92ce9c8`、`01a0cec`、`1620fb4`、`b6120cc`、`d4cf617`、`932e2e5`、`259ccee` 均能在 git history 解析。 |
+| Review 发现与修复 | 修复文档漂移：roadmap 顶层 Phase 4 完成标志仍暗示“至少一个真实 Host 已通过稳定协议接入”，已改为 Runtime/Host contract、headless conformance、持久化边界和 release blockers 可审计；Phase 4 子文档阶段完成检查仍未勾选，已改为带 release blocker 限定的已完成项；通用 Codex Goal 提示词仍硬编码 04-01 起点，已改为从主台账第一个非 `done` Step 恢复。未发现需要修改 Phase 4 代码的阻塞问题。 |
+| 安全/敏感信息 Review | Phase 4 文档继续保留真实 production Host UI/provider、HTTP/gRPC sidecar、远端 registry download、生产签名 verifier、Host/encrypted token/storage/audit backend、分布式 lock、durable idempotency、provider cancellation、CI/ops 自动化等 release blockers；未把 demo/headless/mock/local 未加密能力写成 production-ready。敏感词扫描仅命中源码 redaction 逻辑、测试假值、安全/计划文档和 demo-only 示例，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
+| 残余风险 | Phase 4 已完成本地 Runtime API、headless IPC、registry/cache、config/secret、token/storage/audit/cache contract、Host adapter/action protocol 和本地 concurrency/idempotency gate；真实 production Host UI/provider/conformance、HTTP/gRPC sidecar、真实远端 registry download、生产签名 verifier/publisher policy、生产加密持久化 backend、部署级 audit/export/privacy deletion、跨进程 lock、merchant/provider durable idempotency、metrics/CI/ops 自动化仍待 Phase 5/6 或后续生产接入 Step。Coffee demo 与 headless/local backend 仍不能解释为 production release 完成。 |
+| 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；Phase 4 commit hash 审计通过。 |
+| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 82]`；未提交变更仅为 04-11 final Review 文档、Phase 4 检查表和 roadmap 漂移修复；final review commit 待创建；ledger closure commit 待创建。 |
+
 #### 2.3.9 Codex Goal 提示词
 
-下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准；截至 2026-06-13，Step 03-07 已完成，整体 roadmap 的下一个 Step 是 04-01。
+下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准；不要硬编码历史起点，必须从主台账第一个非 `done` Step 恢复。若当前 Goal 明确限定只执行某个 Phase，则该 Phase final Review Step 完成后停止，不自动进入下一 Phase。
 
 ```text
-请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从第一个非 done Step 开始；如果当前主台账保持最新，应从 04-01 开始。
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从主台账第一个非 done Step 开始，不依赖聊天历史或旧提示词中的固定 Step 编号。
 
 开始前先读取：
 - anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md
@@ -365,7 +376,7 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 
 需要改变范围、顺序、验收标准、公开契约、数据模型、安全边界或验证策略时，先更新 Plan 变更记录和受影响 Step 文档。不得绕过 ANP DID、capability token、allowlist、ConsentGate、audit、redaction 和 sandbox 边界。
 
-所有步骤完成后，执行最终全局 Review 和整体验证，记录实际命令、通过/失败/跳过数量、失败或跳过原因、剩余风险和最终工作区状态。
+所有目标范围内的步骤完成后，执行对应 final Review 和整体验证，记录实际命令、通过/失败/跳过数量、失败或跳过原因、剩余风险和最终工作区状态；如果 Goal 只限定某个 Phase，完成该 Phase final Review 后停止。
 ```
 
 若需要在尚未执行该批次的工作区补跑 Phase 1/2 执行型 Codex Goal，可使用更窄的提示词。它只执行 Phase 1 剩余 Step 和 Phase 2 全部 Step，完成 Step 02-07 后停止，不进入 Phase 3：
@@ -925,9 +936,11 @@ Phase 4 的目标是把 CLI/demo-server 形态升级为可被真实宿主集成�
 
 阶段完成标志：
 
-- 一个真实 Host 可以通过稳定协议调用容器加载 Skill、执行 API、渲染 Render IR、处理 action；
-- 容器重启后 session/storage/audit 能按策略恢复；
-- 多用户、多商家、多 Skill session 隔离通过测试。
+- Runtime public API、headless IPC/SDK envelope 和 Host adapter/action contract 均已版本化并可通过测试查询；
+- CLI/demo 已收敛到同一 Runtime facade，headless adapter 可证明 Render IR、action、fallback、redaction 和 fail-closed contract；
+- token/storage/audit/cache 的持久化、恢复、清理和 release blocker 边界可审计，不把 dev-only/local 未加密 backend 写成 production-ready；
+- 多用户、多商家、多 Skill session 隔离、高风险串行、取消、timeout、幂等和 no-retry 策略通过测试；
+- 真实 production Host UI/provider、HTTP/gRPC sidecar、远端 registry download、生产签名 verifier、加密生产后端、分布式 lock 和 CI/ops 自动化仍作为后续 release blocker 记录。
 - Step 04-11 完成 Phase 4 最终 Review 与整体验证后，才能作为 Phase 5 启动 gate。
 
 ### 7.2 细分小阶段与实施方案

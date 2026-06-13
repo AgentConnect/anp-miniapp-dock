@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-11
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 22:29:59 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 04-10 完成后，执行 Phase 4 最终 Review；完成后停止本 Goal，不进入 Step 05-01 |
+| Review evidence | 2026-06-13 22:38:26 +0800 Phase 4 最终 Review 已记录：修复 roadmap 顶层 Phase 4 完成标志误导为真实 production Host 已接入的问题，修复 Phase 4 阶段完成检查仍全部未勾选的问题，修复通用 Codex Goal 提示词硬编码 04-01 起点的问题；确认 04-01 至 04-10 的 Runtime API、IPC/headless、registry/cache、config/secret、token/storage/audit/cache、Host adapter/action、concurrency/cancellation/idempotency 证据齐全，未发现需要修改 Phase 4 代码的阻塞问题。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 82]`，工作区无未提交变更；已读取主 Plan、Step 04-11 文档、Phase 4 章节、Phase 4 详细计划、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-10 closure evidence；04-01 至 04-10 在主台账均为 `done`；04-01 至 04-10 implementation/closure commit hash 均可解析；`cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；敏感词扫描仅命中源码 redaction 逻辑、测试假值、安全/计划文档和 demo-only 示例，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
+| Next action | 创建 04-11 final review commit 后执行 closure commit；完成后停止在 04-11，不进入 05-01。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,12 +63,12 @@ Step index：04-11
 
 ## 7. 验收标准
 
-- [ ] 主 Plan 执行台账中 Step 04-01 至 04-10 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
-- [ ] git history 能解析 Step 04-01 至 04-10 的 commit hash。
-- [ ] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
-- [ ] Review 覆盖 Runtime public API/SDK、IPC/headless、Skill registry/cache、config/secret、token/storage/audit persistence、Host adapter/action、concurrency/cancellation/retry/idempotency、redaction、安全边界和文档漂移。
-- [ ] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
-- [ ] 主 Plan `2.3.8` 已追加 Phase 4 最终 Review 记录。
+- [x] 主 Plan 执行台账中 Step 04-01 至 04-10 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
+- [x] git history 能解析 Step 04-01 至 04-10 的 commit hash。
+- [x] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
+- [x] Review 覆盖 Runtime public API/SDK、IPC/headless、Skill registry/cache、config/secret、token/storage/audit persistence、Host adapter/action、concurrency/cancellation/retry/idempotency、redaction、安全边界和文档漂移。
+- [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
+- [x] 主 Plan `2.3.8` 已追加 Phase 4 最终 Review 记录。
 - [ ] 本步骤在进入 Step 05-01 之前已经创建 focused commit，并回填主 Plan 执行台账；本 Goal 到此结束。
 
 ## 8. 验证方式
@@ -93,11 +93,11 @@ Step index：04-11
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 1. roadmap 顶层 Phase 4 完成标志仍暗示真实 production Host 已通过稳定协议接入；2. Phase 4 子文档阶段完成检查仍全部未勾选；3. 通用 Codex Goal 提示词硬编码 04-01 起点，恢复后可能误导后续 Goal。未发现需要修改 Phase 4 代码的阻塞问题。 |
+| 已修复问题 | 已修复 | 顶层 Phase 4 完成标志已改为 Runtime/Host contract、headless conformance、持久化边界和 release blockers 可审计；Phase 4 阶段完成检查改为带 release blocker 限定的已完成项；通用 Codex Goal 提示词改为从主台账第一个非 `done` Step 恢复。 |
+| 剩余风险 | 已记录 | 真实 production Host UI/provider/conformance、HTTP/gRPC sidecar、真实远端 registry download、生产签名 verifier/publisher policy、生产加密持久化 backend、部署级 audit/export/privacy deletion、跨进程 lock、merchant/provider durable idempotency、metrics/CI/ops 自动化仍待 Phase 5/6 或后续生产接入 Step；coffee demo 与 headless/local backend 仍不能解释为 production release 完成。 |
+| 新增或缺失测试 | 已覆盖 | 本 Step 是 final Review gate，未新增代码测试；已重新运行 metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check 和 commit hash 审计。 |
+| 已更新或缺失文档 | 已更新 | 已更新 roadmap、Phase 4 实施计划和 04-11 Step 文档；Threat Model、Release Gates 和 component matrix 经审计保留 release blocker 与 demo/headless/local backend 边界，未发现需要继续修改的漂移。 |
 
 ## 10. Commit 要求
 
@@ -113,7 +113,7 @@ Step index：04-11
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 无 | 无 | 当前步骤 / 整体计划 | 无 blocker，04-11 可创建 final review commit 并进入 closure |
 
 ## 12. Plan 变更记录
 
