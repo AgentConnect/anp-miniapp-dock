@@ -75,6 +75,7 @@ cargo run -p dock-cli -- validate examples/coffee-skill
 cargo run -p dock-cli -- inspect examples/coffee-skill
 cargo run -p dock-cli -- test-skill examples/coffee-skill
 cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
+cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dry-run
 cargo run -p dock-cli -- call-api examples/coffee-skill searchDrinks '{}'
 cargo run -p dock-cli -- preview-component examples/coffee-skill components/drink-list/index '{"apiName":"searchDrinks","structuredContent":{"drinks":[{"id":"latte","name":"Latte","price":18}]}}'
 cargo run -p dock-cli -- preview-card '{"content":[{"type":"text","text":"paid"}],"structuredContent":{"orderId":"order_demo_001","status":"paid"}}'

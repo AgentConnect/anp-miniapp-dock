@@ -45,6 +45,7 @@ const DEFAULT_IDENTITY_DIR: &str = "examples/identity";
 const DEFAULT_DID_DOCUMENT_FILE: &str = "did_document.json";
 const DEFAULT_PRIVATE_KEY_FILE: &str = "key-1-private.pem";
 const VALIDATE_REPORT_SCHEMA_VERSION: &str = "dock.validate-report.v1";
+const IMPORT_REPORT_SCHEMA_VERSION: &str = "dock.import-wechat-mcp-report.v1";
 
 #[derive(Debug, Parser)]
 #[command(name = "dock-cli", about = "MiniApp MCP Skill runtime developer CLI")]
@@ -63,6 +64,21 @@ enum Command {
     },
     TestSkill {
         skill: PathBuf,
+    },
+    ImportWechatMcp {
+        source: PathBuf,
+        #[arg(long)]
+        dest: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        #[arg(long, default_value_t = false)]
+        write: bool,
+        #[arg(long, default_value_t = false)]
+        overwrite: bool,
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        generate_patch: bool,
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        include_fixtures: bool,
     },
     CallApi {
         skill: PathBuf,
@@ -125,6 +141,22 @@ impl Cli {
             Command::Validate { skill } => validate(skill),
             Command::Inspect { skill } => inspect(skill),
             Command::TestSkill { skill } => test_skill(skill),
+            Command::ImportWechatMcp {
+                source,
+                dest,
+                dry_run,
+                write,
+                overwrite,
+                generate_patch,
+                include_fixtures,
+            } => import_wechat_mcp(ImportOptions {
+                source,
+                dest: dest.as_deref(),
+                dry_run: !*write || *dry_run,
+                overwrite: *overwrite,
+                generate_patch: *generate_patch,
+                include_fixtures: *include_fixtures,
+            }),
             Command::CallApi {
                 skill,
                 api_name,
@@ -548,6 +580,604 @@ fn validate(skill_path: &Path) -> Result<Value, CliError> {
         },
         "validation": validation_summary(&skill.validation)
     }))
+}
+
+struct ImportOptions<'a> {
+    source: &'a Path,
+    dest: Option<&'a Path>,
+    dry_run: bool,
+    overwrite: bool,
+    generate_patch: bool,
+    include_fixtures: bool,
+}
+
+fn import_wechat_mcp(options: ImportOptions<'_>) -> Result<Value, CliError> {
+    let source_root = canonical_dir(options.source)?;
+    let dest_root = options.dest.map(resolve_import_destination);
+    let dest_root = match dest_root {
+        Some(result) => Some(result?),
+        None => None,
+    };
+
+    let structure = import_structure_report(&source_root)?;
+    let mut blockers = import_blockers(&structure);
+    let app_agent_skills = read_app_agent_skills(&source_root)?;
+    let app_agent_skill_count = app_agent_skills
+        .get("items")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or_default();
+    let loaded_skill = load_skill(&source_root);
+    let (validation_report, compatibility_report, skill_id, migration_patch) = match loaded_skill {
+        Ok(skill) => {
+            let registration = validate_api_registration(&skill);
+            let api_reports = validate_api_reports(&skill, registration.as_ref());
+            let component_reports = validate_component_reports(&skill);
+            let fallbacks = validate_fallbacks(&skill, &component_reports);
+            let release_blockers = validate_release_blockers(&skill, registration.as_ref());
+            let repair_suggestions = validate_repair_suggestions(
+                &skill.validation,
+                &api_reports,
+                &component_reports,
+                &fallbacks,
+                &release_blockers,
+            );
+            (
+                validation_summary(&skill.validation),
+                json!({
+                    "status": validate_report_status(&skill.validation, &release_blockers),
+                    "compatibilityLevel": compatibility_level(&skill.validation, &release_blockers),
+                    "apis": api_reports,
+                    "components": component_reports,
+                    "permissions": validate_permissions(&validate_component_reports(&skill)),
+                    "risks": validate_risks(&skill),
+                    "fallbacks": fallbacks,
+                    "releaseBlockers": release_blockers,
+                    "repairSuggestions": repair_suggestions,
+                    "supplyChain": supply_chain_report(&skill),
+                    "releaseReadiness": validate_release_readiness(&skill, &validate_release_blockers(&skill, registration.as_ref())),
+                }),
+                skill_id(&skill),
+                import_patch_suggestions(&skill),
+            )
+        }
+        Err(error) => {
+            blockers.push(json!({
+                "code": "load_skill_failed",
+                "severity": "blocker",
+                "message": redact_text(&error.to_string()),
+                "suggestion": "Fix required MiniApp MCP package files before importing or validating.",
+            }));
+            (
+                Value::Null,
+                Value::Null,
+                source_root
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(DEFAULT_SKILL_ID)
+                    .to_owned(),
+                json!({
+                    "status": "not-generated",
+                    "reason": "Skill package could not be loaded safely.",
+                    "changes": []
+                }),
+            )
+        }
+    };
+
+    if dest_root.is_none() && !options.dry_run {
+        blockers.push(json!({
+            "code": "destination_required",
+            "severity": "blocker",
+            "message": "Safe copy requires --dest and --write.",
+            "suggestion": "Rerun with --dest <dir> --write after reviewing the dry-run report.",
+        }));
+    }
+
+    if let Some(dest) = &dest_root {
+        if dest == &source_root || dest.starts_with(&source_root) || source_root.starts_with(dest) {
+            blockers.push(json!({
+                "code": "unsafe_destination",
+                "severity": "blocker",
+                "message": "Import destination must be outside the source tree and must not contain the source tree.",
+                "suggestion": "Choose a separate controlled test directory for imported Skill packages.",
+            }));
+        }
+    }
+
+    let copy_plan = match &dest_root {
+        Some(dest) => import_copy_plan(&source_root, dest, options.overwrite)?,
+        None => Vec::new(),
+    };
+    for entry in &copy_plan {
+        if entry
+            .get("status")
+            .and_then(Value::as_str)
+            .is_some_and(|status| status == "blocked")
+        {
+            blockers.push(json!({
+                "code": entry.get("code").cloned().unwrap_or_else(|| json!("copy_blocked")),
+                "severity": "blocker",
+                "path": entry.get("path").cloned(),
+                "message": entry.get("message").cloned().unwrap_or_else(|| json!("Copy plan is blocked.")),
+                "suggestion": entry.get("suggestion").cloned().unwrap_or_else(|| json!("Review import copy plan before writing.")),
+            }));
+        }
+    }
+
+    let copied = if options.dry_run || !blockers.is_empty() {
+        Vec::new()
+    } else if let Some(dest) = &dest_root {
+        execute_import_copy_plan(&source_root, dest, &copy_plan)?;
+        copy_plan
+            .iter()
+            .filter(|entry| {
+                entry
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(|kind| kind == "file")
+            })
+            .filter_map(|entry| entry.get("path").cloned())
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    let status = if blockers.is_empty() {
+        if options.dry_run {
+            "dry-run"
+        } else {
+            "copied"
+        }
+    } else {
+        "blocked"
+    };
+
+    Ok(json!({
+        "schemaVersion": IMPORT_REPORT_SCHEMA_VERSION,
+        "status": status,
+        "commandStatus": "ok",
+        "skillId": skill_id,
+        "source": validate_skill_ref(options.source),
+        "destination": dest_root.as_ref().map(|dest| validate_skill_ref(dest)),
+        "mode": {
+            "dryRun": options.dry_run,
+            "write": !options.dry_run,
+            "overwrite": options.overwrite,
+            "generatePatch": options.generate_patch,
+            "includeFixtures": options.include_fixtures,
+            "note": "import-wechat-mcp is a migration helper; copied packages still require validate/test-skill/doctor and production Host review."
+        },
+        "structure": structure,
+        "appJson": app_agent_skills,
+        "compatibilityReport": compatibility_report,
+        "validation": validation_report,
+        "migrationPatch": if options.generate_patch { migration_patch } else { json!({
+            "status": "disabled",
+            "changes": []
+        }) },
+        "copyPlan": copy_plan,
+        "copied": copied,
+        "blockers": blockers,
+        "nextCommands": import_next_commands(dest_root.as_ref(), options.dry_run, blockers.is_empty(), app_agent_skill_count),
+    }))
+}
+
+fn canonical_dir(path: &Path) -> Result<PathBuf, CliError> {
+    let canonical = std::fs::canonicalize(path)?;
+    let metadata = std::fs::symlink_metadata(&canonical)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(CliError::Demo(
+            "import path must be a real directory, not a symlink or file".to_owned(),
+        ));
+    }
+    Ok(canonical)
+}
+
+fn resolve_import_destination(dest: &Path) -> Result<PathBuf, CliError> {
+    if dest.as_os_str().is_empty()
+        || dest
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(CliError::Demo(
+            "import destination must be a concrete directory without parent traversal".to_owned(),
+        ));
+    }
+    if dest.exists() {
+        return canonical_dir(dest);
+    }
+
+    let absolute = if dest.is_absolute() {
+        dest.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(dest)
+    };
+    let mut missing = Vec::new();
+    let mut ancestor = absolute.as_path();
+    while !ancestor.exists() {
+        let Some(name) = ancestor.file_name() else {
+            return Err(CliError::Demo(
+                "import destination must have an existing parent directory".to_owned(),
+            ));
+        };
+        missing.push(name.to_owned());
+        ancestor = ancestor.parent().ok_or_else(|| {
+            CliError::Demo("import destination must have an existing parent directory".to_owned())
+        })?;
+    }
+
+    let mut resolved = canonical_dir(ancestor)?;
+    for component in missing.iter().rev() {
+        resolved.push(component);
+    }
+    Ok(resolved)
+}
+
+fn import_structure_report(root: &Path) -> Result<Value, CliError> {
+    let required = ["SKILL.md", "mcp.json", "index.js"]
+        .into_iter()
+        .map(|path| {
+            let target = root.join(path);
+            json!({
+                "path": path,
+                "present": target.is_file(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let api_modules = import_directory_files(root, Path::new("apis"), "js")?;
+    let components = import_component_dirs(root)?;
+    let files = import_source_files(root)?;
+    let symlinks = files
+        .iter()
+        .filter(|file| file.get("kind").and_then(Value::as_str) == Some("symlink"))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    Ok(json!({
+        "requiredFiles": required,
+        "apiModules": api_modules,
+        "components": components,
+        "files": files,
+        "symlinks": symlinks,
+    }))
+}
+
+fn import_blockers(structure: &Value) -> Vec<Value> {
+    let mut blockers = Vec::new();
+    if let Some(required) = structure.get("requiredFiles").and_then(Value::as_array) {
+        for file in required {
+            if file.get("present").and_then(Value::as_bool) != Some(true) {
+                blockers.push(json!({
+                    "code": "missing_required_file",
+                    "severity": "blocker",
+                    "path": file.get("path").cloned(),
+                    "message": "Required MiniApp MCP Skill file is missing.",
+                    "suggestion": "Provide SKILL.md, mcp.json, and index.js before import.",
+                }));
+            }
+        }
+    }
+    if let Some(symlinks) = structure.get("symlinks").and_then(Value::as_array) {
+        for link in symlinks {
+            blockers.push(json!({
+                "code": "symlink_denied",
+                "severity": "blocker",
+                "path": link.get("path").cloned(),
+                "message": "Symlinks are not copied by import-wechat-mcp.",
+                "suggestion": "Replace symlinks with real files inside the Skill package.",
+            }));
+        }
+    }
+    blockers
+}
+
+fn import_directory_files(
+    root: &Path,
+    relative: &Path,
+    extension: &str,
+) -> Result<Vec<Value>, CliError> {
+    let dir = root.join(relative);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if metadata.is_file() && path.extension().is_some_and(|found| found == extension) {
+            files.push(json!({
+                "path": safe_relative_path(root, &path)?,
+                "kind": "file",
+                "sizeBytes": metadata.len(),
+            }));
+        }
+    }
+    files.sort_by(|left, right| {
+        left.get("path")
+            .and_then(Value::as_str)
+            .cmp(&right.get("path").and_then(Value::as_str))
+    });
+    Ok(files)
+}
+
+fn import_component_dirs(root: &Path) -> Result<Vec<Value>, CliError> {
+    let components_dir = root.join("components");
+    if !components_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut components = Vec::new();
+    for entry in std::fs::read_dir(&components_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            let relative = safe_relative_path(root, &path)?;
+            let mut files = Vec::new();
+            for name in ["index.js", "index.wxml", "index.wxss", "index.json"] {
+                files.push(json!({
+                    "path": format!("{relative}/{name}"),
+                    "present": path.join(name).is_file(),
+                }));
+            }
+            components.push(json!({
+                "path": format!("{relative}/index"),
+                "directory": relative,
+                "files": files,
+            }));
+        }
+    }
+    components.sort_by(|left, right| {
+        left.get("path")
+            .and_then(Value::as_str)
+            .cmp(&right.get("path").and_then(Value::as_str))
+    });
+    Ok(components)
+}
+
+fn import_source_files(root: &Path) -> Result<Vec<Value>, CliError> {
+    let mut files = Vec::new();
+    import_source_files_inner(root, root, &mut files)?;
+    files.sort_by(|left, right| {
+        left.get("path")
+            .and_then(Value::as_str)
+            .cmp(&right.get("path").and_then(Value::as_str))
+    });
+    Ok(files)
+}
+
+fn import_source_files_inner(
+    root: &Path,
+    dir: &Path,
+    files: &mut Vec<Value>,
+) -> Result<(), CliError> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let relative = safe_relative_path(root, &path)?;
+        let kind = if metadata.file_type().is_symlink() {
+            "symlink"
+        } else if metadata.is_dir() {
+            "directory"
+        } else {
+            "file"
+        };
+        files.push(json!({
+            "path": relative,
+            "kind": kind,
+            "sizeBytes": if metadata.is_file() { Some(metadata.len()) } else { None },
+        }));
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            import_source_files_inner(root, &path, files)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_app_agent_skills(root: &Path) -> Result<Value, CliError> {
+    let path = root.join("app.json");
+    if !path.exists() {
+        return Ok(json!({
+            "status": "not-found",
+            "items": [],
+            "note": "app.json is optional for standalone MiniApp MCP Skill packages."
+        }));
+    }
+    let source = std::fs::read_to_string(&path)?;
+    let value: Value = serde_json::from_str(&source).map_err(|source| CliError::Json {
+        label: "app.json".to_owned(),
+        source,
+    })?;
+    let items = value
+        .get("agent")
+        .and_then(|agent| agent.get("skills"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| redact_metadata_value(&item))
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "status": if items.is_empty() { "missing-agent-skills" } else { "found" },
+        "path": "app.json",
+        "items": items,
+    }))
+}
+
+fn import_patch_suggestions(skill: &LoadedSkill) -> Value {
+    let api_changes = skill
+        .manifest
+        .apis
+        .iter()
+        .map(|api| {
+            let input_formats = api
+                .input_formats()
+                .into_iter()
+                .map(|field| json!({ "path": field.path, "format": field.format }))
+                .collect::<Vec<_>>();
+            json!({
+                "path": format!("mcp.json/apis/{}", api.name),
+                "type": "suggestion",
+                "operation": "merge-meta",
+                "suggested": {
+                    "_meta": {
+                        "anp": {
+                            "risk": api.meta.as_ref().and_then(|meta| meta.anp.as_ref()).and_then(|anp| anp.get("risk")).cloned().unwrap_or_else(|| json!("review-required")),
+                            "hostProviderRequired": !input_formats.is_empty() || api_risk_requires_consent(api),
+                            "didSession": "use ANP DID runtime session; do not copy WeChat login credentials into the Skill package",
+                        }
+                    }
+                },
+                "reason": if input_formats.is_empty() && !api_risk_requires_consent(api) {
+                    "Record ANP runtime ownership for this Atomic API."
+                } else {
+                    "Formatted input or high-risk API requires Host provider, ConsentGate, and audit review."
+                },
+            })
+        })
+        .collect::<Vec<_>>();
+    let component_changes = skill
+        .manifest
+        .components
+        .iter()
+        .filter(|component| component.dynamic_permission().is_some())
+        .map(|component| {
+            json!({
+                "path": format!("mcp.json/components/{}", component.path),
+                "type": "suggestion",
+                "operation": "review-permission",
+                "suggested": {
+                    "permissions": {
+                        "scope.dynamic": redact_metadata_value(component.dynamic_permission().unwrap_or(&Value::Null))
+                    },
+                    "_meta": {
+                        "anp": {
+                            "hostBoundary": "dynamic request/timer requires production Host policy and audit sink"
+                        }
+                    }
+                },
+                "reason": "Dynamic component capabilities must stay behind the Step 02-05 sandbox/resource gate and Host production policy.",
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut changes = Vec::new();
+    changes.extend(api_changes);
+    changes.extend(component_changes);
+    json!({
+        "status": "suggested",
+        "appliesAutomatically": false,
+        "productionReady": false,
+        "note": "Patch suggestions are advisory and must be reviewed manually before editing mcp.json.",
+        "changes": changes,
+    })
+}
+
+fn import_copy_plan(root: &Path, dest: &Path, overwrite: bool) -> Result<Vec<Value>, CliError> {
+    let mut plan = Vec::new();
+    for file in import_source_files(root)? {
+        let Some(relative) = file.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(kind) = file.get("kind").and_then(Value::as_str) else {
+            continue;
+        };
+        let dest_path = dest.join(relative);
+        let target_exists = dest_path.exists();
+        let mut entry = json!({
+            "path": relative,
+            "kind": kind,
+            "action": if kind == "directory" { "create-dir" } else { "copy" },
+            "status": "planned",
+            "overwrite": overwrite,
+        });
+        if kind == "symlink" {
+            entry["status"] = json!("blocked");
+            entry["code"] = json!("symlink_denied");
+            entry["message"] = json!("Symlink copy is denied.");
+            entry["suggestion"] =
+                json!("Replace this symlink with a real file under the Skill root.");
+        } else if target_exists && !overwrite {
+            entry["status"] = json!("blocked");
+            entry["code"] = json!("overwrite_required");
+            entry["message"] =
+                json!("Destination path already exists and --overwrite was not set.");
+            entry["suggestion"] = json!("Review the existing destination and rerun with --overwrite only when replacement is intended.");
+        }
+        plan.push(entry);
+    }
+    Ok(plan)
+}
+
+fn execute_import_copy_plan(root: &Path, dest: &Path, plan: &[Value]) -> Result<(), CliError> {
+    std::fs::create_dir_all(dest)?;
+    for entry in plan {
+        if entry.get("status").and_then(Value::as_str) == Some("blocked") {
+            continue;
+        }
+        let Some(relative) = entry.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        let source = root.join(relative);
+        let target = dest.join(relative);
+        match entry.get("kind").and_then(Value::as_str) {
+            Some("directory") => std::fs::create_dir_all(&target)?,
+            Some("file") => {
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::copy(&source, &target)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn import_next_commands(
+    dest: Option<&PathBuf>,
+    dry_run: bool,
+    can_write: bool,
+    app_agent_skill_count: usize,
+) -> Vec<Value> {
+    let mut commands = Vec::new();
+    if dry_run {
+        if let Some(dest) = dest {
+            commands.push(json!({
+                "label": "safe-copy",
+                "command": format!("dock-cli import-wechat-mcp <source> --dest {} --write", report_path(dest).0),
+                "note": "Run only after reviewing the dry-run report and blockers.",
+            }));
+        } else {
+            commands.push(json!({
+                "label": "safe-copy",
+                "command": "dock-cli import-wechat-mcp <source> --dest <controlled-test-dir> --write",
+                "note": "Choose a controlled destination outside the source tree.",
+            }));
+        }
+    }
+    if can_write {
+        let target = dest
+            .map(|dest| report_path(dest).0)
+            .unwrap_or_else(|| "<imported-skill>".to_owned());
+        commands.push(json!({
+            "label": "validate",
+            "command": format!("dock-cli validate {target}"),
+        }));
+        commands.push(json!({
+            "label": "test-skill",
+            "command": format!("dock-cli test-skill {target}"),
+            "note": "Generated empty-argument cases still require explicit developer fixtures for third-party Skills.",
+        }));
+    }
+    if app_agent_skill_count > 1 {
+        commands.push(json!({
+            "label": "split-agent-skills",
+            "command": "Review app.json agent.skills[] and import each Skill package independently.",
+        }));
+    }
+    commands
 }
 
 fn validate_api_registration(skill: &LoadedSkill) -> Result<Vec<String>, String> {
@@ -1506,64 +2136,11 @@ impl FixturePlan {
                     expected_render_root_kind: Some("view".to_owned()),
                 }],
             }),
-            "coffee-skill" | "coffee" => Ok(Self {
-                name: "coffee".to_owned(),
-                cases: vec![
-                    FixtureCase {
-                        name: "coffee.searchDrinks".to_owned(),
-                        api_name: "searchDrinks".to_owned(),
-                        arguments: json!({"query": "latte"}),
-                        component_path: Some("components/drink-list/index".to_owned()),
-                        snapshot_name: None,
-                        action_method: Some("confirmDrink".to_owned()),
-                        expire: false,
-                        audit_summary: json!({
-                            "provider": "mock-coffee",
-                            "riskLevel": "low",
-                            "boundary": "demo-only-local-fixture",
-                            "dataPolicy": "mock-merchant-data"
-                        }),
-                        expected_render_root_kind: Some("view".to_owned()),
-                    },
-                    FixtureCase {
-                        name: "coffee.confirmOrder".to_owned(),
-                        api_name: "confirmOrder".to_owned(),
-                        arguments: json!({
-                            "drinkId": "latte",
-                            "size": "medium",
-                            "sugar": "less"
-                        }),
-                        component_path: Some("components/order-confirm/index".to_owned()),
-                        snapshot_name: None,
-                        action_method: Some("payOrder".to_owned()),
-                        expire: false,
-                        audit_summary: json!({
-                            "provider": "mock-coffee",
-                            "riskLevel": "order",
-                            "boundary": "dev-headless-consent-approved",
-                            "dataPolicy": "mock-order-only"
-                        }),
-                        expected_render_root_kind: Some("view".to_owned()),
-                    },
-                    FixtureCase {
-                        name: "coffee.payOrder".to_owned(),
-                        api_name: "payOrder".to_owned(),
-                        arguments: json!({"orderId": "order_demo_001"}),
-                        component_path: Some("components/payment-result/index".to_owned()),
-                        snapshot_name: None,
-                        action_method: None,
-                        expire: true,
-                        audit_summary: json!({
-                            "provider": "mock-coffee",
-                            "riskLevel": "payment",
-                            "boundary": "dev-headless-consent-approved",
-                            "dataPolicy": "mock-payment-only"
-                        }),
-                        expected_render_root_kind: Some("view".to_owned()),
-                    },
-                ],
-            }),
+            "coffee-skill" | "coffee" => Ok(coffee_fixture_plan()),
             _ => {
+                if is_coffee_fixture_shape(skill) {
+                    return Ok(coffee_fixture_plan());
+                }
                 let cases = skill
                     .manifest
                     .apis
@@ -1591,6 +2168,91 @@ impl FixturePlan {
                 })
             }
         }
+    }
+}
+
+fn is_coffee_fixture_shape(skill: &LoadedSkill) -> bool {
+    let api_names = skill
+        .manifest
+        .apis
+        .iter()
+        .map(|api| api.name.as_str())
+        .collect::<BTreeSet<_>>();
+    let component_paths = skill
+        .manifest
+        .components
+        .iter()
+        .map(|component| component.path.as_str())
+        .collect::<BTreeSet<_>>();
+    ["searchDrinks", "confirmOrder", "payOrder"]
+        .into_iter()
+        .all(|name| api_names.contains(name))
+        && [
+            "components/drink-list/index",
+            "components/order-confirm/index",
+            "components/payment-result/index",
+        ]
+        .into_iter()
+        .all(|path| component_paths.contains(path))
+}
+
+fn coffee_fixture_plan() -> FixturePlan {
+    FixturePlan {
+        name: "coffee".to_owned(),
+        cases: vec![
+            FixtureCase {
+                name: "coffee.searchDrinks".to_owned(),
+                api_name: "searchDrinks".to_owned(),
+                arguments: json!({"query": "latte"}),
+                component_path: Some("components/drink-list/index".to_owned()),
+                snapshot_name: None,
+                action_method: Some("confirmDrink".to_owned()),
+                expire: false,
+                audit_summary: json!({
+                    "provider": "mock-coffee",
+                    "riskLevel": "low",
+                    "boundary": "demo-only-local-fixture",
+                    "dataPolicy": "mock-merchant-data"
+                }),
+                expected_render_root_kind: Some("view".to_owned()),
+            },
+            FixtureCase {
+                name: "coffee.confirmOrder".to_owned(),
+                api_name: "confirmOrder".to_owned(),
+                arguments: json!({
+                    "drinkId": "latte",
+                    "size": "medium",
+                    "sugar": "less"
+                }),
+                component_path: Some("components/order-confirm/index".to_owned()),
+                snapshot_name: None,
+                action_method: Some("payOrder".to_owned()),
+                expire: false,
+                audit_summary: json!({
+                    "provider": "mock-coffee",
+                    "riskLevel": "order",
+                    "boundary": "dev-headless-consent-approved",
+                    "dataPolicy": "mock-order-only"
+                }),
+                expected_render_root_kind: Some("view".to_owned()),
+            },
+            FixtureCase {
+                name: "coffee.payOrder".to_owned(),
+                api_name: "payOrder".to_owned(),
+                arguments: json!({"orderId": "order_demo_001"}),
+                component_path: Some("components/payment-result/index".to_owned()),
+                snapshot_name: None,
+                action_method: None,
+                expire: true,
+                audit_summary: json!({
+                    "provider": "mock-coffee",
+                    "riskLevel": "payment",
+                    "boundary": "dev-headless-consent-approved",
+                    "dataPolicy": "mock-payment-only"
+                }),
+                expected_render_root_kind: Some("view".to_owned()),
+            },
+        ],
     }
 }
 
@@ -3248,6 +3910,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_import_wechat_mcp_args() {
+        let cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "import-wechat-mcp",
+            "examples/coffee-skill",
+            "--dest",
+            "examples/imported/coffee-skill",
+            "--write",
+        ])
+        .expect("args parse");
+        assert!(matches!(cli.command, Command::ImportWechatMcp { .. }));
+    }
+
+    #[test]
     fn parses_runtime_json_args() {
         let cli = Cli::try_parse_from_args([
             "dock-cli",
@@ -3471,6 +4147,204 @@ mod tests {
         assert!(!rendered.contains("Authorization header leaked"));
         assert!(!rendered.contains("secret"));
         assert!(rendered.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn import_wechat_mcp_dry_run_reports_structure_patch_and_redacts() {
+        let fixture = ImportSkillFixture::new();
+        let output = import_wechat_mcp(ImportOptions {
+            source: &fixture.root,
+            dest: None,
+            dry_run: true,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import dry-run");
+
+        assert_eq!(output["schemaVersion"], IMPORT_REPORT_SCHEMA_VERSION);
+        assert_eq!(output["status"], "dry-run");
+        assert_eq!(output["commandStatus"], "ok");
+        assert_eq!(output["mode"]["dryRun"], true);
+        assert_eq!(output["skillId"], "import-fixture");
+        assert!(output["structure"]["requiredFiles"]
+            .as_array()
+            .expect("required files")
+            .iter()
+            .all(|file| file["present"] == true));
+        assert_eq!(output["appJson"]["status"], "found");
+        assert_eq!(output["appJson"]["items"][0]["secretToken"], "[REDACTED]");
+        assert_eq!(output["migrationPatch"]["status"], "suggested");
+        assert_eq!(output["migrationPatch"]["productionReady"], false);
+        assert!(output["migrationPatch"]["changes"]
+            .as_array()
+            .expect("changes")
+            .iter()
+            .any(|change| change["path"] == "mcp.json/apis/registered"));
+        assert_eq!(
+            output["compatibilityReport"]["supplyChain"]["productionReady"],
+            false
+        );
+        assert!(output["nextCommands"]
+            .as_array()
+            .expect("next commands")
+            .iter()
+            .any(|command| command["label"] == "safe-copy"));
+
+        let rendered = output.to_string();
+        assert!(!rendered.contains(&fixture.root.display().to_string()));
+        assert!(!rendered.contains("import-secret-token"));
+        assert!(!rendered.contains("Authorization"));
+    }
+
+    #[test]
+    fn import_wechat_mcp_safe_copy_preserves_original_fields() {
+        let fixture = ImportSkillFixture::new();
+        let dest_dir = TempDir::new("dock-cli-import-dest").expect("temp dir");
+        let dest = dest_dir.path().join("imported-skill");
+
+        let output = import_wechat_mcp(ImportOptions {
+            source: &fixture.root,
+            dest: Some(&dest),
+            dry_run: false,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import copy");
+
+        assert_eq!(output["status"], "copied");
+        assert!(output["blockers"].as_array().expect("blockers").is_empty());
+        assert!(dest.join("SKILL.md").is_file());
+        assert!(dest.join("mcp.json").is_file());
+        assert!(dest.join("components/import-card/index.wxml").is_file());
+
+        let copied_manifest =
+            fs::read_to_string(dest.join("mcp.json")).expect("read copied manifest");
+        assert!(copied_manifest.contains("\"wechatOriginalField\""));
+        let validate_output = validate(&dest).expect("copied package validates");
+        assert_eq!(
+            validate_output["schemaVersion"],
+            VALIDATE_REPORT_SCHEMA_VERSION
+        );
+        assert_eq!(validate_output["commandStatus"], "ok");
+    }
+
+    #[test]
+    fn imported_coffee_skill_keeps_fixture_runner_shape_after_rename() {
+        let fixture = ProjectIdentityFixture::new();
+        let source = fixture.root.join("examples/coffee-skill");
+        let project_root = default_project_root().expect("project root");
+        copy_dir_all(&project_root.join("examples/coffee-skill"), &source)
+            .expect("copy coffee fixture");
+        let imported = fixture.root.join("imported/renamed-skill");
+
+        let output = import_wechat_mcp(ImportOptions {
+            source: &source,
+            dest: Some(&imported),
+            dry_run: false,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import coffee");
+
+        assert_eq!(output["status"], "copied");
+        let test_report = test_skill(&imported).expect("run copied coffee fixture");
+        assert_eq!(test_report["status"], "ok");
+        assert_eq!(test_report["fixtureSet"], "coffee");
+        assert_eq!(test_report["summary"]["total"], 3);
+        assert_eq!(test_report["summary"]["failed"], 0);
+    }
+
+    #[test]
+    fn import_wechat_mcp_overwrite_requires_explicit_flag() {
+        let fixture = ImportSkillFixture::new();
+        let dest_dir = TempDir::new("dock-cli-import-overwrite").expect("temp dir");
+        fs::write(dest_dir.path().join("mcp.json"), "{}").expect("write existing file");
+
+        let output = import_wechat_mcp(ImportOptions {
+            source: &fixture.root,
+            dest: Some(dest_dir.path()),
+            dry_run: false,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import blocks overwrite");
+
+        assert_eq!(output["status"], "blocked");
+        assert!(output["blockers"]
+            .as_array()
+            .expect("blockers")
+            .iter()
+            .any(
+                |blocker| blocker["code"] == "overwrite_required" && blocker["path"] == "mcp.json"
+            ));
+    }
+
+    #[test]
+    fn import_wechat_mcp_missing_files_report_blockers() {
+        let dir = TempDir::new("dock-cli-import-missing").expect("temp dir");
+        fs::write(dir.path().join("SKILL.md"), "# Missing").expect("write skill");
+
+        let output = import_wechat_mcp(ImportOptions {
+            source: dir.path(),
+            dest: None,
+            dry_run: true,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import missing report");
+
+        assert_eq!(output["status"], "blocked");
+        assert!(output["blockers"]
+            .as_array()
+            .expect("blockers")
+            .iter()
+            .any(|blocker| blocker["code"] == "missing_required_file"
+                && blocker["path"] == "mcp.json"));
+        assert!(output["blockers"]
+            .as_array()
+            .expect("blockers")
+            .iter()
+            .any(|blocker| blocker["code"] == "load_skill_failed"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_wechat_mcp_denies_symlink_copy() {
+        use std::os::unix::fs as unix_fs;
+
+        let fixture = ImportSkillFixture::new();
+        unix_fs::symlink(
+            fixture.root.join("index.js"),
+            fixture.root.join("linked-index.js"),
+        )
+        .expect("create symlink");
+
+        let output = import_wechat_mcp(ImportOptions {
+            source: &fixture.root,
+            dest: None,
+            dry_run: true,
+            overwrite: false,
+            generate_patch: true,
+            include_fixtures: true,
+        })
+        .expect("import symlink report");
+
+        assert_eq!(output["status"], "blocked");
+        assert!(output["structure"]["symlinks"]
+            .as_array()
+            .expect("symlinks")
+            .iter()
+            .any(|link| link["path"] == "linked-index.js"));
+        assert!(output["blockers"]
+            .as_array()
+            .expect("blockers")
+            .iter()
+            .any(|blocker| blocker["code"] == "symlink_denied"));
     }
 
     #[test]
@@ -3912,6 +4786,93 @@ mod tests {
         }
     }
 
+    struct ImportSkillFixture {
+        _dir: TempDir,
+        root: PathBuf,
+    }
+
+    impl ImportSkillFixture {
+        fn new() -> Self {
+            let dir = TempDir::new("dock-cli-import-skill-fixture").expect("temp dir");
+            let root = dir.path().to_path_buf();
+            fs::create_dir_all(root.join("apis")).expect("api dir");
+            fs::create_dir_all(root.join("components/import-card")).expect("component dir");
+            fs::write(root.join("SKILL.md"), "# Import Skill").expect("write SKILL.md");
+            fs::write(
+                root.join("index.js"),
+                "const skill = wx.modelContext.createSkill(__dirname)\n\
+                 skill.registerAPI('registered', require('./apis/registered'))\n\
+                 module.exports = skill\n",
+            )
+            .expect("write index.js");
+            fs::write(
+                root.join("apis/registered.js"),
+                "module.exports = async function registered() {\n\
+                   await wx.login()\n\
+                   return { content: [{ type: 'text', text: 'ok' }] }\n\
+                 }\n",
+            )
+            .expect("write api");
+            fs::write(
+                root.join("components/import-card/index.js"),
+                "Component({ methods: { refresh() { return wx.request({ url: 'https://example.invalid/status' }) } } })\n",
+            )
+            .expect("write component js");
+            fs::write(
+                root.join("components/import-card/index.wxml"),
+                "<view><text>{{ apiName }}</text></view>",
+            )
+            .expect("write component wxml");
+            fs::write(
+                root.join("mcp.json"),
+                r#"{
+                  "id": "import-fixture",
+                  "wechatOriginalField": { "keep": true },
+                  "apis": [{
+                    "name": "registered",
+                    "description": "registered API",
+                    "inputSchema": {
+                      "type": "object",
+                      "properties": {
+                        "receipt": {
+                          "type": "string",
+                          "format": "file"
+                        }
+                      }
+                    },
+                    "_meta": {
+                      "ui": { "componentPath": "components/import-card/index" },
+                      "anp": { "risk": "payment" }
+                    }
+                  }],
+                  "components": [{
+                    "path": "components/import-card/index",
+                    "permissions": {
+                      "scope.dynamic": {
+                        "desc": "refresh status"
+                      }
+                    }
+                  }]
+                }"#,
+            )
+            .expect("write manifest");
+            fs::write(
+                root.join("app.json"),
+                r#"{
+                  "agent": {
+                    "skills": [{
+                      "path": "./",
+                      "secretToken": "import-secret-token"
+                    }]
+                  }
+                }"#,
+            )
+            .expect("write app.json");
+
+            Self { _dir: dir, root }
+        }
+    }
+
     struct SignedSkillFixture {
         _dir: TempDir,
         root: PathBuf,
@@ -4031,6 +4992,21 @@ mod tests {
 
     #[cfg(not(unix))]
     fn set_private_key_permissions(_path: &Path) {}
+
+    fn copy_dir_all(source: &Path, dest: &Path) -> std::io::Result<()> {
+        fs::create_dir_all(dest)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let path = entry.path();
+            let target = dest.join(entry.file_name());
+            if path.is_dir() {
+                copy_dir_all(&path, &target)?;
+            } else {
+                fs::copy(&path, &target)?;
+            }
+        }
+        Ok(())
+    }
 
     struct TempDir {
         path: PathBuf,

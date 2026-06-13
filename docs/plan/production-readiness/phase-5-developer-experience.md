@@ -138,12 +138,46 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 目的：复制/导入小程序 MCP Skill 到容器测试目录，不破坏原字段。
 
+输出 `dock.import-wechat-mcp-report.v1` JSON：
+
+```json
+{
+  "schemaVersion": "dock.import-wechat-mcp-report.v1",
+  "status": "dry-run|copied|blocked",
+  "commandStatus": "ok",
+  "skillId": "...",
+  "source": {},
+  "destination": {},
+  "mode": {
+    "dryRun": true,
+    "write": false,
+    "overwrite": false
+  },
+  "structure": {},
+  "appJson": {},
+  "compatibilityReport": {},
+  "migrationPatch": {},
+  "copyPlan": [],
+  "blockers": [],
+  "nextCommands": []
+}
+```
+
 动作：
 
 - 检查 `SKILL.md`、`mcp.json`、`index.js`；
+- 检查 `apis/*.js`、`components/*/index.*` 和 symlink；
 - 识别 `app.json agent.skills[]`；
-- 输出兼容报告；
+- 输出兼容报告和 safe-copy plan；
 - 可生成 ANP `_meta` 建议 patch，但不自动强制改业务逻辑。
+
+要求：
+
+- 默认 dry-run，只有显式 `--write --dest <dir>` 才复制；
+- safe copy 拒绝 symlink、source/dest 包含关系和未授权 overwrite；
+- copy 保留原始 `mcp.json` 字段，不自动把不安全能力标成 production-ready；
+- patch 只作为人工 review 建议，重点提示 ANP DID session、Host provider、ConsentGate、audit、dynamic component 和 supply-chain 改造；
+- report 不得包含源码内容、token、Authorization、signature、private key path、本机路径或真实隐私原文。
 
 ### 3.5 `doctor`
 

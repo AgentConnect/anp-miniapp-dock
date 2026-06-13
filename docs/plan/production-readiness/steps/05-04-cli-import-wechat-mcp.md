@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-04
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 02:19:43 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 05-03 完成后，启动 import-wechat-mcp |
+| Review evidence | 2026-06-14 02:35:54 +0800 commit 前 Review 已记录：修复导入目标目录解析只支持父目录已存在、无法创建多级目标目录的问题；修复 coffee Skill 复制到任意目录名后 `test-skill` 降级为通用空参数 fixture 并失败的问题，改为按 API/component shape 识别 coffee fixture；确认 import 默认 dry-run，safe copy 拒绝 symlink、source/dest 包含关系和未授权 overwrite，patch 只作为人工建议且 `productionReady = false`。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 92]`；已读取主 Plan、Step 05-04 文档、Phase 5 文档、Release Gates、现有 `dock-cli` validate/inspect/test-skill 结构、skill-loader path/supply-chain gate 和 05-03 closure evidence；`cargo fmt --check` 通过；`cargo test -p dock-cli import` 7 unit tests passed；`cargo test -p skill-loader` 14 package/path + 11 registry/cache tests passed；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；手工 `cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dry-run` 输出 `dock.import-wechat-mcp-report.v1`、`status = dry-run`、`commandStatus = ok`；手工 safe copy 到 `/tmp/dock-import-coffee-out` 后 `validate` 输出 `dock.validate-report.v1`、`test-skill` 输出 `dock.test-skill-report.v1`、`status = ok`、`fixtureSet = coffee`、`failed = 0`；import/validate/test-skill JSON 脱敏抽样未命中本机路径、Authorization、Signature、capabilityToken、private、secret、fixture-token、Bearer、手机号、真实地址或经纬度；`git diff --check -- crates/dock-cli crates/skill-loader docs/developer docs/plan docs/runbook README.md` 无输出；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
+| Next action | 创建 05-04 focused implementation commit，随后回填 commit hash 并关闭本 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,13 +65,13 @@ Step index：05-04
 
 ## 7. 验收标准
 
-- [ ] `dock-cli import-wechat-mcp` 支持 dry-run 和 safe copy。
-- [ ] 导入不会删除或强制改写原业务字段，patch 建议单独输出。
-- [ ] 识别 `SKILL.md`、`mcp.json`、`index.js`、API JS、components 和 `app.json agent.skills[]`。
-- [ ] path escape、symlink escape、overwrite risk fail closed 或需要显式确认。
-- [ ] 输出兼容报告可接 `validate` / `test-skill`。
-- [ ] 迁移文档说明 ANP DID、Host provider、unsupported API 和权限声明改造。
-- [ ] Review 发现已经修复或明确记录。
+- [x] `dock-cli import-wechat-mcp` 支持 dry-run 和 safe copy。
+- [x] 导入不会删除或强制改写原业务字段，patch 建议单独输出。
+- [x] 识别 `SKILL.md`、`mcp.json`、`index.js`、API JS、components 和 `app.json agent.skills[]`。
+- [x] path escape、symlink escape、overwrite risk fail closed 或需要显式确认。
+- [x] 输出兼容报告可接 `validate` / `test-skill`。
+- [x] 迁移文档说明 ANP DID、Host provider、unsupported API 和权限声明改造。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,18 +94,18 @@ Step index：05-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 目标目录解析初版只能处理父目录已存在的目标，不能创建 `imported/renamed-skill` 这类多级目标；导入后的 coffee 包如果目录名变化，`test-skill` 初版会走通用空参数 fallback，导致 fixture runner failed。 |
+| 已修复问题 | 已修复 | 新增 `resolve_import_destination`，规范化最近的已存在祖先并拒绝 parent traversal；新增 coffee fixture shape 识别和回归测试，让导入/重命名后的 coffee 包仍跑 3 个 coffee cases。 |
+| 剩余风险 | 已记录 | `migrationPatch` 仍是建议型 JSON，不自动编辑 `mcp.json`；第三方 Skill 的 fixture case authoring、真实 Host provider conformance、production publisher/signature policy 和 `doctor` 环境检查仍待后续 Step。 |
+| 新增或缺失测试 | 已补充 | 新增 import CLI parse、dry-run report/redaction、safe copy、overwrite fail-closed、missing file blocker、symlink deny、导入后 coffee `test-skill` shape 识别测试。缺口：真实外部 WeChat 项目多 Skill 拆分仍需人工 review 和后续文档/工具补强。 |
+| 已更新或缺失文档 | 已更新 | 新增 `docs/developer/import-wechat-mcp-skill.md`，更新 README、Phase 5 文档、Release Gates、本 Step 与主 Plan 台账。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 import-wechat-mcp、直接 tests 和迁移文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 92]`；未提交文件均属于 05-04：`README.md`、`crates/dock-cli/src/commands.rs`、`docs/developer/import-wechat-mcp-skill.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness/steps/05-04-cli-import-wechat-mcp.md`、`docs/runbook/release-gates.md`。
+- 纳入文件：上述 7 个文件。
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase5: add wechat mcp import command`
@@ -114,7 +114,7 @@ Step index：05-04
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 不适用 | 不适用 | 无 | 创建 focused commit 后关闭本 Step |
 
 ## 12. Plan 变更记录
 
