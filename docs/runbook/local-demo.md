@@ -124,6 +124,22 @@ Preview a CardSpec fallback:
 cargo run -p dock-cli -- preview-card '{"content":[{"type":"text","text":"paid"}],"structuredContent":{"orderId":"order_demo_001","status":"paid"}}'
 ```
 
+Run the headless Runtime JSON IPC surface:
+
+```bash
+cargo run -p dock-cli -- runtime-json examples/coffee-skill \
+  '{"apiVersion":"dock.runtime.v1","requestId":"req-1","method":"runtime.negotiateVersion","params":{}}'
+```
+
+Call a Skill API through the same local envelope:
+
+```bash
+cargo run -p dock-cli -- runtime-json examples/coffee-skill \
+  '{"apiVersion":"dock.runtime.v1","requestId":"req-call-1","method":"runtime.callApi","params":{"session":{"userDid":"did:wba:user.example","agentDid":"did:wba:agent.example","merchantDid":"did:wba:coffee-merchant.example","skillId":"coffee","sessionId":"session-ipc"},"apiName":"searchDrinks","arguments":{"query":"latte"},"capabilityToken":"capability-secret-token"}}'
+```
+
+`runtime-json` is the first Phase 4 headless Host integration surface. It uses `headless-cli-json` over local process stdio and returns a stable envelope with `apiVersion`, `requestId`, `method`, `status`, `result` or `error`, `redaction`, and `transport`. It is not an HTTP/gRPC sidecar and does not provide production Host UI, persistent session storage, or production consent providers. Capability tokens and private key paths must not appear in responses; parse errors, invalid params, unsupported versions, and unsupported methods all return redacted JSON envelopes.
+
 Run the coffee flow against a localhost server:
 
 ```bash

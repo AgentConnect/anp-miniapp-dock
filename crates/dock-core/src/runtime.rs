@@ -8,6 +8,7 @@ use consent_audit::redact_value;
 use mcp_schema::{
     AtomicApiResult, ModelVisibleApiResult, TextContent, ValidationIssue, ValidationReport,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use skill_loader::{load_skill, LoadedSkill, SkillPackageError};
@@ -16,6 +17,8 @@ use std::fmt;
 use std::path::Path;
 
 pub const RUNTIME_API_VERSION: &str = "dock.runtime.v1";
+pub const RUNTIME_IPC_TRANSPORT: &str = "headless-cli-json";
+pub const RUNTIME_IPC_BINDING: &str = "local-process-stdio";
 
 pub type RuntimeError = Box<RuntimeErrorResponse>;
 pub type RuntimeResult<T> = Result<RuntimeResponse<T>, RuntimeError>;
@@ -34,6 +37,119 @@ impl Default for RuntimeVersion {
             supported: vec![RUNTIME_API_VERSION.to_owned()],
         }
     }
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIpcRequest {
+    pub api_version: String,
+    pub request_id: String,
+    pub method: String,
+    #[serde(default = "empty_object")]
+    pub params: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIpcResponse {
+    pub api_version: String,
+    pub request_id: String,
+    pub method: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<RuntimeErrorDto>,
+    pub redaction: RuntimeIpcRedaction,
+    pub transport: RuntimeIpcTransport,
+}
+
+impl RuntimeIpcResponse {
+    pub fn ok<T: Serialize>(
+        request_id: impl Into<String>,
+        method: impl Into<String>,
+        response: RuntimeResponse<T>,
+    ) -> Self {
+        match serde_json::to_value(response) {
+            Ok(result) => Self {
+                api_version: RUNTIME_API_VERSION.to_owned(),
+                request_id: request_id.into(),
+                method: method.into(),
+                status: "ok".to_owned(),
+                result: Some(result),
+                error: None,
+                redaction: RuntimeIpcRedaction::default(),
+                transport: RuntimeIpcTransport::default(),
+            },
+            Err(error) => Self::error(
+                request_id,
+                method,
+                RuntimeErrorResponse::new(
+                    "serialization_failed",
+                    format!("runtime response serialization failed: {error}"),
+                    None,
+                ),
+            ),
+        }
+    }
+
+    pub fn error(
+        request_id: impl Into<String>,
+        method: impl Into<String>,
+        error: RuntimeErrorResponse,
+    ) -> Self {
+        Self {
+            api_version: RUNTIME_API_VERSION.to_owned(),
+            request_id: request_id.into(),
+            method: method.into(),
+            status: "error".to_owned(),
+            result: None,
+            error: Some(error.error),
+            redaction: RuntimeIpcRedaction::default(),
+            transport: RuntimeIpcTransport::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIpcRedaction {
+    pub marker: String,
+    pub policy: String,
+    pub applied_by_default: bool,
+}
+
+impl Default for RuntimeIpcRedaction {
+    fn default() -> Self {
+        Self {
+            marker: "[REDACTED]".to_owned(),
+            policy: "dock.runtime.redaction.v1".to_owned(),
+            applied_by_default: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIpcTransport {
+    pub mode: String,
+    pub binding: String,
+}
+
+impl Default for RuntimeIpcTransport {
+    fn default() -> Self {
+        Self {
+            mode: RUNTIME_IPC_TRANSPORT.to_owned(),
+            binding: RUNTIME_IPC_BINDING.to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeIpcVersionParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -83,6 +199,14 @@ impl RuntimeErrorResponse {
 
     pub fn unsupported(message: impl Into<String>) -> Self {
         Self::new("unsupported", redact_text(&message.into()), None)
+    }
+
+    pub fn invalid_method(message: impl Into<String>) -> Self {
+        Self::new("invalid_method", redact_text(&message.into()), None)
+    }
+
+    pub fn invalid_params(message: impl Into<String>) -> Self {
+        Self::new("invalid_params", redact_text(&message.into()), None)
     }
 
     pub fn boxed(self) -> RuntimeError {
@@ -611,6 +735,80 @@ where
             boundary: "stateless-runtime-facade".to_owned(),
         }))
     }
+
+    pub fn handle_ipc_request(&self, request: RuntimeIpcRequest) -> RuntimeIpcResponse {
+        if request.api_version != RUNTIME_API_VERSION {
+            return RuntimeIpcResponse::error(
+                request.request_id,
+                request.method,
+                RuntimeErrorResponse::new(
+                    "unsupported_version",
+                    "runtime API version is not supported",
+                    None,
+                ),
+            );
+        }
+
+        let request_id = request.request_id;
+        let method = request.method;
+        match method.as_str() {
+            "runtime.negotiateVersion" => {
+                let params = match parse_ipc_params::<RuntimeIpcVersionParams>(&request.params) {
+                    Ok(params) => params,
+                    Err(error) => {
+                        return RuntimeIpcResponse::error(request_id, method, *error);
+                    }
+                };
+                runtime_ipc_response(
+                    request_id,
+                    method,
+                    negotiate_runtime_version(params.requested_version.as_deref()),
+                )
+            }
+            "runtime.validateSkill" => {
+                RuntimeIpcResponse::ok(request_id, method, self.validate_skill())
+            }
+            "runtime.loadSkill" => {
+                RuntimeIpcResponse::ok(request_id, method, self.load_skill_response())
+            }
+            "runtime.callApi" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.call_api(params)),
+            ),
+            "runtime.renderComponent" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.render_component(params)),
+            ),
+            "runtime.dispatchComponentAction" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params)
+                    .and_then(|params| self.dispatch_component_action(params)),
+            ),
+            "runtime.expireCards" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.expire_cards(params)),
+            ),
+            "runtime.getAuditRecords" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.get_audit_records(params)),
+            ),
+            "runtime.closeSession" => runtime_ipc_response(
+                request_id,
+                method,
+                parse_ipc_params(&request.params).and_then(|params| self.close_session(params)),
+            ),
+            _ => RuntimeIpcResponse::error(
+                request_id,
+                method,
+                RuntimeErrorResponse::invalid_method("runtime method is not supported"),
+            ),
+        }
+    }
 }
 
 fn skill_id(skill: &LoadedSkill) -> String {
@@ -681,6 +879,33 @@ fn redacted_validation_issue(issue: &ValidationIssue) -> ValidationIssue {
         message: redact_text(&issue.message),
         suggestion: issue.suggestion.as_deref().map(redact_text),
     }
+}
+
+fn runtime_ipc_response<T: Serialize>(
+    request_id: String,
+    method: String,
+    result: RuntimeResult<T>,
+) -> RuntimeIpcResponse {
+    match result {
+        Ok(response) => RuntimeIpcResponse::ok(request_id, method, response),
+        Err(error) => RuntimeIpcResponse::error(request_id, method, *error),
+    }
+}
+
+fn parse_ipc_params<T: DeserializeOwned>(params: &Value) -> Result<T, RuntimeError> {
+    let params = if params.is_null() {
+        empty_object()
+    } else {
+        params.clone()
+    };
+    serde_json::from_value(params).map_err(|error| {
+        RuntimeErrorResponse::invalid_params(format!("runtime IPC params are invalid: {error}"))
+            .boxed()
+    })
+}
+
+fn empty_object() -> Value {
+    Value::Object(Map::new())
 }
 
 #[allow(dead_code)]

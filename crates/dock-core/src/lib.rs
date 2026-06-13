@@ -21,8 +21,9 @@ pub use runtime::{
     RuntimeCallRequest, RuntimeCallResponse, RuntimeCloseSessionRequest,
     RuntimeCloseSessionResponse, RuntimeComponentAction, RuntimeDispatchComponentActionRequest,
     RuntimeDispatchComponentActionResponse, RuntimeErrorDto, RuntimeErrorResponse,
-    RuntimeExpireCardsRequest, RuntimeExpireCardsResponse, RuntimeLoadSkillResponse,
+    RuntimeExpireCardsRequest, RuntimeExpireCardsResponse, RuntimeIpcRedaction, RuntimeIpcRequest,
+    RuntimeIpcResponse, RuntimeIpcTransport, RuntimeIpcVersionParams, RuntimeLoadSkillResponse,
     RuntimeRenderComponentRequest, RuntimeRenderComponentResponse, RuntimeResponse, RuntimeResult,
     RuntimeService, RuntimeSessionContext, RuntimeSkillSummary, RuntimeValidateSkillResponse,
-    RuntimeVersion, RUNTIME_API_VERSION,
+    RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING, RUNTIME_IPC_TRANSPORT,
 };

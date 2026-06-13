@@ -52,6 +52,16 @@ fn cli_json_result(args: impl IntoIterator<Item = String>) -> Result<Value, Stri
         .and_then(|_| serde_json::from_slice(&output).map_err(|error| error.to_string()))
 }
 
+fn runtime_ipc_request(method: &str, request_id: &str, params: Value) -> String {
+    json!({
+        "apiVersion": "dock.runtime.v1",
+        "requestId": request_id,
+        "method": method,
+        "params": params
+    })
+    .to_string()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dock_cli_runs_coffee_order_flow_end_to_end() {
     let fixture = DidFixture::new();
@@ -209,6 +219,148 @@ fn call_api_reports_schema_errors_without_running_runtime() {
     .expect_err("missing drinkId should fail inputSchema");
 
     assert!(error.contains("validation_failed"));
+}
+
+#[test]
+fn ipc_runtime_json_call_uses_versioned_envelope_and_facade() {
+    let skill = skill_root().display().to_string();
+    let response = cli_json([
+        "dock-cli".to_owned(),
+        "runtime-json".to_owned(),
+        skill,
+        runtime_ipc_request(
+            "runtime.callApi",
+            "req-call-1",
+            json!({
+                "session": {
+                    "userDid": "did:wba:user.example",
+                    "agentDid": "did:wba:agent.example",
+                    "merchantDid": "did:wba:coffee-merchant.example",
+                    "skillId": "coffee",
+                    "sessionId": "session-ipc"
+                },
+                "apiName": "searchDrinks",
+                "arguments": { "query": "latte" },
+                "capabilityToken": "capability-secret-token"
+            }),
+        ),
+    ]);
+
+    assert_eq!(response["apiVersion"], "dock.runtime.v1");
+    assert_eq!(response["requestId"], "req-call-1");
+    assert_eq!(response["method"], "runtime.callApi");
+    assert_eq!(response["status"], "ok");
+    assert_eq!(response["transport"]["mode"], "headless-cli-json");
+    assert_eq!(response["transport"]["binding"], "local-process-stdio");
+    assert_eq!(response["redaction"]["marker"], "[REDACTED]");
+    assert_eq!(
+        response["result"]["data"]["result"]["structuredContent"]["drinks"][0]["id"],
+        "latte"
+    );
+    assert_eq!(
+        response["result"]["data"]["render"]["renderer"],
+        "component-runtime"
+    );
+
+    let rendered = response.to_string();
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
+}
+
+#[test]
+fn ipc_runtime_json_rejects_version_and_method_with_redacted_errors() {
+    let skill = skill_root().display().to_string();
+    let version_error = cli_json([
+        "dock-cli".to_owned(),
+        "runtime-json".to_owned(),
+        skill.clone(),
+        json!({
+            "apiVersion": "dock.runtime.v0",
+            "requestId": "req-version",
+            "method": "runtime.callApi",
+            "params": {}
+        })
+        .to_string(),
+    ]);
+    assert_eq!(version_error["status"], "error");
+    assert_eq!(version_error["error"]["code"], "unsupported_version");
+    assert_eq!(version_error["requestId"], "req-version");
+
+    let method_error = cli_json([
+        "dock-cli".to_owned(),
+        "runtime-json".to_owned(),
+        skill,
+        runtime_ipc_request(
+            "runtime.unsupportedSecretMethod",
+            "req-method",
+            json!({
+                "token": "capability-secret-token",
+                "path": "/home/user/key-1-private.pem"
+            }),
+        ),
+    ]);
+    assert_eq!(method_error["status"], "error");
+    assert_eq!(method_error["error"]["code"], "invalid_method");
+    let rendered = method_error.to_string();
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("/home/user/key-1-private.pem"));
+    assert!(rendered.contains("[REDACTED]") || rendered.contains("not supported"));
+}
+
+#[test]
+fn ipc_runtime_json_redacts_invalid_params_errors() {
+    let response = cli_json([
+        "dock-cli".to_owned(),
+        "runtime-json".to_owned(),
+        skill_root().display().to_string(),
+        runtime_ipc_request(
+            "runtime.callApi",
+            "req-invalid",
+            json!({
+                "session": {
+                    "userDid": "did:wba:user.example",
+                    "skillId": "coffee",
+                    "sessionId": "session-ipc"
+                },
+                "apiName": 123,
+                "arguments": {
+                    "Authorization": "Bearer capability-secret-token",
+                    "privateKey": "/home/user/key-1-private.pem"
+                }
+            }),
+        ),
+    ]);
+
+    assert_eq!(response["status"], "error");
+    assert_eq!(response["error"]["code"], "invalid_params");
+    let rendered = response.to_string();
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("/home/user/key-1-private.pem"));
+    assert!(rendered.contains("[REDACTED]"));
+}
+
+#[test]
+fn ipc_runtime_json_parse_errors_use_redacted_envelope() {
+    let response = cli_json([
+        "dock-cli".to_owned(),
+        "runtime-json".to_owned(),
+        skill_root().display().to_string(),
+        r#"{"apiVersion":1,"requestId":"req-parse","method":"runtime.callApi","params":{"capabilityToken":"capability-secret-token","privateKey":"/home/user/key-1-private.pem"}}"#.to_owned(),
+    ]);
+
+    assert_eq!(response["apiVersion"], "dock.runtime.v1");
+    assert_eq!(response["method"], "runtime.parseRequest");
+    assert_eq!(response["status"], "error");
+    assert_eq!(response["error"]["code"], "invalid_params");
+    assert_eq!(response["redaction"]["marker"], "[REDACTED]");
+    assert_eq!(response["transport"]["binding"], "local-process-stdio");
+
+    let rendered = response.to_string();
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("/home/user/key-1-private.pem"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
 }
 
 #[test]

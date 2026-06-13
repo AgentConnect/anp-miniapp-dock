@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-02
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 18:54:30 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-01 完成后，启动 IPC / SDK 边界 |
+| Review evidence | 2026-06-13 19:07:40 +0800 commit 前 Review 已记录：确认 `dock-cli runtime-json` 只作为 `headless-cli-json` / `local-process-stdio` 传输层复用 `RuntimeService`，未绕过 permission、ConsentGate、audit、redaction 或 package integrity；修复 request envelope parse/schema error 可能走裸 CLI JSON error、缺少 IPC redaction envelope 的问题；确认当前未声明 HTTP/gRPC sidecar 或 production Host UI |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p dock-cli ipc` 4 passed；`cargo test -p dock-core runtime` 4 passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/dock-cli crates/demo-server docs/runbook docs/plan` 无输出；手工 `runtime-json` success/error 抽样输出 `headless-cli-json`、`local-process-stdio`、`[REDACTED]` 且敏感串扫描无命中 |
+| Next action | 创建 04-02 focused commit，随后回填 commit hash 并进入 04-03 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -93,20 +93,20 @@ Step index：04-02
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录并处理 | `runtime-json` 对 request envelope parse/schema error 初版会走 CLI JSON error 路径，不保证返回 IPC envelope，也可能让 serde error 暴露过多上下文。 |
+| 已修复问题 | 已修复 | 将 request envelope parse/schema error 收敛为 `runtime.parseRequest` 的 `RuntimeIpcResponse::error`，不回显原始请求；新增 parse error redaction 测试。 |
+| 剩余风险 | 已记录 | 本 Step 只提供 headless CLI JSON / local process stdio；HTTP/JSON-RPC sidecar、真实 Host UI、生产 Host consent provider、持久 session/card store 仍待后续 Step，不声明 production-ready。 |
+| 新增或缺失测试 | 已新增 | 新增 IPC integration tests 覆盖 success envelope、version mismatch、invalid method、invalid params、parse/schema error redaction；未新增 HTTP loopback test，因为本 Step 未实现 HTTP sidecar，local binding 由 `transport.binding = local-process-stdio` 和手工抽样证明。 |
+| 已更新或缺失文档 | 已更新 | 更新 Phase 4 文档记录 04-02 选择 `dock-cli runtime-json`、envelope、method 列表、安全边界；更新 local demo runbook 增加 headless Runtime JSON 示例与限制。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 IPC/SDK transport、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 64]`，未提交文件均为 04-02 IPC/headless JSON 代码、测试和直接文档。
+- 纳入文件：`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/runbook/local-demo.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md`。
+- Commit 后证据：待提交后回填 commit hash 和 commit 后 `git status --short --branch`。
+- 遗留未提交变更：待提交后确认。
 - 建议消息：`phase4: add runtime ipc boundary`
 
 ## 11. Blocked 处理

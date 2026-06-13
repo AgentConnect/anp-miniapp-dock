@@ -72,6 +72,52 @@ close_session(session)
 
 建议顺序：先稳定 Rust facade，再做 local HTTP/JSON-RPC。这样 Mac/Flutter/Web host 都能接入，且不会把 CLI 输出当生产协议。
 
+当前 Step 04-02 选择的首个可测试 Host 接入形态是 `dock-cli runtime-json`：
+
+- transport mode：`headless-cli-json`；
+- binding：`local-process-stdio`；
+- 目标：给非 Rust Host 一个本地进程级、machine-readable 的 JSON envelope，同时继续复用 04-01 的 `RuntimeService` facade；
+- 非目标：不在本 Step 启动 HTTP/gRPC sidecar，不把旧的 developer CLI JSON 当作生产 IPC 协议。
+
+请求 envelope：
+
+```json
+{
+  "apiVersion": "dock.runtime.v1",
+  "requestId": "req-1",
+  "method": "runtime.callApi",
+  "params": {}
+}
+```
+
+响应 envelope 必须包含：
+
+- `apiVersion`、`requestId`、`method`、`status`；
+- `result` 或 `error`；
+- `redaction.marker = "[REDACTED]"`、`redaction.policy = "dock.runtime.redaction.v1"`；
+- `transport.mode = "headless-cli-json"`、`transport.binding = "local-process-stdio"`。
+
+当前支持的 IPC method：
+
+| Method | Runtime facade |
+|---|---|
+| `runtime.negotiateVersion` | `negotiate_runtime_version()` |
+| `runtime.validateSkill` | `RuntimeService::validate_skill()` |
+| `runtime.loadSkill` | `RuntimeService::load_skill_response()` |
+| `runtime.callApi` | `RuntimeService::call_api()` |
+| `runtime.renderComponent` | `RuntimeService::render_component()` |
+| `runtime.dispatchComponentAction` | `RuntimeService::dispatch_component_action()` |
+| `runtime.expireCards` | `RuntimeService::expire_cards()` |
+| `runtime.getAuditRecords` | `RuntimeService::get_audit_records()` |
+| `runtime.closeSession` | `RuntimeService::close_session()` |
+
+安全边界：
+
+- IPC 只负责传输，不允许绕过 permission、ConsentGate、audit、redaction 或 package integrity gate；
+- `capabilityToken` 可作为请求参数进入 Runtime facade，但 request DTO 不派生 `Debug` 且响应默认不序列化该字段；
+- invalid method、invalid params、version mismatch 和 request parse/schema error 都返回 redacted envelope；
+- 当前 binding 是本地进程 stdio，后续 HTTP/JSON-RPC sidecar 必须单独补 loopback/socket binding、安全配置和 conformance tests。
+
 ### 3.3 Skill Registry / Cache
 
 开发项：

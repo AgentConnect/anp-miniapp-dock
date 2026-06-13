@@ -14,7 +14,8 @@ use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_
 use dock_core::{
     ApiCallContext, AuditEvent, AuditSink, ComponentRenderInput, ConsentDecision, ConsentGate,
     DockCoreError, ErrorCode, PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
-    RuntimeCallRequest, RuntimeErrorResponse, RuntimeHost, RuntimeService, RuntimeSessionContext,
+    RuntimeCallRequest, RuntimeErrorResponse, RuntimeHost, RuntimeIpcRequest, RuntimeIpcResponse,
+    RuntimeService, RuntimeSessionContext,
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
 use mcp_schema::{
@@ -64,6 +65,10 @@ enum Command {
     },
     PreviewCard {
         result_json: String,
+    },
+    RuntimeJson {
+        skill: PathBuf,
+        request_json: String,
     },
     RunDemo {
         #[arg(long)]
@@ -118,6 +123,10 @@ impl Cli {
                 json_input,
             } => preview_component(skill, component_path, json_input),
             Command::PreviewCard { result_json } => preview_card(result_json),
+            Command::RuntimeJson {
+                skill,
+                request_json,
+            } => runtime_json(skill, request_json),
             Command::RunDemo {
                 skill,
                 server,
@@ -778,6 +787,34 @@ fn preview_card(result_json: &str) -> Result<Value, CliError> {
     }))
 }
 
+fn runtime_json(skill_path: &Path, request_json: &str) -> Result<Value, CliError> {
+    let request: RuntimeIpcRequest = match serde_json::from_str(request_json) {
+        Ok(request) => request,
+        Err(_) => {
+            let response = RuntimeIpcResponse::error(
+                "",
+                "runtime.parseRequest",
+                RuntimeErrorResponse::invalid_params(
+                    "runtime IPC request JSON is invalid or does not match the envelope schema",
+                ),
+            );
+            return serde_json::to_value(response).map_err(|source| CliError::Json {
+                label: "runtime JSON response".to_owned(),
+                source,
+            });
+        }
+    };
+    let runtime = RuntimeHarness::load(
+        skill_path,
+        RuntimeIdentity::default_demo(),
+        Option::<&DemoAuthConfig>::None,
+    )?;
+    serde_json::to_value(runtime.handle_ipc_request(request)).map_err(|source| CliError::Json {
+        label: "runtime JSON response".to_owned(),
+        source,
+    })
+}
+
 fn run_demo(
     skill_path: &Path,
     server: &str,
@@ -981,6 +1018,10 @@ impl RuntimeHarness {
 
     fn audit_events(&self) -> Vec<AuditEvent> {
         self.audit.events.borrow().clone()
+    }
+
+    fn handle_ipc_request(&self, request: RuntimeIpcRequest) -> dock_core::RuntimeIpcResponse {
+        self.service.handle_ipc_request(request)
     }
 }
 
@@ -1772,6 +1813,18 @@ mod tests {
         let cli = Cli::try_parse_from_args(["dock-cli", "validate", "examples/coffee-skill"])
             .expect("args parse");
         assert!(matches!(cli.command, Command::Validate { .. }));
+    }
+
+    #[test]
+    fn parses_runtime_json_args() {
+        let cli = Cli::try_parse_from_args([
+            "dock-cli",
+            "runtime-json",
+            "examples/coffee-skill",
+            r#"{"apiVersion":"dock.runtime.v1","requestId":"req-1","method":"runtime.loadSkill","params":{}}"#,
+        ])
+        .expect("args parse");
+        assert!(matches!(cli.command, Command::RuntimeJson { .. }));
     }
 
     #[test]
