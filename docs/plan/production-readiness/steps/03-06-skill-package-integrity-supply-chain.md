@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-06
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 15:34:39 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 16:02:50 +0800 |
+| Commit | `b9c767b` |
 | Review evidence | 2026-06-13 15:54:50 +0800 commit 前 Review：发现并修复 validate report 可能输出 package signature value 的测试缺口；发现 digest contract 文档要求 lowercase hex 但实现接受大写 hex，已收紧为 64 位小写 hex；确认 supply-chain gate 在 `load_skill_with_integrity_policy` 中早于 entry/API/component 加载，dev/local unsigned 明确 `demo-unsigned`，production policy 对 unsigned、digest mismatch、signature mismatch、unknown publisher quarantine/fail closed；真实 registry/cache 和生产签名 verifier 留给 Phase 4/6，不在本 Step 冒充完成。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p skill-loader package` 通过，filter 实际命中 `symlink_outside_package_fails_closed` 1 test；`cargo test -p skill-loader` 14 passed，覆盖 digest mismatch、signature mismatch、unknown publisher、trusted publisher allowlist、unsigned production quarantine、outside symlink、absolute path、`..`、zip slip；`cargo test -p mcp-schema -p dock-cli validate` 通过，mcp-schema 2 filtered tests + dock-cli validate 4 unit / 1 integration passed；`cargo test -p js-runtime-quickjs remote_require_is_rejected` 1 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 `compatibilityLevel: demo-only`，`compatibilityReport.supplyChain.status = demo-unsigned`，releaseBlockers 含 `supply_chain`；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/mcp-schema crates/dock-cli crates/js-runtime-quickjs docs/security docs/runbook docs/plan Cargo.toml Cargo.lock` 无输出；敏感词抽样仅命中测试假值、redaction 断言、安全文档、runbook 和既有 demo-only placeholder，未发现真实 secret/token/proof/private key path 或 package signature value 输出。 |
-| Next action | 正在执行 03-06 最终验证；验证通过后创建 focused commit、回填主 Plan 和本 Step，再进入 Step 03-07 Phase 3 最终 Review 与整体验证 |
+| Next action | 进入 03-07 Phase 3 最终 Review 与整体验证 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：03-06
 - [x] 本地 coffee demo 的未签名状态被标为 dev/demo-only，不误标 production-ready。
 - [x] Threat Model、Release Gates、CLI validate 计划与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -105,8 +105,8 @@ Step index：03-06
 - Commit 范围：只包含 Skill package integrity/supply chain gate、直接 tests 和相关文档。
 - Commit 前状态：`git status --short` 只包含 03-06 代码、测试和文档变更。
 - 纳入文件：`Cargo.toml`、`Cargo.lock`、`crates/skill-loader/Cargo.toml`、`crates/skill-loader/src/integrity.rs`、`crates/skill-loader/src/lib.rs`、`crates/skill-loader/src/package.rs`、`crates/skill-loader/src/resolver.rs`、`crates/skill-loader/tests/coffee_skill_load.rs`、`crates/mcp-schema/src/manifest.rs`、`crates/mcp-schema/src/validation.rs`、`crates/mcp-schema/tests/mcp_validation.rs`、`crates/dock-cli/src/commands.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-3-security-hardening.md`、`docs/plan/production-readiness/phase-3-threat-model-and-controls.md`、`docs/plan/production-readiness-roadmap.md`、本 Step 文档。
-- Commit 后证据：待创建 commit 后回填。
-- 遗留未提交变更：待 commit 后确认；预期只剩 closure 文档回填。
+- Commit 后证据：`b9c767b`；post-commit `git status --short --branch` = `## main...origin/main [ahead 57]`。
+- 遗留未提交变更：无；本 closure 文档回填作为单独提交记录。
 - 建议消息：`phase3: add skill package integrity gates`
 
 ## 11. Blocked 处理
