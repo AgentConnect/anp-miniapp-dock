@@ -6,7 +6,7 @@ Phase 3 要把安全能力从“Demo 中有边界”升级为“线上默认安�
 
 深入威胁模型见：[Threat Model 与安全控制](phase-3-threat-model-and-controls.md)。
 
-当前执行状态：Step 03-01 冻结风险分级、owner、required gate 和 release blocker 口径；Step 03-02 已把 sandbox/resource gate 升级为本地 required release gate；Step 03-03 已补齐 permission decision、network allowlist 和 decision audit 的本地 required gate；Step 03-04 已补齐 DID/token lifecycle、challenge replay 和 resolver trust anchor 的本地 required gate；Step 03-05 已补齐 Host consent adapter、ConsentProof 元数据、provider unavailable audit 和 append-only JSONL audit sink 本地 gate；Step 03-06 已补齐 package digest、manifest supply-chain contract、trusted publisher allowlist、quarantine、remote require/path/symlink/zip slip deny 和 validate supply-chain report 的本地 gate。本文不把尚未落地的 CI 自动化、生产 Host 配置、真实 registry/cache、生产签名 verifier 或部署级持久化加密能力写成已完成。
+当前执行状态：Step 03-01 冻结风险分级、owner、required gate 和 release blocker 口径；Step 03-02 已把 sandbox/resource gate 升级为本地 required release gate；Step 03-03 已补齐 permission decision、network allowlist 和 decision audit 的本地 required gate；Step 03-04 已补齐 DID/token lifecycle、challenge replay 和 resolver trust anchor 的本地 required gate；Step 03-05 已补齐 Host consent adapter、ConsentProof 元数据、provider unavailable audit 和 append-only JSONL audit sink 本地 gate；Step 03-06 已补齐 package digest、manifest supply-chain contract、trusted publisher allowlist、quarantine、remote require/path/symlink/zip slip deny 和 validate supply-chain report 的本地 gate；Step 03-07 已完成 Phase 3 最终 Review 与整体验证，作为 Phase 4 启动前 gate。本文不把尚未落地的 CI 自动化、生产 Host 配置、真实 registry/cache、生产签名 verifier 或部署级持久化加密能力写成已完成。
 
 ## 2. 涉及模块
 
@@ -146,4 +146,4 @@ Allow | Deny(reason) | Prompt(consent_request) | MockAllowed(dev_only)
 - [x] DID/token lifecycle 覆盖 refresh/revoke/replay。
 - [x] audit 可持久化且默认脱敏。
 - [x] Skill 包 digest/signature 有实现计划和初版实现。
-- [ ] Step 03-07 完成 Phase 3 最终 Review 与整体验证后，才能作为 Phase 4 启动 gate。
+- [x] Step 03-07 完成 Phase 3 最终 Review 与整体验证后，才能作为 Phase 4 启动 gate。

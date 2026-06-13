@@ -90,7 +90,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.1 Resume From Here
 
-当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 03-01 [`production-readiness/steps/03-01-threat-model-security-classification.md`](production-readiness/steps/03-01-threat-model-security-classification.md)。如果 Codex Goal 明确限定只执行 Step 01-05 至 02-07，则该批次已经完成，应在 02-07 停止，不进入 03-01。
+当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 04-01 [`production-readiness/steps/04-01-runtime-api-facade-versioning.md`](production-readiness/steps/04-01-runtime-api-facade-versioning.md)。如果 Codex Goal 明确限定只执行 Phase 3，则该批次已经完成，应在 03-07 停止，不进入 04-01。
 
 恢复规则：
 
@@ -131,7 +131,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 03-04 | DID / Token 生命周期与 Resolver 信任锚 | 01-04, 03-01, 03-03 | refresh/revoke/logout、jti replay、resolver cache/trust anchor | [production-readiness/steps/03-04-did-token-lifecycle-resolver.md](production-readiness/steps/03-04-did-token-lifecycle-resolver.md) | 必须 | done |
 | 03-05 | Consent Adapter 与持久化 Audit Sink | 01-08, 03-01, 03-03 | Host consent adapter、ConsentProof、persistent audit、redacted export | [production-readiness/steps/03-05-consent-adapter-persistent-audit.md](production-readiness/steps/03-05-consent-adapter-persistent-audit.md) | 必须 | done |
 | 03-06 | Skill 包完整性与供应链 Gate | 01-02, 03-01, 03-03 | digest、signature、publisher DID、trusted allowlist、quarantine | [production-readiness/steps/03-06-skill-package-integrity-supply-chain.md](production-readiness/steps/03-06-skill-package-integrity-supply-chain.md) | 必须 | done |
-| 03-07 | Phase 3 最终 Review 与整体验证 | 03-01, 03-02, 03-03, 03-04, 03-05, 03-06 | Phase 3 全局 Review 记录、整体验证证据、Phase 4 启动 gate | [production-readiness/steps/03-07-phase3-final-review-verification.md](production-readiness/steps/03-07-phase3-final-review-verification.md) | 必须 | pending |
+| 03-07 | Phase 3 最终 Review 与整体验证 | 03-01, 03-02, 03-03, 03-04, 03-05, 03-06 | Phase 3 全局 Review 记录、整体验证证据、Phase 4 启动 gate | [production-readiness/steps/03-07-phase3-final-review-verification.md](production-readiness/steps/03-07-phase3-final-review-verification.md) | 必须 | done |
 | 04-01 | Runtime API Facade 与版本化 | 02-06, 03-07 | public Runtime API、stable DTO/error、version、CLI 收敛 | [production-readiness/steps/04-01-runtime-api-facade-versioning.md](production-readiness/steps/04-01-runtime-api-facade-versioning.md) | 必须 | pending |
 | 04-02 | IPC / SDK 形态与 Host 进程边界 | 04-01 | local IPC/headless JSON/Rust SDK envelope、version/error/redaction | [production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md](production-readiness/steps/04-02-ipc-sdk-host-process-boundary.md) | 必须 | pending |
 | 04-03 | Skill Registry / Cache 与版本回滚 | 03-06, 04-01 | registry ref、digest-keyed cache、version pin、rollback、eviction | [production-readiness/steps/04-03-skill-registry-cache-versioning.md](production-readiness/steps/04-03-skill-registry-cache-versioning.md) | 必须 | pending |
@@ -189,7 +189,7 @@ Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均�
 | 03-04 | done | `main` | 2026-06-13 14:49:53 +0800 | 2026-06-13 15:11:49 +0800 | `24a8f10` | 2026-06-13 15:10:32 +0800 commit 前 Review 已记录：修复 `TrustedDidDocumentResolver` 仅校验 DID document `id` 而未校验完整 trust anchor 内容的问题；确认 token host-only、普通 `verify()` 兼容、lifecycle/replay API 显式、challenge 登录尝试即消费、resolver/cache/replay failure fail closed | `cargo fmt --check` 通过；`cargo test -p anp-adapter token` 18 passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter challenge` 15 unit + 1 integration passed；`cargo test -p anp-adapter` 44 unit + 11 integration passed；`cargo test -p demo-server token` 5 unit + 1 integration passed；`cargo test -p demo-server` 7 lib + 4 main + 6 integration passed；`cargo test -p demo-server demo_signature_and_replayed_challenge_are_rejected` 1 passed；`cargo test -p js-runtime-quickjs wx_login` 3 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/demo-server crates/js-runtime-quickjs docs/security docs/runbook docs/plan` 无输出；敏感信息抽样仅命中测试假值、文档安全说明、redaction 断言和 `AuthMode::HttpSignatures` 常量；post-commit `git status --short --branch` = `## main...origin/main [ahead 53]` | 进入 03-05 |
 | 03-05 | done | `main` | 2026-06-13 15:11:49 +0800 | 2026-06-13 15:34:39 +0800 | `e7c9f49` | 2026-06-13 15:32:32 +0800 commit 前 Review 已记录：修复 `FileAuditSink` export 只信任已持久化 redacted record、可能导出 legacy/raw JSONL 的问题；补充 Host adapter denied fail-closed audit 测试；确认 ConsentGate 在 executor/provider 前、provider unavailable/denied fail closed 且可审计、dev/headless mock 有显式 provider/actor、JSONL audit record/export 默认脱敏 | `cargo fmt --check` 通过；`cargo test -p consent-audit consent` 3 unit + 3 integration passed；`cargo test -p consent-audit audit` 2 unit + 4 integration passed；`cargo test -p dock-core consent` 9 passed；`cargo test -p consent-audit` 5 unit + 7 integration passed；`cargo test -p dock-core` 15 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/consent-audit crates/dock-core crates/dock-cli docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、文档安全说明、redaction 断言、`AuthMode::HttpSignatures` 常量和 demo-only secret placeholder，未发现真实 secret/token/proof/private key path 输出；pre-commit `git status --short` 只包含 03-05 代码、测试和文档变更；post-commit `git status --short --branch` = `## main...origin/main [ahead 55]` | 进入 03-06 |
 | 03-06 | done | `main` | 2026-06-13 15:34:39 +0800 | 2026-06-13 16:02:50 +0800 | `b9c767b` | 2026-06-13 15:54:50 +0800 commit 前 Review 已记录：修复 validate report package signature value redaction 测试缺口，并将 digest contract 收紧为 64 位小写 hex；确认 production policy 对 unsigned/digest mismatch/signature mismatch/unknown publisher quarantine/fail closed，local coffee demo 仍为 dev/demo-only | `cargo fmt --check` 通过；`cargo test -p skill-loader package` 通过，filter 实际命中 symlink test 1 passed；`cargo test -p skill-loader` 14 passed；`cargo test -p mcp-schema -p dock-cli validate` 通过；`cargo test -p js-runtime-quickjs remote_require_is_rejected` 1 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 demo-only 且 supplyChain.status = demo-unsigned、releaseBlockers 含 supply_chain；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/skill-loader crates/mcp-schema crates/dock-cli crates/js-runtime-quickjs docs/security docs/runbook docs/plan Cargo.toml Cargo.lock` 无输出；敏感词抽样仅命中测试假值、redaction 断言、安全文档、runbook 和 demo-only placeholder，未发现真实 secret/token/proof/private key path 或 package signature value 输出；post-commit `git status --short --branch` = `## main...origin/main [ahead 57]` | 进入 03-07 |
-| 03-07 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-06 closure 回填提交后启动 |
+| 03-07 | done | `main` | 2026-06-13 16:04:15 +0800 | 2026-06-13 16:10:22 +0800 | 待回填 final review commit | 2026-06-13 16:10:22 +0800 Phase 3 最终 Review 已记录：修复 roadmap 恢复指针和通用 Codex Goal 提示词仍指向 03-01、Phase 3 子文档 03-07 未关闭的文档漂移；确认 03-01 至 03-06 safety gates、release blockers、demo-only 边界和 redaction 口径一致，未发现阻塞问题 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 `demo-only`、`supplyChain.status = demo-unsigned`、releaseBlockers 含 `supply_chain`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；Phase 3 commit hash 均可解析；敏感词抽样仅命中测试假值、redaction 断言、安全文档和 demo-only placeholder，未发现真实 secret/token/proof/private key path、package signature value 或隐私原文输出 | 本 Goal 停止在 03-07，不进入 04-01 |
 | 04-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-07 完成 |
 | 04-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-01 完成 |
 | 04-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 04-02 完成 |
@@ -310,7 +310,7 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 
 最终 Review 执行记录：
 
-> 以下记录只覆盖 Step 00-01 至 01-04。新增 Step 01-05 至 02-06 全部完成后，必须在本节追加新的最终全局 Review 与整体验证记录。
+> 以下记录按批次追加；每条记录只覆盖该条 `范围` 中列出的 Step 和文档。
 
 | 项目 | 记录 |
 |---|---|
@@ -334,12 +334,23 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 | 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 1 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出。 |
 | 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 42]`，无未提交完成工作；final review commit 为 `2f0d122 docs: record phase1 phase2 final review`；final ledger closure commit 为 `8cd9b80 docs: close phase1 phase2 final review gate`；closure 后 `git status --short --branch` = `## main...origin/main [ahead 44]`，工作区无未提交变更。 |
 
+| 项目 | 记录 |
+|---|---|
+| 执行时间 | 2026-06-13 16:10:22 +0800 |
+| 范围 | Roadmap 执行台账、Step 03-01 至 03-07 文档、Phase 3 子文档、Threat Model、Release Gates、wx API / component 兼容矩阵、相关源码/测试和 git history。 |
+| Step/ledger 审计 | 执行台账中 03-01 至 03-06 均为 `done`，且有 commit hash、Review 证据和验证证据；03-07 是进入 04-01 前可追踪 final Review gate。台账记录的 commit `a61a7e7`、`1c4e784`、`32ada09`、`24a8f10`、`e7c9f49`、`b9c767b` 和 03-06 closure `b70fd1b` 均能在 git history 解析。 |
+| Review 发现与修复 | 修复文档漂移：恢复指针和通用 Codex Goal 提示词仍指向 03-01，已改为 Phase 3 完成后的下一个未完成 Step 04-01；`phase-3-security-hardening.md` 仍把 03-07 标为未完成，已改为 final Review gate 完成。未发现需要修改 Phase 3 代码的阻塞问题。 |
+| 安全/敏感信息 Review | Threat Model、Release Gates 和 Phase 3 文档均保留 CI 自动化、生产 Host 配置、真实 registry/cache、生产签名 verifier、secret store、持久化 token cache/revocation restore 等残余风险，没有误写成已完成；sandbox、permission、DID/token、Consent/Audit、package integrity 的本地 required gates 均保持 fail closed。敏感词抽样仅命中测试假值、redaction 断言、安全文档、runbook 和 demo-only placeholder，未发现真实 secret、token、proof、private key path、package signature value、手机号、地址、文件内容或隐私原文输出。 |
+| 残余风险 | Phase 3 已完成本地安全 gate 和最终 Review；CI gate 自动化、生产 Host/registry/cache、生产签名 verifier、部署级 secret store、持久化 token cache/revocation restore、生产 Host UI/conformance、真实 registry zip extraction 和运维发布自动化仍待 Phase 4/6。Coffee demo 仍为 `demo-only`，不能解释为 production release 完成。 |
+| 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 `compatibilityLevel: demo-only`、`supplyChain.status = demo-unsigned`、releaseBlockers 含 `supply_chain`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；Phase 3 commit hash 审计通过。 |
+| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 58]`，未提交变更仅为 03-07 final Review 文档回填；final review commit 待本 Step 提交后由 closure 回填。 |
+
 #### 2.3.9 Codex Goal 提示词
 
-下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准；截至 2026-06-13，Step 01-05 至 02-07 已完成，整体 roadmap 的下一个 Step 是 03-01。
+下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准；截至 2026-06-13，Step 03-07 已完成，整体 roadmap 的下一个 Step 是 04-01。
 
 ```text
-请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从第一个非 done Step 开始；如果当前主台账保持最新，应从 03-01 开始。
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从第一个非 done Step 开始；如果当前主台账保持最新，应从 04-01 开始。
 
 开始前先读取：
 - anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md

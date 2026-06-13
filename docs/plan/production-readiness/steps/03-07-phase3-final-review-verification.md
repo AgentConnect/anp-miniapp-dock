@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-07
-状态：pending
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | done |
 | Branch | `main` |
-| Started | 待记录 |
-| Completed | 待记录 |
-| Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 03-06 完成后，执行 Phase 3 最终 Review；完成后停止本 Goal，不进入 Step 04-01 |
+| Started | 2026-06-13 16:04:15 +0800 |
+| Completed | 2026-06-13 16:10:22 +0800 |
+| Commit | 待回填 final review commit |
+| Review evidence | 2026-06-13 16:10:22 +0800 Phase 3 最终 Review 已记录：修复 roadmap 恢复指针和通用 Codex Goal 提示词仍指向 03-01、Phase 3 子文档 03-07 未关闭的文档漂移；确认 03-01 至 03-06 safety gates、release blockers、demo-only 边界和 redaction 口径一致，未发现阻塞问题。 |
+| Verification evidence | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo run -q -p dock-cli -- validate examples/coffee-skill` 输出 `compatibilityLevel: demo-only`、`supplyChain.status = demo-unsigned`、releaseBlockers 含 `supply_chain`；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；Phase 3 commit hash 均可解析；敏感词抽样仅命中测试假值、redaction 断言、安全文档和 demo-only placeholder，未发现真实 secret/token/proof/private key path、package signature value 或隐私原文输出。 |
+| Next action | 本 Goal 停止在 03-07，不进入 Step 04-01；后续若启动新 Goal，应从主 Plan 第一个非 `done` Step 04-01 开始。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,12 +63,12 @@ Step index：03-07
 
 ## 7. 验收标准
 
-- [ ] 主 Plan 执行台账中 Step 03-01 至 03-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
-- [ ] git history 能解析 Step 03-01 至 03-06 的 commit hash。
-- [ ] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
-- [ ] Review 覆盖 Threat Model、Release Gates、sandbox、permission、DID/token、Consent/Audit、Skill package integrity、redaction、安全边界和文档漂移。
-- [ ] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
-- [ ] 主 Plan `2.3.8` 已追加 Phase 3 最终 Review 记录。
+- [x] 主 Plan 执行台账中 Step 03-01 至 03-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
+- [x] git history 能解析 Step 03-01 至 03-06 的 commit hash。
+- [x] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
+- [x] Review 覆盖 Threat Model、Release Gates、sandbox、permission、DID/token、Consent/Audit、Skill package integrity、redaction、安全边界和文档漂移。
+- [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
+- [x] 主 Plan `2.3.8` 已追加 Phase 3 最终 Review 记录。
 - [ ] 本步骤在进入 Step 04-01 之前已经创建 focused commit，并回填主 Plan 执行台账；本 Goal 到此结束。
 
 ## 8. 验证方式
@@ -93,11 +93,11 @@ Step index：03-07
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 文档漂移：roadmap 恢复指针和通用 Codex Goal 提示词仍指向 03-01；Phase 3 子文档仍把 03-07 标为未完成。未发现需要修改 Phase 3 代码的阻塞问题。 |
+| 已修复问题 | 已修复 | 恢复指针、通用 Codex Goal 提示词、Phase 3 完成状态和主 Plan `2.3.8` final Review 记录已更新。 |
+| 剩余风险 | 已记录 | CI 自动化、生产 Host/registry/cache、生产签名 verifier、secret store、持久化 token cache/revocation restore、生产 Host UI/conformance、真实 registry zip extraction 和运维发布自动化仍待 Phase 4/6；coffee demo 仍为 `demo-only`。 |
+| 新增或缺失测试 | 已覆盖 | 本 Step 是 final Review gate，未新增代码测试；已重新运行 metadata、fmt、clippy、workspace tests、coffee E2E、validate coffee 和 docs diff check。 |
+| 已更新或缺失文档 | 已更新 | 已更新 roadmap、03-07 Step 文档和 Phase 3 子文档；Threat Model / Release Gates 未发现需要改动的状态漂移。 |
 
 ## 10. Commit 要求
 
@@ -113,7 +113,7 @@ Step index：03-07
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 无 | 无 | 当前步骤 / 整体计划 | 无 blocker，03-07 可关闭 |
 
 ## 12. Plan 变更记录
 
