@@ -231,6 +231,52 @@ async fn dock_cli_runs_coffee_order_flow_end_to_end() {
 }
 
 #[test]
+fn inspect_coffee_skill_reports_package_graph() {
+    let inspect = cli_json([
+        "dock-cli".to_owned(),
+        "inspect".to_owned(),
+        skill_root().display().to_string(),
+    ]);
+
+    assert_eq!(inspect["schemaVersion"], "dock.inspect-report.v1");
+    assert_eq!(inspect["commandStatus"], "ok");
+    assert_eq!(inspect["skillId"], "coffee");
+    assert_eq!(inspect["package"]["entry"], "index.js");
+    assert!(inspect["files"]
+        .as_array()
+        .expect("files")
+        .iter()
+        .any(|file| file["path"] == "mcp.json" && file["kind"] == "file"));
+    assert!(inspect["apis"]
+        .as_array()
+        .expect("apis")
+        .iter()
+        .any(|api| api["name"] == "payOrder"
+            && api["registered"] == true
+            && api["registrationStatus"] == "declared-and-registered"
+            && api["risk"] == "payment"));
+    assert!(inspect["components"]
+        .as_array()
+        .expect("components")
+        .iter()
+        .any(
+            |component| component["path"] == "components/payment-result/index"
+                && component["loaded"] == true
+        ));
+    assert!(inspect["wxApiUsage"]["items"]
+        .as_array()
+        .expect("wx usage")
+        .iter()
+        .any(|usage| usage["api"] == "wx.login" && usage["file"] == "index.js"));
+
+    let rendered = inspect.to_string();
+    assert!(!rendered.contains("/home/"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Signature"));
+    assert!(!rendered.contains("capabilityToken"));
+}
+
+#[test]
 fn call_api_reports_schema_errors_without_running_runtime() {
     let error = cli_json_result([
         "dock-cli".to_owned(),

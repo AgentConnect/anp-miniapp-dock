@@ -19,13 +19,14 @@ use dock_core::{
 };
 use js_runtime_quickjs::{ApiVm, HostDidAuthConfig};
 use mcp_schema::{
-    ApiDeclaration, AtomicApiResult, ComponentDeclaration, ValidationIssueCategory,
-    ValidationReport,
+    ApiDeclaration, AtomicApiResult, ComponentDeclaration, ValidationIssue,
+    ValidationIssueCategory, ValidationReport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use skill_loader::{load_skill, resolve_component_path, LoadedSkill};
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -53,6 +54,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Validate {
+        skill: PathBuf,
+    },
+    Inspect {
         skill: PathBuf,
     },
     CallApi {
@@ -114,6 +118,7 @@ impl Cli {
     fn execute(&mut self) -> Result<Value, CliError> {
         match &self.command {
             Command::Validate { skill } => validate(skill),
+            Command::Inspect { skill } => inspect(skill),
             Command::CallApi {
                 skill,
                 api_name,
@@ -1012,6 +1017,347 @@ fn validate_release_readiness(skill: &LoadedSkill, release_blockers: &[Value]) -
         "status": if release_blockers.is_empty() { "requires-environment-gates" } else { "blocked" },
         "checks": checks,
     })
+}
+
+fn inspect(skill_path: &Path) -> Result<Value, CliError> {
+    let skill = load_skill(skill_path)?;
+    let registration = validate_api_registration(&skill);
+    let registered_apis = registration
+        .clone()
+        .unwrap_or_else(|_| inspect_registered_api_scan(&skill));
+    let registration_source = if registration.is_ok() {
+        "api-vm-registration-trace"
+    } else if registered_apis.is_empty() {
+        "unknown-with-reason"
+    } else {
+        "static-register-api-scan"
+    };
+    let file_tree = inspect_file_tree(&skill.root)?;
+    let wx_usage = inspect_wx_usage(&skill);
+    let component_reports = validate_component_reports(&skill);
+    let permissions = validate_permissions(&component_reports);
+    let risks = validate_risks(&skill);
+    let api_reports = inspect_api_reports(
+        &skill,
+        &registered_apis,
+        registration_source,
+        registration.as_ref().err(),
+    );
+    let warnings = inspect_warnings(&skill, registration.as_ref().err());
+    let skill_ref = validate_skill_ref(skill_path);
+    let package = inspect_package_summary(&skill, &file_tree);
+
+    Ok(json!({
+        "schemaVersion": "dock.inspect-report.v1",
+        "status": if warnings.is_empty() { "ok" } else { "warning" },
+        "commandStatus": "ok",
+        "skillId": skill_id(&skill),
+        "skillRef": skill_ref,
+        "package": package,
+        "files": file_tree,
+        "apis": api_reports,
+        "registeredApis": registered_apis,
+        "registeredApisSource": registration_source,
+        "components": component_reports,
+        "permissions": permissions,
+        "risks": risks,
+        "wxApiUsage": wx_usage,
+        "warnings": warnings,
+        "validation": validation_summary(&skill.validation),
+    }))
+}
+
+fn inspect_file_tree(root: &Path) -> Result<Vec<Value>, CliError> {
+    let mut files = Vec::new();
+    inspect_file_tree_inner(root, root, &mut files)?;
+    files.sort_by(|left, right| {
+        left.get("path")
+            .and_then(Value::as_str)
+            .cmp(&right.get("path").and_then(Value::as_str))
+    });
+    Ok(files)
+}
+
+fn inspect_file_tree_inner(
+    root: &Path,
+    dir: &Path,
+    files: &mut Vec<Value>,
+) -> Result<(), CliError> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let relative = safe_relative_path(root, &path)?;
+        let kind = if metadata.file_type().is_symlink() {
+            "symlink"
+        } else if metadata.is_dir() {
+            "directory"
+        } else {
+            "file"
+        };
+        files.push(json!({
+            "path": relative,
+            "kind": kind,
+            "sizeBytes": if metadata.is_file() { Some(metadata.len()) } else { None },
+        }));
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            inspect_file_tree_inner(root, &path, files)?;
+        }
+    }
+    Ok(())
+}
+
+fn safe_relative_path(root: &Path, path: &Path) -> Result<String, CliError> {
+    let relative = path.strip_prefix(root).map_err(|_| {
+        CliError::Demo(format!(
+            "inspect path escaped skill root: {}",
+            redact_text(&path.display().to_string())
+        ))
+    })?;
+    let rendered = relative
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
+    if rendered.contains("..") || rendered.contains('\0') || rendered.trim().is_empty() {
+        return Err(CliError::Demo(
+            "inspect encountered an unsafe package path".to_owned(),
+        ));
+    }
+    Ok(rendered)
+}
+
+fn inspect_package_summary(skill: &LoadedSkill, file_tree: &[Value]) -> Value {
+    json!({
+        "entry": skill.entry_js.relative_path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"),
+        "skillMd": skill.skill_md.relative_path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"),
+        "fileCount": file_tree.len(),
+        "apiModuleCount": skill.api_modules.len(),
+        "componentCount": skill.components.len(),
+        "supplyChain": supply_chain_report(skill),
+    })
+}
+
+fn inspect_api_reports(
+    skill: &LoadedSkill,
+    registered_apis: &[String],
+    registration_source: &str,
+    registration_error: Option<&String>,
+) -> Vec<Value> {
+    skill
+        .manifest
+        .apis
+        .iter()
+        .map(|api| {
+            let registered = registered_apis.iter().any(|name| name == &api.name);
+            let api_module_path = skill
+                .api_modules
+                .get(&api.name)
+                .map(|module| module.relative_path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"));
+            let input_formats = api
+                .input_formats()
+                .into_iter()
+                .map(|field| json!({ "path": field.path, "format": field.format }))
+                .collect::<Vec<_>>();
+            let compatibility_status = if registration_error.is_some() {
+                if registered {
+                    api_compatibility_status(api, registered, &input_formats)
+                } else {
+                    "unsupported"
+                }
+            } else {
+                api_compatibility_status(api, registered, &input_formats)
+            };
+            json!({
+                "name": api.name,
+                "description": api.description,
+                "registered": registered,
+                "registrationStatus": if registered && registration_error.is_some() {
+                    "registered-static-with-vm-error"
+                } else if registered {
+                    "declared-and-registered"
+                } else {
+                    "declared-only"
+                },
+                "registrationSource": registration_source,
+                "registrationReason": registration_error.map(|error| redact_text(error)),
+                "apiModule": api_module_path,
+                "componentPath": api.component_path(),
+                "risk": api.meta.as_ref().and_then(|meta| meta.anp.as_ref()).and_then(|anp| anp.get("risk")).cloned(),
+                "consentRequired": api_risk_requires_consent(api),
+                "inputFormats": input_formats,
+                "hasOutputSchema": api.output_schema.is_some(),
+                "compatibilityStatus": compatibility_status,
+                "suggestion": api_report_suggestion(api, registered, &input_formats),
+            })
+        })
+        .collect()
+}
+
+fn inspect_registered_api_scan(skill: &LoadedSkill) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    scan_registered_api_names(&skill.entry_js.source, &mut names);
+    for module in skill.api_modules.values() {
+        scan_registered_api_names(&module.source, &mut names);
+    }
+    names.into_iter().collect()
+}
+
+fn scan_registered_api_names(source: &str, names: &mut BTreeSet<String>) {
+    let bytes = source.as_bytes();
+    let mut offset = 0;
+    while let Some(found) = source[offset..].find("registerAPI") {
+        let mut index = offset + found + "registerAPI".len();
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if bytes.get(index) != Some(&b'(') {
+            offset = index;
+            continue;
+        }
+        index += 1;
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        let Some(quote @ (b'\'' | b'"' | b'`')) = bytes.get(index).copied() else {
+            offset = index;
+            continue;
+        };
+        index += 1;
+        let start = index;
+        while index < bytes.len() && bytes[index] != quote {
+            if bytes[index] == b'\\' {
+                index = index.saturating_add(2);
+            } else {
+                index += 1;
+            }
+        }
+        if index <= bytes.len() && index > start {
+            let name = &source[start..index];
+            if !name.trim().is_empty() {
+                names.insert(name.to_owned());
+            }
+        }
+        offset = index.saturating_add(1);
+    }
+}
+
+fn inspect_warnings(skill: &LoadedSkill, registration_error: Option<&String>) -> Vec<Value> {
+    let mut warnings = Vec::new();
+    if let Some(error) = registration_error {
+        warnings.push(json!({
+            "code": "api_registration_unknown",
+            "message": redact_text(error),
+            "suggestion": "Fix API VM registration errors before relying on inspect registrationStatus.",
+        }));
+    }
+    for warning in &skill.validation.warnings {
+        let mut warning_json = validation_issue_json(warning);
+        if let Value::Object(fields) = &mut warning_json {
+            fields.insert("code".to_owned(), json!("validation_warning"));
+        }
+        warnings.push(warning_json);
+    }
+    warnings
+}
+
+fn inspect_wx_usage(skill: &LoadedSkill) -> Value {
+    let mut usages = Vec::new();
+    scan_wx_usage(&mut usages, "index.js", &skill.entry_js.source);
+    for module in skill.api_modules.values() {
+        scan_wx_usage(
+            &mut usages,
+            &module
+                .relative_path
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/"),
+            &module.source,
+        );
+    }
+    for component in skill.components.values() {
+        for source in [
+            component.index_js.as_ref(),
+            component.index_wxml.as_ref(),
+            component.index_wxss.as_ref(),
+            component.index_json.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            scan_wx_usage(
+                &mut usages,
+                &source
+                    .relative_path
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/"),
+                &source.source,
+            );
+        }
+    }
+    usages.sort_by(|left, right| {
+        (
+            left.get("api").and_then(Value::as_str),
+            left.get("file").and_then(Value::as_str),
+            left.get("line").and_then(Value::as_u64),
+        )
+            .cmp(&(
+                right.get("api").and_then(Value::as_str),
+                right.get("file").and_then(Value::as_str),
+                right.get("line").and_then(Value::as_u64),
+            ))
+    });
+    json!({
+        "status": if usages.is_empty() { "unknown-with-reason" } else { "scanned" },
+        "reason": "Static string scan over loaded Skill JS/component files; dynamic property access is reported as unknown and should be verified with test-skill.",
+        "items": usages,
+    })
+}
+
+fn scan_wx_usage(usages: &mut Vec<Value>, file: &str, source: &str) {
+    for (line_index, line) in source.lines().enumerate() {
+        let mut offset = 0;
+        while let Some(found) = line[offset..].find("wx.") {
+            let start = offset + found + 3;
+            let Some((api, consumed)) = parse_wx_api(&line[start..]) else {
+                offset = start;
+                continue;
+            };
+            usages.push(json!({
+                "api": format!("wx.{api}"),
+                "file": file,
+                "line": line_index + 1,
+                "confidence": "static-string-scan",
+            }));
+            offset = start + consumed;
+        }
+    }
+}
+
+fn parse_wx_api(input: &str) -> Option<(String, usize)> {
+    let mut consumed = 0;
+    let mut parts = Vec::new();
+    for segment in input.split('.') {
+        let ident: String = segment
+            .chars()
+            .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+            .collect();
+        if ident.is_empty() {
+            break;
+        }
+        consumed += ident.len();
+        parts.push(ident);
+        if parts.len() == 2 {
+            break;
+        }
+        if input.as_bytes().get(consumed) == Some(&b'.') {
+            consumed += 1;
+        } else {
+            break;
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some((parts.join("."), consumed))
+    }
 }
 
 fn call_api(skill_path: &Path, api_name: &str, json_args: &str) -> Result<Value, CliError> {
@@ -2030,8 +2376,26 @@ fn write_json(writer: &mut impl Write, output: &impl Serialize) -> Result<(), Cl
 fn validation_summary(report: &ValidationReport) -> Value {
     json!({
         "valid": report.is_valid(),
-        "errors": report.errors,
-        "warnings": report.warnings
+        "errors": report
+            .errors
+            .iter()
+            .map(validation_issue_json)
+            .collect::<Vec<_>>(),
+        "warnings": report
+            .warnings
+            .iter()
+            .map(validation_issue_json)
+            .collect::<Vec<_>>()
+    })
+}
+
+fn validation_issue_json(issue: &ValidationIssue) -> Value {
+    json!({
+        "level": issue.level,
+        "category": issue.category,
+        "path": redact_text(&issue.path),
+        "message": redact_text(&issue.message),
+        "suggestion": issue.suggestion.as_ref().map(|suggestion| redact_text(suggestion)),
     })
 }
 
@@ -2105,7 +2469,7 @@ fn redact_text(value: &str) -> String {
             .to_ascii_lowercase()
             .contains(&marker.to_ascii_lowercase())
         {
-            return format!("{marker}=[REDACTED]");
+            return "[REDACTED]".to_owned();
         }
     }
     value.to_owned()
@@ -2114,6 +2478,7 @@ fn redact_text(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mcp_schema::ValidationIssueLevel;
     use std::fs;
 
     #[test]
@@ -2121,6 +2486,13 @@ mod tests {
         let cli = Cli::try_parse_from_args(["dock-cli", "validate", "examples/coffee-skill"])
             .expect("args parse");
         assert!(matches!(cli.command, Command::Validate { .. }));
+    }
+
+    #[test]
+    fn parses_inspect_args() {
+        let cli = Cli::try_parse_from_args(["dock-cli", "inspect", "examples/coffee-skill"])
+            .expect("args parse");
+        assert!(matches!(cli.command, Command::Inspect { .. }));
     }
 
     #[test]
@@ -2153,7 +2525,7 @@ mod tests {
     #[test]
     fn redacts_http_errors() {
         let redacted = redact_text(r#"{"capabilityToken":"demo-token"}"#);
-        assert_eq!(redacted, "capabilityToken=[REDACTED]");
+        assert_eq!(redacted, "[REDACTED]");
     }
 
     #[test]
@@ -2239,6 +2611,114 @@ mod tests {
         assert!(!output
             .to_string()
             .contains(&fixture.root.display().to_string()));
+    }
+
+    #[test]
+    fn inspect_reports_package_graph_and_wx_usage_without_absolute_paths() {
+        let fixture = InspectSkillFixture::new();
+        let output = inspect(&fixture.root).expect("inspect reports package graph");
+
+        assert_eq!(output["schemaVersion"], "dock.inspect-report.v1");
+        assert_eq!(output["status"], "warning");
+        assert_eq!(output["commandStatus"], "ok");
+        assert_eq!(output["skillRef"]["redacted"], true);
+        assert_eq!(output["skillId"], "inspect-fixture");
+        assert_eq!(output["package"]["entry"], "index.js");
+        assert_eq!(output["package"]["skillMd"], "SKILL.md");
+        assert!(output["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .any(|file| file["path"] == "mcp.json" && file["kind"] == "file"));
+        assert!(output["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .all(|file| file["path"]
+                .as_str()
+                .is_some_and(|path| !path.starts_with('/'))));
+        assert!(output["registeredApis"]
+            .as_array()
+            .expect("registered apis")
+            .iter()
+            .any(|api| api == "registered"));
+        assert!(matches!(
+            output["registeredApisSource"].as_str(),
+            Some("api-vm-registration-trace" | "static-register-api-scan")
+        ));
+        assert!(output["apis"]
+            .as_array()
+            .expect("apis")
+            .iter()
+            .any(|api| api["name"] == "registered"
+                && api["registered"] == true
+                && matches!(
+                    api["registrationStatus"].as_str(),
+                    Some("declared-and-registered" | "registered-static-with-vm-error")
+                )
+                && api["risk"] == "payment"
+                && api["consentRequired"] == true));
+        assert!(output["apis"]
+            .as_array()
+            .expect("apis")
+            .iter()
+            .any(|api| api["name"] == "declaredOnly"
+                && api["registered"] == false
+                && api["registrationStatus"] == "declared-only"));
+        assert!(output["components"]
+            .as_array()
+            .expect("components")
+            .iter()
+            .any(
+                |component| component["path"] == "components/inspect-card/index"
+                    && component["compatibilityStatus"] == "host-boundary"
+                    && component["permissions"]["dynamic"] == true
+            ));
+        assert!(output["permissions"]["requiredHostCapabilities"]
+            .as_array()
+            .expect("host capabilities")
+            .iter()
+            .any(|capability| capability["componentPath"] == "components/inspect-card/index"));
+        assert!(output["wxApiUsage"]["items"]
+            .as_array()
+            .expect("wx usage")
+            .iter()
+            .any(|usage| usage["api"] == "wx.login" && usage["file"] == "index.js"));
+        assert!(output["wxApiUsage"]["items"]
+            .as_array()
+            .expect("wx usage")
+            .iter()
+            .any(|usage| usage["api"] == "wx.request"
+                && usage["file"] == "components/inspect-card/index.js"));
+        assert!(output["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning["code"] == "validation_warning"));
+        let rendered = output.to_string();
+        assert!(!rendered.contains(&fixture.root.display().to_string()));
+        assert!(!rendered.contains("super-secret-token"));
+        assert!(!rendered.contains("Authorization"));
+    }
+
+    #[test]
+    fn validation_summary_redacts_sensitive_issue_text() {
+        let summary = validation_summary(&ValidationReport {
+            errors: vec![ValidationIssue {
+                level: ValidationIssueLevel::Error,
+                category: ValidationIssueCategory::Spec,
+                path: "private/source/path".to_owned(),
+                message: "Authorization header leaked".to_owned(),
+                suggestion: Some("move secret to Host provider".to_owned()),
+            }],
+            warnings: Vec::new(),
+        });
+
+        let rendered = summary.to_string();
+        assert!(!rendered.contains("private/source/path"));
+        assert!(!rendered.contains("Authorization header leaked"));
+        assert!(!rendered.contains("secret"));
+        assert!(rendered.contains("[REDACTED]"));
     }
 
     #[test]
@@ -2581,6 +3061,83 @@ mod tests {
                     }
                   ],
                   "components": []
+                }"#,
+            )
+            .expect("write mcp.json");
+
+            Self { _dir: dir, root }
+        }
+    }
+
+    struct InspectSkillFixture {
+        _dir: TempDir,
+        root: PathBuf,
+    }
+
+    impl InspectSkillFixture {
+        fn new() -> Self {
+            let dir = TempDir::new("dock-cli-inspect-skill-fixture").expect("temp dir");
+            let root = dir.path().to_path_buf();
+            fs::create_dir_all(root.join("components/inspect-card")).expect("component dir");
+            fs::write(root.join("SKILL.md"), "# Inspect Skill").expect("write SKILL.md");
+            fs::write(
+                root.join("index.js"),
+                "const skill = wx.modelContext.createSkill(__dirname)\n\
+                 async function login() { return wx.login() }\n\
+                 skill.registerAPI('registered', async () => {\n\
+                   await login()\n\
+                   return { content: [{ type: 'text', text: 'ok' }] }\n\
+                 })\n\
+                 module.exports = skill\n",
+            )
+            .expect("write index.js");
+            fs::write(
+                root.join("components/inspect-card/index.js"),
+                "Component({ methods: { async refresh() { return wx.request({ url: 'https://example.invalid/status' }) } } })\n\
+                 const secret = 'super-secret-token'\n",
+            )
+            .expect("write component js");
+            fs::write(
+                root.join("components/inspect-card/index.wxml"),
+                "<view><text>{{ apiName }}</text></view>",
+            )
+            .expect("write component wxml");
+            fs::write(
+                root.join("mcp.json"),
+                r#"{
+                  "id": "inspect-fixture",
+                  "apis": [
+                    {
+                      "name": "registered",
+                      "description": "registered API",
+                      "inputSchema": {},
+                      "_meta": {
+                        "ui": { "componentPath": "components/inspect-card/index" },
+                        "anp": { "risk": "payment" }
+                      }
+                    },
+                    {
+                      "name": "declaredOnly",
+                      "description": "declared only API",
+                      "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                          "receipt": {
+                            "type": "string",
+                            "format": "file"
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "components": [{
+                    "path": "components/inspect-card/index",
+                    "permissions": {
+                      "scope.dynamic": {
+                        "desc": "refresh via wx.request"
+                      }
+                    }
+                  }]
                 }"#,
             )
             .expect("write mcp.json");

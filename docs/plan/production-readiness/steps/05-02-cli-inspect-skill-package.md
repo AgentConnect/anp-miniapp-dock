@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-02
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 23:54:31 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 05-01 完成后，启动 CLI inspect |
+| Review evidence | 2026-06-14 00:10:41 +0800 commit 前 Review 已记录：确认 `inspect` 只调用 `load_skill`、API registration trace / 静态注册扫描、文件树和 `wx.*` 静态扫描，不调用 Skill API 或 Host provider；修复 `validation_summary` / inspect warning 可能透传敏感 issue 文本的问题，统一输出 `[REDACTED]` 且不回显 `Authorization` / `Signature` / token marker；确认 file tree 只输出相对路径、类型和大小，不输出源码；确认 dynamic property access 与静态扫描限制已在输出和 Phase 5 文档中标注。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 88]`；已读取主 Plan、Step 05-02 文档、Phase 5 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；已确认 05-01 implementation commit `153027c` 与 closure commit `d8ae27f`；`cargo fmt --check` 通过；`cargo test -p dock-cli inspect` 2 unit + 1 integration passed；`cargo test -p skill-loader` 14 package/path tests + 11 registry/cache tests + doctests passed；`cargo run -p dock-cli -- inspect examples/coffee-skill` 输出 `dock.inspect-report.v1`、`status = warning`、`commandStatus = ok`、`registeredApisSource = api-vm-registration-trace`；`python3 -m json.tool /tmp/dock-inspect-0502.json` 可解析；inspect JSON 脱敏抽样未命中 `/home/`、Authorization、Signature、capabilityToken、private、secret 或 token；`git diff --check -- crates/dock-cli crates/skill-loader crates/mcp-schema docs/plan README.md` 无输出；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
+| Next action | 创建 05-02 focused implementation commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,13 +64,13 @@ Step index：05-02
 
 ## 7. 验收标准
 
-- [ ] `dock-cli inspect` 输出 Skill package 文件、API/registration 对照、componentPath、permissions、risk、wxApiUsage。
-- [ ] 输出支持 JSON，可由 CI/文档示例复用。
-- [ ] 路径以 Skill root 相对路径展示，包外路径 fail closed 或 redacted。
-- [ ] 静态扫描无法确定的能力标注 unknown-with-reason，不误标 supported。
-- [ ] 输出 redacted，不含 token、Authorization、signature、private key path 或隐私原文。
-- [ ] Phase 5 文档和 README/CLI docs 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] `dock-cli inspect` 输出 Skill package 文件、API/registration 对照、componentPath、permissions、risk、wxApiUsage。
+- [x] 输出支持 JSON，可由 CI/文档示例复用。
+- [x] 路径以 Skill root 相对路径展示，包外路径 fail closed 或 redacted。
+- [x] 静态扫描无法确定的能力标注 unknown-with-reason，不误标 supported。
+- [x] 输出 redacted，不含 token、Authorization、signature、private key path 或隐私原文。
+- [x] Phase 5 文档和 README/CLI docs 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -92,11 +92,11 @@ Step index：05-02
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 有，已修复 | 初版 `validation_summary` / inspect warning 直接序列化 loader validation issue，极端情况下可能把敏感 path/message/suggestion 带入 JSON；初版 redaction placeholder 仍回显 `Signature` 等 marker，导致敏感词扫描命中。 |
+| 已修复问题 | 已修复 | 新增 `validation_issue_json`，对 path/message/suggestion 统一调用 `redact_text`；`redact_text` 改为只输出 `[REDACTED]`；补充 `validation_summary_redacts_sensitive_issue_text` 回归测试。 |
+| 剩余风险 | 已记录 | `registeredApisSource = static-register-api-scan` 与 `wxApiUsage` 仍是轻量静态扫描，dynamic property access 必须通过后续 `test-skill` / fixture gate 验证。 |
+| 新增或缺失测试 | 已新增 | 新增 CLI inspect arg/unit 测试、inspect package graph/redaction 测试、coffee inspect integration 测试；未新增完整 JS 静态分析器测试，符合本 Step 非目标。 |
+| 已更新或缺失文档 | 已更新 | 更新 Phase 5 `inspect` schema/限制说明和 README CLI 示例；主 Plan 和本 Step 台账同步。 |
 
 ## 10. Commit 要求
 
@@ -112,7 +112,7 @@ Step index：05-02
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 无 | 无 | 当前步骤 / 整体计划 | 无 |
 
 ## 12. Plan 变更记录
 

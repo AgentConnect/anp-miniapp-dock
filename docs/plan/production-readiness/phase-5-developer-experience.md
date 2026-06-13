@@ -59,14 +59,38 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ### 3.2 `inspect`
 
-展示：
+输出 `dock.inspect-report.v1` JSON：
 
-- Skill package 文件；
-- API 注册与 manifest 对照；
-- componentPath；
-- 权限需求；
-- 风险等级；
-- 使用到的 `wx.*` API（可静态扫描 + runtime trace）。
+```json
+{
+  "schemaVersion": "dock.inspect-report.v1",
+  "status": "ok|warning",
+  "commandStatus": "ok",
+  "skillId": "...",
+  "skillRef": {},
+  "package": {},
+  "files": [],
+  "apis": [],
+  "registeredApis": [],
+  "registeredApisSource": "api-vm-registration-trace|static-register-api-scan|unknown-with-reason",
+  "components": [],
+  "permissions": {},
+  "risks": [],
+  "wxApiUsage": {
+    "status": "scanned|unknown-with-reason",
+    "items": []
+  },
+  "warnings": []
+}
+```
+
+要求：
+
+- Skill package 文件只展示相对路径、类型和大小，不输出源码内容；
+- API 注册与 manifest 对照必须标出 `declared-and-registered`、`declared-only` 或 `registered-static-with-vm-error`；
+- componentPath、权限需求、风险等级复用 validate 状态枚举；
+- `wx.*` 使用痕迹来自静态字符串扫描，必须说明 dynamic property access 需要 `test-skill` 继续验证；
+- 绝对路径、包外路径、token、Authorization、signature、private key path 和隐私原文必须脱敏或 fail closed。
 
 ### 3.3 `test-skill`
 
