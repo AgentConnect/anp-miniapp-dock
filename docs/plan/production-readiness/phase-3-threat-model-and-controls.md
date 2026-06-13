@@ -1,6 +1,6 @@
 # Phase 3 子文档：Threat Model 与安全控制
 
-本文是 `docs/security/threat-model.md` 的 Phase 3 摘要。完整风险等级、L3/L4 控制矩阵、owner、required gate、残余风险和 release blocker 以 `docs/security/threat-model.md` 为准；本文不把 Step 03-02 至 03-06 的 planned gate 写成已完成。
+本文是 `docs/security/threat-model.md` 的 Phase 3 摘要。完整风险等级、L3/L4 控制矩阵、owner、required gate、残余风险和 release blocker 以 `docs/security/threat-model.md` 为准；Step 03-02 sandbox/resource 本地 release gate 已补齐，Step 03-03 至 03-06 的 planned gate 仍不得写成已完成。
 
 ## 0. 风险等级
 
@@ -92,7 +92,7 @@
 
 | 威胁 | 控制 | 当前证据 | Phase 3 required gate |
 |---|---|---|---|
-| JS escape | 禁用 eval/Function/prototype constructor/process/fetch/WebSocket，限制 timer/result/console/resource | Step 02-05 最小 sandbox/dynamic tests | Step 03-02 full sandbox/resource regression |
+| JS escape | 禁用 eval/Function/prototype constructor/process/fetch/WebSocket，限制 timer/result/console/resource | Step 03-02 本地 gate：Atomic API VM sandbox/limit/console/pending job tests，Component VM sandbox/dynamic/snapshot size tests | CI 自动化和 resource metrics 待 Phase 6 |
 | Path traversal | canonicalize + validate inside root | skill-loader path tests | Step 03-06 symlink/zip slip/remote require/digest/signature gate |
 | Unauthorized network | allowlist + broker only | RequestBroker deny-by-default、auth header deny tests | Step 03-03 scheme/host/port/path/method/scope allowlist |
 | Token leakage | host-only token + redaction | CLI/log/audit redaction tests | Step 03-04 lifecycle redaction + Step 03-05 audit export redaction |

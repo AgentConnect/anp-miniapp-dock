@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 3 security gates 基线
+> 状态：Phase 3 security gates 基线；Step 03-02 sandbox/resource gate 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -65,7 +65,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 本节把安全 gate 分成三类：
 
 - **当前必须执行**：当前代码库已有自动化或手工 gate，任何 Step / release 都必须执行或记录无法执行原因。
-- **Phase 3 required**：Phase 3 的 Step 03-02 至 03-06 必须实现或升级为 required 的 gate；在对应 Step 完成前不得写成“已通过”。
+- **Phase 3 required**：Phase 3 的 Step 03-02 至 03-06 必须实现或升级为 required 的 gate；在对应 Step 完成前不得写成“已通过”。Step 03-02 已升级为本地 required release gate；CI 自动化仍待 Phase 6。
 - **Phase 4/5 后续 gate**：依赖 production Host、registry、持久化 backend、开发者工具或 CI 自动化的 gate；当前仍是 production release blocker，但不作为 03-01 的已实现证据。
 
 ### 4.1 当前必须执行
@@ -77,8 +77,8 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Skill package path escape / absolute path deny | [`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs) |
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
-| Atomic API sandbox、unsafe require、timeout | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs) |
-| Component sandbox、default no network/timer、native bridge hidden、expire 后事件失败 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs) |
+| Atomic API sandbox、unsafe require、timeout、WebSocket/timer globals deny、Promise job drain、console/result size limit | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs) |
+| Component sandbox、default no network/timer、native bridge hidden、snapshot size limit、expire 后事件失败 | [`component_lifecycle.rs`](../../crates/component-runtime/tests/component_lifecycle.rs)、[`component_vm.rs`](../../crates/component-runtime/src/component_vm.rs) |
 | Component profile 默认 deny request/timer，dynamic 才可表达 request/timer boundary | [`component_permissions.rs`](../../crates/wx-compat/tests/component_permissions.rs) |
 | Request allowlist deny by default / miss deny without transport | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | token scope isolation、HTTP Signature fallback、401 retry | [`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
@@ -106,7 +106,7 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 | Gate | Step | 当前处理 | 完成后必须记录 |
 |---|---|---|---|
-| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | 03-02 | Step 02-05 已覆盖 dynamic 前置最小 gate；仍缺完整 Atomic API VM + Component VM release blocker 专项回归集 | `cargo test -p js-runtime-quickjs sandbox`、`cargo test -p component-runtime sandbox`、limit error redaction 抽样、resource limit 残余风险 |
+| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | 03-02 | 已升级为本地 required release gate：Atomic API VM 禁用 WebSocket/timer globals，限制 Promise job drain、console 和 result size；Component VM 扩展 escape regression 并限制 snapshot output size；dynamic 例外仍只由 component capability profile 开放 | `cargo test -p js-runtime-quickjs sandbox`、`cargo test -p js-runtime-quickjs limit`、`cargo test -p js-runtime-quickjs console`、`cargo test -p js-runtime-quickjs invalid_atomic`、`cargo test -p js-runtime-quickjs pending_job`、`cargo test -p component-runtime sandbox`、`cargo test -p component-runtime dynamic`、`cargo test -p component-runtime snapshot_size`、`cargo test -p js-runtime-quickjs`、`cargo test -p component-runtime`；CI 自动化和 resource metrics 仍待 Phase 6 |
 | permission policy engine：`Allow` / `Deny` / `Prompt` / `MockAllowed(dev_only)`，Host deny override，manifest permission，dynamic scope，merchant trust policy | 03-03 | 高风险 provider boundary 已 fail closed；策略仍分散在 profile、broker、orchestrator 和 manifest validation | permission tests、core enforcement tests、decision audit summary、mock dev-only release blocker |
 | network allowlist：scheme、host、port、path prefix、method、scope，默认 deny | 03-03 | RequestBroker 已有 deny-by-default 和 authority allowlist；path/method/scope 仍需统一 gate | allowlist path/method/scope tests、denied audit、redacted stable reason |
 | DID/token lifecycle：token claims version、refresh、revoke/logout、cache eviction、jti replay、challenge nonce 一次性、resolver cache/trust anchor | 03-04 | 当前已有 challenge proof、JWT scope/audience/TTL 和 session cache；revoke/replay/resolver 仍未生产化 | `cargo test -p anp-adapter session`、`cargo test -p anp-adapter challenge`、`cargo test -p demo-server token`、token redaction 抽样 |

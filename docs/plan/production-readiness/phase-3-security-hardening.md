@@ -6,7 +6,7 @@ Phase 3 要把安全能力从“Demo 中有边界”升级为“线上默认安�
 
 深入威胁模型见：[Threat Model 与安全控制](phase-3-threat-model-and-controls.md)。
 
-当前执行状态：Step 03-01 冻结风险分级、owner、required gate 和 release blocker 口径；Step 03-02 至 03-06 负责把这些 gate 实现、验证并回填证据。本文不把 planned gate 写成已自动化。
+当前执行状态：Step 03-01 冻结风险分级、owner、required gate 和 release blocker 口径；Step 03-02 已把 sandbox/resource gate 升级为本地 required release gate；Step 03-03 至 03-06 继续负责把 permission、token、consent/audit 和 supply-chain gate 实现、验证并回填证据。本文不把尚未落地的 CI 自动化写成已完成。
 
 ## 2. 涉及模块
 
@@ -48,7 +48,7 @@ Phase 3 要把安全能力从“Demo 中有边界”升级为“线上默认安�
 - 每次 API call 独立 context；
 - component expire/detach 后不可继续执行事件或 timer。
 
-验收：Step 03-02 必须让 sandbox escape/resource limit tests 成为 release gate；在 CI 自动化落地前，runbook 必须记录本地命令、测试范围和残余风险。
+验收：Step 03-02 已让 sandbox escape/resource limit tests 成为本地 release gate；在 CI 自动化落地前，runbook 必须记录本地命令、测试范围和残余风险。
 
 ### 3.3 权限策略引擎
 
@@ -129,7 +129,7 @@ Allow | Deny(reason) | Prompt(consent_request) | MockAllowed(dev_only)
 | Gate | 示例 | 对应 Step | 当前状态 |
 |---|---|---|---|
 | threat classification | L0-L4、L3/L4 控制矩阵、owner、release blocker | 03-01 | 当前 Step 收敛 |
-| sandbox escape | Function constructor、prototype constructor、process/fetch/WebSocket、timer/result/console limit | 03-02 | Step 02-05 已有最小 dynamic gate；Phase 3 待升级 |
+| sandbox escape | Function constructor、prototype constructor、process/fetch/WebSocket、timer/result/console limit | 03-02 | 本地 required release gate 已升级；CI 自动化待 Phase 6 |
 | path escape | absolute path、`..`、symlink outside package、zip slip、remote require | 03-06 | 当前 path/manifest validation；digest/signature 待实现 |
 | network deny | non-allowlist host、scheme/path/method/scope mismatch、Authorization override | 03-03 | 当前 deny-by-default 基线；统一 policy engine 待实现 |
 | token security | replay、expired、wrong scope、wrong audience、resolver mismatch、revoke/logout | 03-04 | 当前 challenge/JWT 基线；lifecycle/replay/resolver 待实现 |
@@ -140,6 +140,7 @@ Allow | Deny(reason) | Prompt(consent_request) | MockAllowed(dev_only)
 ## 5. 阶段完成检查
 
 - [x] threat model 完成并链接到 release gates，作为 Step 03-01 控制矩阵基线。
+- [x] sandbox escape/resource tests 成为本地 required release gate。
 - [ ] sandbox escape tests 进入 CI。
 - [ ] permission engine 默认 fail closed。
 - [ ] DID/token lifecycle 覆盖 refresh/revoke/replay。

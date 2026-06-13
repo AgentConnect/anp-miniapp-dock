@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-02
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 13:52:49 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 03-01 完成后，启动 QuickJS 沙箱加固 |
+| Review evidence | 2026-06-13 14:06:07 +0800 commit 前 Review：修复 API VM console trace 因 `Rc::try_unwrap` 失败而丢失的问题；修复 `InvalidResult` 仍可能通过 serde 错误文本回显敏感 payload 的问题；确认 Atomic API VM WebSocket/timer globals deny、Promise job drain、console/result size、Component VM snapshot size、dynamic timer cleanup 与文档 gate 一致。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p js-runtime-quickjs sandbox` 通过；`cargo test -p js-runtime-quickjs limit` 2 passed；`cargo test -p js-runtime-quickjs console` 1 passed；`cargo test -p js-runtime-quickjs invalid_atomic` 1 passed；`cargo test -p js-runtime-quickjs pending_job` 1 passed；`cargo test -p component-runtime sandbox` 2 passed；`cargo test -p component-runtime dynamic` 5 passed + snapshot dynamic 2 passed；`cargo test -p component-runtime snapshot_size` 1 passed；`cargo test -p js-runtime-quickjs` 47 passed；`cargo test -p component-runtime` 53 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/js-runtime-quickjs crates/component-runtime docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值和 redaction 断言。 |
+| Next action | 创建 Step 03-02 focused commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,12 +63,12 @@ Step index：03-02
 
 ## 7. 验收标准
 
-- [ ] Atomic API VM 和 Component VM 都有 constructor/eval/Function/process/fetch/WebSocket/require escape regression tests。
-- [ ] memory、stack、CPU timeout、Promise job drain、console size、result size 至少有 focused test 或明确 skip 原因。
-- [ ] limit hit 返回稳定脱敏错误，不泄露 JS 源码中的敏感值或 Host private data。
-- [ ] 复核 Step 02-05 的 dynamic component gate 仍通过，且 Component expire/detach 后不能继续触发事件、timer 或高风险 action。
-- [ ] Release Gates 将 sandbox escape regression 列为 required。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Atomic API VM 和 Component VM 都有 constructor/eval/Function/process/fetch/WebSocket/require escape regression tests；Atomic API 的 `require` 是受控包内 CommonJS 能力，包外/remote/path escape 由 `require_parent_escape_is_rejected` 和 CommonJS resolver tests 覆盖。
+- [x] memory、stack、CPU timeout、Promise job drain、console size、result size 至少有 focused test 或明确 skip 原因：memory/stack 由 QuickJS runtime config gate 保持默认限制；CPU timeout、Promise job drain、console size、Atomic API result size 和 Component snapshot size 均有 focused tests。
+- [x] limit hit 返回稳定脱敏错误，不泄露 JS 源码中的敏感值或 Host private data。
+- [x] 复核 Step 02-05 的 dynamic component gate 仍通过，且 Component expire/detach 后不能继续触发事件、timer 或高风险 action。
+- [x] Release Gates 将 sandbox escape regression 列为 required。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -91,11 +91,11 @@ Step index：03-02
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | API VM console trace 初版使用 `Rc::try_unwrap(console).unwrap_or_default()`，Host bridge closure 仍持有 `Rc` 时会丢弃全部 console 记录，导致 console size gate 不可审计；`InvalidResult` 初版仍包含 serde error 文本，可能回显 invalid payload 中的敏感字段；主 Plan Step 拆分表仍把 03-01/03-02 标为 pending，与执行台账不一致。 |
+| 已修复问题 | 已修复 | API VM trace 改为 clone console buffer；invalid schema error 改为稳定 `schema validation failed`，不带原始 payload；Atomic API VM 增加 WebSocket/timer globals deny、Promise job drain、console/result size 限制；Component VM 增加 snapshot output size 限制；主 Plan 状态将在本 Step 收尾中同步。 |
+| 剩余风险 | 已记录 | 本 Step 只完成本地 required release gate，不声明 CI 自动化已完成；真实 Host transport/background scheduler、persistent request/audit、permission allowlist、token lifecycle、Skill 包签名和 resource metrics 仍由 03-03 至 03-06、Phase 4 和 Phase 6 承接。 |
+| 新增或缺失测试 | 已补齐本 Step 范围 | 新增/扩展 `crates/js-runtime-quickjs/tests/middleware_chain.rs` 覆盖 WebSocket/timer globals、prototype/async/generator constructor、console truncation、result size、invalid result redaction、pending job drain；新增/扩展 `crates/component-runtime/tests/component_lifecycle.rs` 覆盖 require/eval/process/clear timer/constructor escape 和 snapshot size limit。memory/stack 依赖 QuickJS runtime config，未新增 OOM/stack overflow pressure test，避免环境敏感和不稳定。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 3 安全文档、Phase 3 threat-model 摘要、主 Plan 和本 Step 文档；明确 CI 自动化仍待 Phase 6，不把本地 gate 误写成已自动化。 |
 
 ## 10. Commit 要求
 
@@ -106,6 +106,13 @@ Step index：03-02
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase3: harden quickjs sandbox limits`
+
+执行记录：
+
+- Commit 前状态：`git status --short --branch` 显示仅 Step 03-02 范围内的 `crates/js-runtime-quickjs`、`crates/component-runtime`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 3 文档、主 Plan 和本 Step 文档变更。
+- 纳入文件：`crates/js-runtime-quickjs/src/api_vm.rs`、`crates/js-runtime-quickjs/src/bridge.rs`、`crates/js-runtime-quickjs/tests/middleware_chain.rs`、`crates/component-runtime/src/component_vm.rs`、`crates/component-runtime/tests/component_lifecycle.rs`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-3-security-hardening.md`、`docs/plan/production-readiness/phase-3-threat-model-and-controls.md`、主 Plan 和本 Step 文档。
+- Commit 后证据：待记录。
+- 遗留未提交变更：待记录。
 
 ## 11. Blocked 处理
 

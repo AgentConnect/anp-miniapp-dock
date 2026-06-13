@@ -38,6 +38,10 @@ pub struct ApiVmConfig {
     pub timeout: Duration,
     pub memory_limit_bytes: usize,
     pub max_stack_size_bytes: usize,
+    pub max_pending_jobs: usize,
+    pub max_console_entries: usize,
+    pub max_console_message_chars: usize,
+    pub max_result_json_bytes: usize,
 }
 
 impl Default for ApiVmConfig {
@@ -46,6 +50,10 @@ impl Default for ApiVmConfig {
             timeout: Duration::from_secs(300),
             memory_limit_bytes: 16 * 1024 * 1024,
             max_stack_size_bytes: 512 * 1024,
+            max_pending_jobs: 1024,
+            max_console_entries: 64,
+            max_console_message_chars: 2048,
+            max_result_json_bytes: 256 * 1024,
         }
     }
 }
@@ -212,6 +220,12 @@ pub enum ApiVmError {
     #[error("API `{0}` returned invalid AtomicApiResult: {1}")]
     InvalidResult(String, String),
 
+    #[error("API `{0}` result exceeded size limit of {1} bytes")]
+    ResultTooLarge(String, usize),
+
+    #[error("QuickJS pending job limit exceeded")]
+    PendingJobLimitExceeded,
+
     #[error("API `{0}` timed out after {1:?}")]
     Timeout(String, Duration),
 }
@@ -226,6 +240,8 @@ impl ApiVmError {
             | Self::ManifestApiNotRegistered(_)
             | Self::InvalidJson(_, _)
             | Self::InvalidResult(_, _)
+            | Self::ResultTooLarge(_, _)
+            | Self::PendingJobLimitExceeded
             | Self::UnsafeRequire(_) => ErrorCode::ValidationFailed,
             Self::QuickJs(_) => ErrorCode::VmFailed,
         }
@@ -364,7 +380,7 @@ fn evaluate_registration(
             .call::<_, ()>(())
             .catch(&ctx)
             .map_err(caught_error)?;
-        drain_jobs(&ctx);
+        drain_jobs(&ctx, config.max_pending_jobs)?;
 
         let registered_names: Function = ctx
             .globals()
@@ -420,7 +436,7 @@ fn execute_api_call(
             .call::<_, ()>(())
             .catch(&ctx)
             .map_err(caught_error)?;
-        drain_jobs(&ctx);
+        drain_jobs(&ctx, config.max_pending_jobs)?;
 
         let context_json = serde_json::to_string(&call.to_context_value())
             .map_err(|error| ApiVmError::InvalidJson(api_name.clone(), error.to_string()))?;
@@ -436,14 +452,16 @@ fn execute_api_call(
             .finish::<String>()
             .catch(&ctx)
             .map_err(|error| map_caught_or_timeout(error, &api_name, config.timeout))?;
+        if result_json.len() > config.max_result_json_bytes {
+            return Err(ApiVmError::ResultTooLarge(
+                api_name.clone(),
+                config.max_result_json_bytes,
+            ));
+        }
 
-        let mut result =
-            serde_json::from_str::<AtomicApiResult>(&result_json).map_err(|error| {
-                ApiVmError::InvalidResult(
-                    api_name.clone(),
-                    format!("{error}; payload={result_json}"),
-                )
-            })?;
+        let mut result = serde_json::from_str::<AtomicApiResult>(&result_json).map_err(|_| {
+            ApiVmError::InvalidResult(api_name.clone(), "schema validation failed".to_owned())
+        })?;
         bridge.attach_model_context_meta(&mut result);
         Ok(result)
     })?;
@@ -476,7 +494,7 @@ fn with_runtime<R>(
         .map_err(|error| ApiVmError::InvalidJson("__modules".to_owned(), error.to_string()))?;
 
     let result = context.with(|ctx| {
-        install_host_bridge(ctx.clone(), modules_json, console.clone(), bridge)?;
+        install_host_bridge(ctx.clone(), modules_json, console.clone(), bridge, config)?;
         ctx.eval::<(), _>(runtime_bootstrap())
             .catch(&ctx)
             .map_err(caught_error)?;
@@ -485,7 +503,7 @@ fn with_runtime<R>(
     });
 
     let trace = ExecutionTrace {
-        console: Rc::try_unwrap(console).unwrap_or_default().into_inner(),
+        console: console.borrow().clone(),
     };
 
     runtime.set_interrupt_handler(None);
@@ -498,6 +516,7 @@ fn install_host_bridge<'js>(
     modules_json: String,
     console: Rc<RefCell<Vec<ConsoleEntry>>>,
     bridge: HostBridgeRuntime,
+    config: &ApiVmConfig,
 ) -> Result<(), ApiVmError> {
     let dock = Object::new(ctx.clone()).map_err(to_quickjs_error)?;
     let modules_json_fn = {
@@ -578,16 +597,27 @@ fn install_host_bridge<'js>(
     dock.set("modelContextExpireAllCards", expire_all_cards_fn)
         .map_err(to_quickjs_error)?;
 
+    let max_console_entries = config.max_console_entries;
+    let max_console_message_chars = config.max_console_message_chars;
     let log_fn = Func::from(move |level: String, args: Vec<String>| {
         let level = match level.as_str() {
             "warn" => ConsoleLevel::Warn,
             "error" => ConsoleLevel::Error,
             _ => ConsoleLevel::Log,
         };
-        console.borrow_mut().push(ConsoleEntry {
-            level,
-            message: args.join(" "),
-        });
+        let mut entries = console.borrow_mut();
+        if max_console_entries == 0 {
+            return;
+        }
+        if entries.len() >= max_console_entries {
+            if let Some(last) = entries.last_mut() {
+                last.level = ConsoleLevel::Warn;
+                last.message = "[console output truncated]".to_owned();
+            }
+            return;
+        }
+        let message = truncate_chars(&args.join(" "), max_console_message_chars);
+        entries.push(ConsoleEntry { level, message });
     });
     dock.set("log", log_fn).map_err(to_quickjs_error)?;
     ctx.globals()
@@ -1836,8 +1866,33 @@ fn validate_registration(
     Ok(())
 }
 
-fn drain_jobs(ctx: &Ctx<'_>) {
-    while ctx.execute_pending_job() {}
+fn drain_jobs(ctx: &Ctx<'_>, max_pending_jobs: usize) -> Result<(), ApiVmError> {
+    let mut drained = 0;
+    while ctx.execute_pending_job() {
+        drained += 1;
+        if drained > max_pending_jobs {
+            return Err(ApiVmError::PendingJobLimitExceeded);
+        }
+    }
+    Ok(())
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    if value.chars().count() <= max_chars {
+        return value.to_owned();
+    }
+    const MARKER: &str = "...[TRUNCATED]";
+    let marker_chars = MARKER.chars().count();
+    if max_chars <= marker_chars {
+        return MARKER.chars().take(max_chars).collect();
+    }
+    let prefix_len = max_chars - marker_chars;
+    let mut truncated = value.chars().take(prefix_len).collect::<String>();
+    truncated.push_str(MARKER);
+    truncated
 }
 
 fn map_caught_or_timeout(error: CaughtError<'_>, api_name: &str, timeout: Duration) -> ApiVmError {

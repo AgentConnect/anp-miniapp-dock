@@ -491,6 +491,11 @@ Object.defineProperty(globalThis, 'Function', { value: undefined, configurable: 
 Object.defineProperty(globalThis, 'Proxy', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'process', { value: undefined, configurable: false, writable: false });
 Object.defineProperty(globalThis, 'fetch', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'WebSocket', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'setTimeout', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'setInterval', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'clearTimeout', { value: undefined, configurable: false, writable: false });
+Object.defineProperty(globalThis, 'clearInterval', { value: undefined, configurable: false, writable: false });
 
 function __dockLoadEntry() {
   return __dockRequire('index', 'index');
@@ -536,6 +541,9 @@ mod tests {
         let bootstrap = runtime_bootstrap();
         assert!(bootstrap.contains("globalThis, 'process'"));
         assert!(bootstrap.contains("globalThis, 'fetch'"));
+        assert!(bootstrap.contains("globalThis, 'WebSocket'"));
+        assert!(bootstrap.contains("globalThis, 'setTimeout'"));
+        assert!(bootstrap.contains("globalThis, 'setInterval'"));
         assert!(bootstrap.contains("globalThis, 'eval'"));
         assert!(bootstrap.contains("globalThis, 'Function'"));
         assert!(bootstrap.contains("globalThis, 'Proxy'"));

@@ -1797,10 +1797,16 @@ skill.registerAPI('globals', () => ({
   content: [{ type: 'text', text: [
     typeof process,
     typeof fetch,
+    typeof WebSocket,
+    typeof setTimeout,
+    typeof setInterval,
+    typeof clearTimeout,
+    typeof clearInterval,
     typeof eval,
     typeof Function,
     typeof Proxy,
     typeof (() => {}).constructor,
+    typeof ({}).constructor.constructor,
     typeof (async function() {}).constructor,
     typeof (function* () {}).constructor,
     typeof (async function* () {}).constructor
@@ -1817,10 +1823,125 @@ module.exports = skill
         .call(ApiCall::new("skill", "session", "globals", json!({})))
         .expect("call globals");
 
-    assert_eq!(
-        result.content[0].text,
-        "undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined"
+    let observed = result.content[0].text.split(',').collect::<Vec<_>>();
+    assert_eq!(observed.len(), 15);
+    assert!(observed.iter().all(|value| *value == "undefined"));
+}
+
+#[test]
+fn console_trace_is_bounded_and_truncated() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+console.log('short')
+console.log('very-sensitive-token-should-be-truncated')
+console.error('third entry should collapse into truncation marker')
+skill.registerAPI('noop', () => ({ content: [{ type: 'text', text: 'ok' }] }))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["noop"],
     );
+    let vm = ApiVm::load_skill_with_config(
+        skill,
+        ApiVmConfig {
+            max_console_entries: 2,
+            max_console_message_chars: 18,
+            ..Default::default()
+        },
+    )
+    .expect("load VM");
+
+    assert_eq!(vm.trace().console.len(), 2);
+    assert_eq!(vm.trace().console[0].message, "short");
+    assert_eq!(vm.trace().console[1].message, "[console output truncated]");
+    assert!(!vm
+        .trace()
+        .console
+        .iter()
+        .any(|entry| entry.message.contains("very-sensitive-token")));
+}
+
+#[test]
+fn result_json_size_limit_rejects_large_atomic_api_result() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('large', () => ({
+  content: [{ type: 'text', text: 'x'.repeat(512) }]
+}))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["large"],
+    );
+    let vm = ApiVm::load_skill_with_config(
+        skill,
+        ApiVmConfig {
+            max_result_json_bytes: 128,
+            ..Default::default()
+        },
+    )
+    .expect("load VM");
+
+    let error = vm
+        .call(ApiCall::new("skill", "session", "large", json!({})))
+        .expect_err("large result should fail closed");
+
+    assert!(matches!(&error, ApiVmError::ResultTooLarge(name, 128) if name == "large"));
+    assert!(!error.to_string().contains(&"x".repeat(32)));
+}
+
+#[test]
+fn invalid_atomic_api_result_error_does_not_echo_payload() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('invalid', () => ({
+  content: 'secret-token-should-not-be-echoed'
+}))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["invalid"],
+    );
+    let vm = ApiVm::load_skill(skill).expect("load VM");
+
+    let error = vm
+        .call(ApiCall::new("skill", "session", "invalid", json!({})))
+        .expect_err("invalid result should fail closed");
+
+    assert!(matches!(&error, ApiVmError::InvalidResult(name, _) if name == "invalid"));
+    let message = error.to_string();
+    assert!(!message.contains("secret-token-should-not-be-echoed"));
+    assert!(!message.contains("payload="));
+}
+
+#[test]
+fn pending_job_drain_limit_fails_registration() {
+    let skill = test_skill(
+        r#"
+Promise.resolve()
+  .then(() => {})
+  .then(() => {})
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('noop', () => ({ content: [{ type: 'text', text: 'ok' }] }))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["noop"],
+    );
+
+    let error = ApiVm::load_skill_with_config(
+        skill,
+        ApiVmConfig {
+            max_pending_jobs: 1,
+            ..Default::default()
+        },
+    )
+    .expect_err("excess pending jobs should fail closed");
+
+    assert!(matches!(error, ApiVmError::PendingJobLimitExceeded));
 }
 
 fn test_skill(

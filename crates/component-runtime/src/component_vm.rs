@@ -471,6 +471,7 @@ pub struct ComponentVmConfig {
     pub timeout: Duration,
     pub memory_limit_bytes: usize,
     pub max_stack_size_bytes: usize,
+    pub max_snapshot_json_bytes: usize,
     pub dynamic: DynamicComponentConfig,
 }
 
@@ -480,6 +481,7 @@ impl Default for ComponentVmConfig {
             timeout: Duration::from_secs(30),
             memory_limit_bytes: 16 * 1024 * 1024,
             max_stack_size_bytes: 512 * 1024,
+            max_snapshot_json_bytes: 512 * 1024,
             dynamic: DynamicComponentConfig::default(),
         }
     }
@@ -529,6 +531,7 @@ pub enum ComponentVmError {
     InvalidJson(String),
     Compile(ComponentCompileError),
     Expired,
+    OutputTooLarge { limit: usize },
     Timeout(Duration),
 }
 
@@ -544,6 +547,12 @@ impl std::fmt::Display for ComponentVmError {
             }
             Self::Compile(error) => write!(formatter, "component render compile failed: {error}"),
             Self::Expired => formatter.write_str("component is expired"),
+            Self::OutputTooLarge { limit } => {
+                write!(
+                    formatter,
+                    "component VM output exceeded size limit of {limit} bytes"
+                )
+            }
             Self::Timeout(timeout) => write!(formatter, "component VM timed out after {timeout:?}"),
         }
     }
@@ -850,9 +859,15 @@ impl ComponentInstance {
             start: Instant::now(),
             timeout: self.config.timeout,
         });
-        let result = self
-            .context
-            .with(|ctx| call_js_snapshot(ctx, function_name, args, self.config.timeout));
+        let result = self.context.with(|ctx| {
+            call_js_snapshot(
+                ctx,
+                function_name,
+                args,
+                self.config.timeout,
+                self.config.max_snapshot_json_bytes,
+            )
+        });
         *self.deadline.borrow_mut() = None;
         result
     }
@@ -895,6 +910,7 @@ fn call_js_snapshot<'js, A>(
     function_name: &str,
     args: A,
     timeout: Duration,
+    max_snapshot_json_bytes: usize,
 ) -> Result<JsSnapshot, ComponentVmError>
 where
     A: IntoArgs<'js>,
@@ -908,6 +924,11 @@ where
         .finish::<String>()
         .catch(&ctx)
         .map_err(|error| map_caught_or_timeout(error, timeout))?;
+    if snapshot_json.len() > max_snapshot_json_bytes {
+        return Err(ComponentVmError::OutputTooLarge {
+            limit: max_snapshot_json_bytes,
+        });
+    }
     serde_json::from_str(&snapshot_json)
         .map_err(|error| ComponentVmError::InvalidJson(error.to_string()))
 }

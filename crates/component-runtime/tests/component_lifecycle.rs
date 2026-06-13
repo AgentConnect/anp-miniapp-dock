@@ -286,13 +286,25 @@ Component({
     created() {
       const functionEscape = (function() {}).constructor
       const asyncEscape = (async function() {}).constructor
+      const generatorEscape = (function* () {}).constructor
+      const asyncGeneratorEscape = (async function* () {}).constructor
+      const prototypeEscape = ({}).constructor.constructor
       this.setData({
         ok: typeof fetch === 'undefined'
           && typeof WebSocket === 'undefined'
           && typeof setTimeout === 'undefined'
+          && typeof setInterval === 'undefined'
+          && typeof clearTimeout === 'undefined'
+          && typeof clearInterval === 'undefined'
+          && typeof require === 'undefined'
+          && typeof eval === 'undefined'
+          && typeof process === 'undefined'
           && typeof Function === 'undefined'
           && typeof functionEscape === 'undefined'
           && typeof asyncEscape === 'undefined'
+          && typeof generatorEscape === 'undefined'
+          && typeof asyncGeneratorEscape === 'undefined'
+          && typeof prototypeEscape === 'undefined'
       })
     }
   }
@@ -312,6 +324,42 @@ Component({
         outcome.render.root.children[0].text.as_deref(),
         Some("true")
     );
+}
+
+#[test]
+fn component_snapshot_size_limit_fails_closed_without_echoing_payload() {
+    let root = write_component(
+        "snapshot-size",
+        r#"
+Component({
+  data: { blob: '' },
+  lifetimes: {
+    created() {
+      this.setData({ blob: 'private-token-should-not-be-echoed'.repeat(16) })
+    }
+  }
+})
+"#,
+        r#"<view><text>{{ blob }}</text></view>"#,
+    );
+    let package = ComponentPackage::load(root).expect("load component");
+    let config = ComponentVmConfig {
+        max_snapshot_json_bytes: 128,
+        ..ComponentVmConfig::default()
+    };
+    let mut instance = ComponentInstance::with_config(package, config).expect("create vm");
+
+    let error = instance
+        .mount(ComponentInput::new("searchDrinks"))
+        .expect_err("oversized snapshot should fail closed");
+
+    assert!(matches!(
+        error,
+        ComponentVmError::OutputTooLarge { limit: 128 }
+    ));
+    assert!(!error
+        .to_string()
+        .contains("private-token-should-not-be-echoed"));
 }
 
 #[test]
