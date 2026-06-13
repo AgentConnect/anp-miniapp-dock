@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-09
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 21:23:49 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 21:53:01 +0800 |
+| Commit | `b6120cc` |
 | Review evidence | 2026-06-13 21:50:47 +0800 commit 前 Review 已完成：修复 Host action outcome 只依赖 custom Host 自行脱敏的问题，改为 Runtime 出口统一二次脱敏；修复 `openDetailPage` 初版只在 headless Host 内 canonicalize 的问题，改为 Runtime 先拒绝 external URL、protocol-relative、`javascript:`、`file:`、traversal、encoded slash/traversal 和敏感 query，再把 canonical relative target 交给 Host；确认 `api/call` 不进入 Host adapter，仍走 Orchestrator、permission、ConsentGate、audit 和 executor；确认 custom Host unknown action 默认 unsupported fail closed，headless mock `productionReady = false`。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 78]`，工作区无未提交变更；已读取主 Plan、Step 04-09 文档、Phase 4 Host Adapter Contract 章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 04-08 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p dock-core host` 11 matched tests passed（其中 `host_adapter_contract` filter 命中 5 个，`cargo test -p dock-core` 覆盖全部 7 个 Host contract tests）；`cargo test -p dock-core` 37 passed；`cargo test -p component-runtime action` 3 matched tests passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo clippy -p dock-core --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/component-runtime crates/card-spec crates/dock-cli docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词扫描使用 fixed-string `rg`，仅命中文档红线、redaction marker、测试假值和既有安全计划文本，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
-| Next action | 创建 04-09 focused commit，然后关闭本 Step 并进入 04-10。 |
+| Next action | 进入 04-10 并发、取消、重试与幂等策略。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：04-09
 - [x] openDetailPage、external URL/path 有 canonicalize 和 deny tests。
 - [x] 组件矩阵、Release Gates 和 Phase 4 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -109,6 +109,14 @@ Step index：04-09
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase4: define host adapter action protocol`
+
+执行记录：
+
+- Commit 前状态：`git status --short` 仅包含 04-09 代码、测试和相关文档变更。
+- 纳入文件：`crates/dock-core/src/host.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/src/runtime.rs`、`crates/dock-core/tests/runtime_facade.rs`、`crates/dock-core/tests/host_adapter_contract.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-09-host-adapter-contract-action-protocol.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
+- 实现 commit：`b6120cc phase4: define host adapter action protocol`。
+- Commit 后状态：`git status --short --branch` = `## main...origin/main [ahead 79]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 
 ## 11. Blocked 处理
 
