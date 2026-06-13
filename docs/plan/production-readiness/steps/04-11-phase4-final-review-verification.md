@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-11
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 22:29:59 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 22:41:28 +0800 |
+| Commit | `c3be4c5`；closure 待回填 |
 | Review evidence | 2026-06-13 22:38:26 +0800 Phase 4 最终 Review 已记录：修复 roadmap 顶层 Phase 4 完成标志误导为真实 production Host 已接入的问题，修复 Phase 4 阶段完成检查仍全部未勾选的问题，修复通用 Codex Goal 提示词硬编码 04-01 起点的问题；确认 04-01 至 04-10 的 Runtime API、IPC/headless、registry/cache、config/secret、token/storage/audit/cache、Host adapter/action、concurrency/cancellation/idempotency 证据齐全，未发现需要修改 Phase 4 代码的阻塞问题。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 82]`，工作区无未提交变更；已读取主 Plan、Step 04-11 文档、Phase 4 章节、Phase 4 详细计划、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-10 closure evidence；04-01 至 04-10 在主台账均为 `done`；04-01 至 04-10 implementation/closure commit hash 均可解析；`cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；敏感词扫描仅命中源码 redaction 逻辑、测试假值、安全/计划文档和 demo-only 示例，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
-| Next action | 创建 04-11 final review commit 后执行 closure commit；完成后停止在 04-11，不进入 05-01。 |
+| Next action | 本 Goal 停止在 04-11，不进入 05-01；后续若启动新 Goal，应从 05-01 开始。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -69,7 +69,7 @@ Step index：04-11
 - [x] Review 覆盖 Runtime public API/SDK、IPC/headless、Skill registry/cache、config/secret、token/storage/audit persistence、Host adapter/action、concurrency/cancellation/retry/idempotency、redaction、安全边界和文档漂移。
 - [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
 - [x] 主 Plan `2.3.8` 已追加 Phase 4 最终 Review 记录。
-- [ ] 本步骤在进入 Step 05-01 之前已经创建 focused commit，并回填主 Plan 执行台账；本 Goal 到此结束。
+- [x] 本步骤在进入 Step 05-01 之前已经创建 focused commit，并回填主 Plan 执行台账；本 Goal 到此结束。
 
 ## 8. 验证方式
 
@@ -108,6 +108,15 @@ Step index：04-11
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`docs: record phase4 final review`
+
+执行记录：
+
+- Commit 前状态：`git status --short` 仅包含 04-11 final Review 文档、Phase 4 检查表和 roadmap 漂移修复。
+- 纳入文件：`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-11-phase4-final-review-verification.md`。
+- Final review commit：`c3be4c5 docs: record phase4 final review`。
+- Closure 前状态：`git status --short --branch` = `## main...origin/main [ahead 83]`，工作区无未提交变更。
+- Closure commit：待回填。
+- 遗留未提交变更：无。
 
 ## 11. Blocked 处理
 
