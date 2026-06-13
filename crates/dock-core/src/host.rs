@@ -2,6 +2,7 @@ use crate::error::DockCoreError;
 use crate::orchestrator::{ApiCallContext, ComponentRenderInput};
 use consent_audit::{ConsentProof, ConsentRequest, RiskLevel};
 use mcp_schema::AtomicApiResult;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub trait RuntimeHost {
@@ -49,7 +50,101 @@ pub trait AuditSink {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PermissionDecision {
     Allow,
-    Deny(String),
+    Deny { reason: String, reason_code: String },
+    Prompt { reason: String, reason_code: String },
+    MockAllowedDevOnly { reason: String, reason_code: String },
+}
+
+impl PermissionDecision {
+    pub fn deny(reason: impl Into<String>, reason_code: impl Into<String>) -> Self {
+        Self::Deny {
+            reason: reason.into(),
+            reason_code: reason_code.into(),
+        }
+    }
+
+    pub fn prompt(reason: impl Into<String>, reason_code: impl Into<String>) -> Self {
+        Self::Prompt {
+            reason: reason.into(),
+            reason_code: reason_code.into(),
+        }
+    }
+
+    pub fn mock_allowed_dev_only(
+        reason: impl Into<String>,
+        reason_code: impl Into<String>,
+    ) -> Self {
+        Self::MockAllowedDevOnly {
+            reason: reason.into(),
+            reason_code: reason_code.into(),
+        }
+    }
+
+    pub fn summary(&self) -> PermissionDecisionSummary {
+        match self {
+            Self::Allow => PermissionDecisionSummary {
+                decision: "allow".to_owned(),
+                reason_code: "host_allow".to_owned(),
+                reason: "Host allowed this API call".to_owned(),
+                dev_only: false,
+            },
+            Self::Deny {
+                reason,
+                reason_code,
+            } => PermissionDecisionSummary {
+                decision: "deny".to_owned(),
+                reason_code: reason_code.clone(),
+                reason: redact_permission_reason(reason),
+                dev_only: false,
+            },
+            Self::Prompt {
+                reason,
+                reason_code,
+            } => PermissionDecisionSummary {
+                decision: "prompt".to_owned(),
+                reason_code: reason_code.clone(),
+                reason: redact_permission_reason(reason),
+                dev_only: false,
+            },
+            Self::MockAllowedDevOnly {
+                reason,
+                reason_code,
+            } => PermissionDecisionSummary {
+                decision: "mock_allowed".to_owned(),
+                reason_code: reason_code.clone(),
+                reason: redact_permission_reason(reason),
+                dev_only: true,
+            },
+        }
+    }
+}
+
+fn redact_permission_reason(reason: &str) -> String {
+    let lower = reason.to_ascii_lowercase();
+    for marker in [
+        "authorization",
+        "signature",
+        "token",
+        "secret",
+        "private",
+        "password",
+        "cookie",
+        "credential",
+    ] {
+        if lower.contains(marker) {
+            return format!("{marker}=[REDACTED]");
+        }
+    }
+    reason.to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionDecisionSummary {
+    pub decision: String,
+    pub reason_code: String,
+    pub reason: String,
+    pub dev_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +171,7 @@ pub struct AuditEvent {
     pub api_name: String,
     pub risk_level: RiskLevel,
     pub parameter_summary: Value,
+    pub permission_decision: PermissionDecisionSummary,
     pub consent_proof: Option<ConsentProof>,
     pub outcome: String,
 }

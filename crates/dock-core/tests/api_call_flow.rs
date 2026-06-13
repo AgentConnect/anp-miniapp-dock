@@ -56,6 +56,22 @@ where
     Orchestrator::load_skill(skill, AllowHost, consent, executor, renderer, audit)
 }
 
+fn orchestrator_with_host<H, C, A>(
+    host: H,
+    executor: MockExecutor,
+    renderer: MockRenderer,
+    consent: C,
+    audit: A,
+) -> Orchestrator<H, C, MockExecutor, MockRenderer, A>
+where
+    H: RuntimeHost,
+    C: ConsentGate,
+    A: AuditSink,
+{
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    Orchestrator::load_skill(skill, host, consent, executor, renderer, audit)
+}
+
 #[test]
 fn successful_api_call_routes_to_renderer() {
     let executor = MockExecutor::with_result(AtomicApiResult {
@@ -110,6 +126,11 @@ fn input_schema_failure_does_not_execute_vm() {
     assert_eq!(events[0].api_name, "confirmOrder");
     assert_eq!(events[0].risk_level, RiskLevel::L3);
     assert_eq!(events[0].outcome, "validation_failed");
+    assert_eq!(events[0].permission_decision.decision, "not_evaluated");
+    assert_eq!(
+        events[0].permission_decision.reason_code,
+        "input_validation_failed"
+    );
 }
 
 #[test]
@@ -261,8 +282,99 @@ fn high_risk_payment_requires_consent_before_executor() {
     assert_eq!(events[0].api_name, "payOrder");
     assert_eq!(events[0].risk_level, RiskLevel::L3);
     assert_eq!(events[0].outcome, "blocked_consent_required");
+    assert_eq!(events[0].permission_decision.decision, "allow");
     assert_eq!(events[0].parameter_summary["capabilityToken"], "[REDACTED]");
     assert!(events[0].consent_proof.is_none());
+}
+
+#[test]
+fn host_permission_deny_blocks_before_consent_and_executor_with_audit_summary() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("should not execute")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let consent = RequireConsent::default();
+    let consent_calls = consent.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with_host(
+        StaticHost(PermissionDecision::deny(
+            "Host policy denied payOrder Authorization: Bearer secret-token",
+            "host_override_deny",
+        )),
+        executor,
+        MockRenderer::ok(),
+        consent,
+        audit,
+    );
+
+    let error = orchestrator
+        .call_api(context(
+            "payOrder",
+            json!({"orderId": "order-1", "capabilityToken": "real-token"}),
+        ))
+        .expect_err("Host deny override must block");
+
+    assert_eq!(error.code(), ErrorCode::PermissionDenied);
+    assert_eq!(*executor_calls.borrow(), 0);
+    assert_eq!(*consent_calls.borrow(), 0);
+
+    let events = events.borrow();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].outcome, "blocked_permission_denied");
+    assert_eq!(events[0].permission_decision.decision, "deny");
+    assert_eq!(
+        events[0].permission_decision.reason_code,
+        "host_override_deny"
+    );
+    assert!(!events[0]
+        .permission_decision
+        .reason
+        .contains("secret-token"));
+    assert_eq!(events[0].parameter_summary["capabilityToken"], "[REDACTED]");
+}
+
+#[test]
+fn host_permission_prompt_flows_into_consent_gate_and_audit_summary() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let audit = MockAudit::default();
+    let events = audit.events.clone();
+    let orchestrator = orchestrator_with_host(
+        StaticHost(PermissionDecision::prompt(
+            "Host policy requires prompt",
+            "host_override_prompt",
+        )),
+        executor,
+        MockRenderer::ok(),
+        ApproveConsent,
+        audit,
+    );
+
+    orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect("approved prompt should continue through consent");
+
+    assert_eq!(*executor_calls.borrow(), 1);
+    let events = events.borrow();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].outcome, "ok");
+    assert_eq!(events[0].permission_decision.decision, "prompt");
+    assert_eq!(
+        events[0].permission_decision.reason_code,
+        "host_override_prompt"
+    );
+    assert!(events[0].consent_proof.is_some());
 }
 
 #[test]
@@ -348,6 +460,18 @@ impl RuntimeHost for AllowHost {
         _context: &ApiCallContext,
     ) -> Result<PermissionDecision, DockCoreError> {
         Ok(PermissionDecision::Allow)
+    }
+}
+
+#[derive(Clone)]
+struct StaticHost(PermissionDecision);
+
+impl RuntimeHost for StaticHost {
+    fn check_permission(
+        &self,
+        _context: &ApiCallContext,
+    ) -> Result<PermissionDecision, DockCoreError> {
+        Ok(self.0.clone())
     }
 }
 

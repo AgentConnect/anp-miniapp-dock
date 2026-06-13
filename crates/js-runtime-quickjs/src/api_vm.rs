@@ -1493,8 +1493,14 @@ impl RequestBroker for LocalDidRequestBroker {
         profile
             .ensure(wx_compat::Capability::Request)
             .map_err(|denial| match denial {
-                wx_compat::PermissionDecision::Deny { reason, .. } => {
+                wx_compat::PermissionDecision::Deny { reason, .. }
+                | wx_compat::PermissionDecision::Prompt { reason, .. } => {
                     WxRequestError::Denied(reason)
+                }
+                wx_compat::PermissionDecision::MockAllowed { reason, .. } => {
+                    WxRequestError::Unsupported(format!(
+                        "mock request permission cannot use local DID transport: {reason}"
+                    ))
                 }
                 wx_compat::PermissionDecision::Allow => {
                     WxRequestError::Denied("request capability is unavailable".to_owned())

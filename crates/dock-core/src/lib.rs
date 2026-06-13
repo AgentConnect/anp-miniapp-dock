@@ -9,7 +9,7 @@ pub use api_registry::{ApiRegistry, RegisteredApi};
 pub use error::{DockCoreError, ErrorCode};
 pub use host::{
     ApiExecutor, AuditEvent, AuditSink, ConsentDecision, ConsentGate, PermissionDecision,
-    RenderOutcome, RenderRouter, RuntimeHost,
+    PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
 };
 pub use orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,

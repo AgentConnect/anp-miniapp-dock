@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-03
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 14:12:53 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 03-02 完成后，启动权限策略引擎 |
+| Review evidence | 2026-06-13 14:38:45 +0800 commit 前 Review 已记录：修复 Host allow 可绕过未声明敏感权限、通用 boolean permission 可能误声明任意 capability 的问题；确认 Host deny override 优先、mock 仅 dev/headless、Prompt 进入 ConsentGate、decision audit 脱敏、allowlist mismatch 在 transport 前失败。 |
+| Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat permission` 7 passed；`cargo test -p dock-core permission` 2 passed；`cargo test -p anp-adapter allowlist` 5 passed；`cargo test -p wx-compat` 29 passed；`cargo test -p anp-adapter` 44 passed；`cargo test -p dock-core` 11 passed；`cargo test -p js-runtime-quickjs wx_request` 4 passed；`cargo test -p component-runtime dynamic` 7 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/dock-core crates/anp-adapter crates/consent-audit crates/js-runtime-quickjs crates/component-runtime crates/dock-cli docs/architecture docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、文档安全说明和 `AuthMode::HttpSignatures` 常量。 |
+| Next action | 创建 Step 03-03 focused commit，回填 commit hash 后进入 Step 03-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -67,13 +67,13 @@ Step index：03-03
 
 ## 7. 验收标准
 
-- [ ] 所有敏感 capability 都经过统一 permission decision。
-- [ ] 未声明权限默认 deny；Host deny override 优先于 Skill manifest。
-- [ ] Mock provider 只能在显式 dev/headless profile 下返回 `MockAllowed(dev_only)`，production release gate 阻断。
-- [ ] 网络 allowlist 支持 scheme、host、port、path prefix、method、scope，并有 deny-by-default 测试。
-- [ ] Permission decision 进入脱敏 audit summary。
-- [ ] 相关矩阵、Threat Model、Release Gates 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 所有敏感 capability 都经过统一 permission decision。
+- [x] 未声明权限默认 deny；Host deny override 优先于 Skill manifest。
+- [x] Mock provider 只能在显式 dev/headless profile 下返回 `MockAllowed(dev_only)`，production release gate 阻断。
+- [x] 网络 allowlist 支持 scheme、host、port、path prefix、method、scope，并有 deny-by-default 测试。
+- [x] Permission decision 进入脱敏 audit summary。
+- [x] 相关矩阵、Threat Model、Release Gates 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -96,11 +96,11 @@ Step index：03-03
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 1. 初版 Host allow override 可能把未声明敏感 capability 放行，不满足“未声明默认 deny”；2. 初版 JSON permission parser 把通用 boolean 当作任意 capability 声明，可能扩大权限；3. 需要确认新增 `Prompt` / `MockAllowed` 分支不会落到真实 RequestBroker 出站。 |
+| 已修复问题 | 已修复 | Host allow 改为只能在 manifest/meta/dynamic 已声明后生效；普通 boolean 不再声明任意敏感 capability，dynamic scope 仍单独支持 boolean；真实 ANP/本地 DID RequestBroker 对 `MockAllowed` 返回 unsupported，对 `Prompt` 返回 denied，不会静默出站。 |
+| 剩余风险 | 已记录 | 生产 Host policy UI/config、生产 RequestBroker transport、registry 配置来源、provider conformance、persistent request/audit 仍在 Phase 4/Step 03-05；本 Step 只完成本地 required gate 和可审计 decision。 |
+| 新增或缺失测试 | 已新增 | 新增/扩展 `wx-compat` permission tests、`anp-adapter` allowlist tests、`dock-core` permission audit tests；缺失的生产 Host UI/config 和 persistent audit tests 按后续 Step 记录。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `docs/architecture/wx-api-compatibility-matrix.md`、`docs/architecture/component-compatibility-matrix.md`、`docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 3 文档和本 Step 文档。 |
 
 ## 10. Commit 要求
 

@@ -1,7 +1,9 @@
 use wx_compat::{
     unsupported_api, unsupported_api_registry, AppBaseInfo, Capability, CapabilityProfile,
-    CardEvent, DeviceInfo, InMemoryCardEventSink, ModelContext, RequestBroker, UnsupportedApiKind,
-    UnsupportedRequestBroker, WxRequest, WxRequestError,
+    CardEvent, DeviceInfo, HostPermissionOverride, InMemoryCardEventSink, ModelContext,
+    PermissionDecision, PermissionPolicyEngine, PermissionPolicyInput, PermissionReasonCode,
+    RequestBroker, RuntimeProfile, UnsupportedApiKind, UnsupportedRequestBroker, WxEnvironmentKind,
+    WxRequest, WxRequestError,
 };
 
 #[test]
@@ -50,6 +52,151 @@ fn dynamic_component_profile_can_enable_request_broker_boundary() {
 
     assert!(profile.check(Capability::Request).is_allowed());
     assert!(profile.check(Capability::Timer).is_allowed());
+}
+
+#[test]
+fn permission_policy_denies_undeclared_sensitive_capability_by_default() {
+    let decision = PermissionPolicyEngine.decide(PermissionPolicyInput::new(
+        Capability::Payment,
+        WxEnvironmentKind::AtomicApi,
+    ));
+
+    assert!(matches!(
+        decision,
+        PermissionDecision::Deny {
+            reason_code: PermissionReasonCode::CapabilityNotDeclared,
+            ..
+        }
+    ));
+    let summary = decision.summary(Capability::Payment);
+    assert_eq!(summary.decision, "deny");
+    assert_eq!(summary.reason_code, "capability_not_declared");
+}
+
+#[test]
+fn permission_policy_host_deny_override_wins_over_manifest() {
+    let decision = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Request, WxEnvironmentKind::AtomicApi)
+            .with_manifest_declared(true)
+            .with_host_override(HostPermissionOverride::Deny),
+    );
+
+    assert!(matches!(
+        decision,
+        PermissionDecision::Deny {
+            reason_code: PermissionReasonCode::HostOverrideDeny,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn permission_policy_host_allow_does_not_declare_sensitive_capability() {
+    let decision = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Payment, WxEnvironmentKind::AtomicApi)
+            .with_host_override(HostPermissionOverride::Allow),
+    );
+
+    assert!(matches!(
+        decision,
+        PermissionDecision::Deny {
+            reason_code: PermissionReasonCode::CapabilityNotDeclared,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn permission_policy_mock_provider_is_dev_headless_only() {
+    let production = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Payment, WxEnvironmentKind::AtomicApi)
+            .with_manifest_declared(true)
+            .with_mock_provider(true),
+    );
+    assert!(matches!(
+        production,
+        PermissionDecision::Deny {
+            reason_code: PermissionReasonCode::MockProductionDenied,
+            ..
+        }
+    ));
+
+    let headless = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Payment, WxEnvironmentKind::AtomicApi)
+            .with_manifest_declared(true)
+            .with_runtime_profile(RuntimeProfile::Headless)
+            .with_mock_provider(true),
+    );
+    assert!(matches!(
+        headless,
+        PermissionDecision::MockAllowed {
+            reason_code: PermissionReasonCode::MockDevOnlyAllowed,
+            dev_only: true,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn component_request_requires_dynamic_scope_even_with_meta_permission() {
+    let denied = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Request, WxEnvironmentKind::Component)
+            .with_meta_anp_declared(true),
+    );
+    assert!(matches!(
+        denied,
+        PermissionDecision::Deny {
+            reason_code: PermissionReasonCode::CapabilityNotDeclared,
+            ..
+        }
+    ));
+
+    let allowed = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Request, WxEnvironmentKind::Component)
+            .with_dynamic_scope_declared(true),
+    );
+    assert!(allowed.is_allowed());
+}
+
+#[test]
+fn permission_policy_reads_manifest_meta_anp_and_x_anp_values() {
+    let from_manifest = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Request, WxEnvironmentKind::AtomicApi)
+            .with_manifest_permissions_value(&serde_json::json!({
+                "capabilities": ["wx.request"]
+            })),
+    );
+    assert!(from_manifest.is_allowed());
+
+    let from_meta_anp = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Payment, WxEnvironmentKind::AtomicApi)
+            .with_meta_anp_value(&serde_json::json!({
+                "permissions": {
+                    "wx.requestPayment": true
+                }
+            })),
+    );
+    assert!(from_meta_anp.is_allowed());
+
+    let from_x_anp = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Login, WxEnvironmentKind::AtomicApi)
+            .with_x_anp_value(&serde_json::json!({
+                "scopes": ["wx.login"]
+            })),
+    );
+    assert!(from_x_anp.is_allowed());
+}
+
+#[test]
+fn permission_policy_reads_component_dynamic_scope_value() {
+    let decision = PermissionPolicyEngine.decide(
+        PermissionPolicyInput::new(Capability::Timer, WxEnvironmentKind::Component)
+            .with_component_dynamic_scope_value(&serde_json::json!({
+                "desc": "refresh status"
+            })),
+    );
+
+    assert!(decision.is_allowed());
 }
 
 #[test]

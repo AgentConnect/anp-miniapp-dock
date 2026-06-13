@@ -1673,6 +1673,7 @@ fn audit_events_json(events: &[AuditEvent]) -> Value {
                     "apiName": event.api_name,
                     "riskLevel": event.risk_level,
                     "parameterSummary": event.parameter_summary,
+                    "permissionDecision": event.permission_decision,
                     "consentProof": event.consent_proof,
                     "outcome": event.outcome
                 })

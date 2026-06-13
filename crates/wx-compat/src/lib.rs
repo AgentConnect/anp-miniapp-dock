@@ -20,7 +20,11 @@ pub use model_context::{
     RelatedPage, NOTIFICATION_TYPE_EXPIRE, NOTIFICATION_TYPE_INPUT, NOTIFICATION_TYPE_OVERFLOW,
     NOTIFICATION_TYPE_RESULT,
 };
-pub use permissions::{Capability, CapabilityProfile, PermissionDecision, WxEnvironmentKind};
+pub use permissions::{
+    Capability, CapabilityProfile, HostPermissionOverride, PermissionDecision,
+    PermissionDecisionSummary, PermissionPolicyEngine, PermissionPolicyInput, PermissionReasonCode,
+    PermissionSource, RuntimeProfile, WxEnvironmentKind,
+};
 pub use request::{
     RequestBroker, UnsupportedRequestBroker, WxMethod, WxRequest, WxRequestError, WxResponse,
 };

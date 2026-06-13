@@ -24,7 +24,8 @@ pub use session::{
 };
 pub use signed_request::{
     redact_for_log, AnpHttpClient, AnpRequestBroker, AnpRequestError, AuthMaterial, HttpTransport,
-    ReqwestHttpTransport, SignedRequestPolicy, TransportRequest, TransportResponse,
+    NetworkAllowlistDenial, NetworkAllowlistRule, ReqwestHttpTransport, SignedRequestPolicy,
+    TransportRequest, TransportResponse,
 };
 pub use token::{
     bearer_token_expiry_ms, CapabilityToken, CapabilityTokenCache, CapabilityTokenClaims,

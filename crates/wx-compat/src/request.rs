@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum WxMethod {
     Get,
     Post,
@@ -87,7 +87,12 @@ impl RequestBroker for UnsupportedRequestBroker {
                 "wx.request is defined by wx-compat but real ANP HTTP is implemented in Step 08"
                     .to_owned(),
             )),
-            PermissionDecision::Deny { reason, .. } => Err(WxRequestError::Denied(reason)),
+            PermissionDecision::MockAllowed { reason, .. } => Err(WxRequestError::Unsupported(
+                format!("wx.request mock permission reached unsupported broker: {reason}"),
+            )),
+            PermissionDecision::Deny { reason, .. } | PermissionDecision::Prompt { reason, .. } => {
+                Err(WxRequestError::Denied(reason))
+            }
         }
     }
 }
