@@ -4,7 +4,7 @@ use crate::orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
 };
 use crate::RuntimeHost;
-use consent_audit::redact_value;
+use consent_audit::{redact_value, AuditOutcome, AuditRecord, AuditRecordInput};
 use mcp_schema::{
     AtomicApiResult, ModelVisibleApiResult, TextContent, ValidationIssue, ValidationReport,
 };
@@ -15,6 +15,7 @@ use skill_loader::{load_skill, LoadedSkill, SkillPackageError};
 use std::error::Error;
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 pub const RUNTIME_API_VERSION: &str = "dock.runtime.v1";
 pub const RUNTIME_IPC_TRANSPORT: &str = "headless-cli-json";
@@ -534,13 +535,142 @@ pub struct RuntimeCloseSessionResponse {
 }
 
 pub trait RuntimeAuditReader {
-    fn runtime_audit_records(&self) -> Vec<AuditEvent>;
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError>;
 }
 
 impl RuntimeAuditReader for () {
-    fn runtime_audit_records(&self) -> Vec<AuditEvent> {
-        Vec::new()
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError> {
+        Ok(Vec::new())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimePersistentAuditSink<S> {
+    sink: Arc<S>,
+}
+
+impl<S> RuntimePersistentAuditSink<S> {
+    pub fn new(sink: S) -> Self {
+        Self {
+            sink: Arc::new(sink),
+        }
+    }
+
+    pub fn sink(&self) -> &S {
+        self.sink.as_ref()
+    }
+}
+
+impl<S> AuditSink for RuntimePersistentAuditSink<S>
+where
+    S: consent_audit::AuditSink,
+{
+    fn ensure_available(&self) -> Result<(), DockCoreError> {
+        self.sink.ensure_available().map_err(|_| {
+            DockCoreError::core(
+                ErrorCode::AuditUnavailable,
+                "audit sink unavailable for runtime audit",
+            )
+        })
+    }
+
+    fn record(&self, event: AuditEvent) -> Result<(), DockCoreError> {
+        self.sink
+            .record(audit_record_from_event(event))
+            .map_err(|_| {
+                DockCoreError::core(
+                    ErrorCode::AuditUnavailable,
+                    "audit sink unavailable for runtime audit",
+                )
+            })
+    }
+}
+
+impl<S> RuntimeAuditReader for RuntimePersistentAuditSink<S>
+where
+    S: consent_audit::AuditSink + PersistentAuditRecordReader,
+{
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError> {
+        Ok(self
+            .sink
+            .records()
+            .map_err(|_| {
+                DockCoreError::core(
+                    ErrorCode::AuditUnavailable,
+                    "audit sink unavailable for runtime audit",
+                )
+            })?
+            .into_iter()
+            .map(AuditEvent::from)
+            .collect())
+    }
+}
+
+pub trait PersistentAuditRecordReader {
+    fn records(&self) -> Result<Vec<AuditRecord>, consent_audit::AuditError>;
+}
+
+impl PersistentAuditRecordReader for consent_audit::FileAuditSink {
+    fn records(&self) -> Result<Vec<AuditRecord>, consent_audit::AuditError> {
+        consent_audit::FileAuditSink::records(self)
+    }
+}
+
+fn audit_record_from_event(event: AuditEvent) -> AuditRecord {
+    let permission_decision = serde_json::to_value(&event.permission_decision)
+        .map_or(Value::Null, |value| redact_value(&value));
+    let mut record = AuditRecord::new(AuditRecordInput {
+        user_did: event.user_did,
+        agent_did: event.agent_did,
+        merchant_did: event.merchant_did,
+        session_id: event.session_id,
+        skill_id: event.skill_id,
+        api_name: event.api_name,
+        risk_level: event.risk_level,
+        arguments: &event.parameter_summary,
+        consent_proof: event.consent_proof,
+        outcome: AuditOutcome::from_label(&event.outcome),
+    });
+    record.permission_decision = Some(permission_decision);
+    record
+}
+
+impl From<AuditRecord> for AuditEvent {
+    fn from(record: AuditRecord) -> Self {
+        let parameter_summary = redact_value(&record.parameter_summary);
+        let permission_decision = permission_decision_from_audit_record(&record);
+        Self {
+            user_did: record.user_did,
+            agent_did: record.agent_did,
+            merchant_did: record.merchant_did,
+            session_id: record.session_id,
+            skill_id: record.skill_id,
+            api_name: record.api_name,
+            risk_level: record.risk_level,
+            parameter_summary,
+            permission_decision,
+            consent_proof: record.consent_proof,
+            outcome: record.outcome.to_string(),
+        }
+    }
+}
+
+fn permission_decision_from_audit_record(
+    record: &AuditRecord,
+) -> crate::host::PermissionDecisionSummary {
+    record
+        .permission_decision
+        .as_ref()
+        .and_then(|value| {
+            serde_json::from_value::<crate::host::PermissionDecisionSummary>(redact_value(value))
+                .ok()
+        })
+        .unwrap_or_else(|| crate::host::PermissionDecisionSummary {
+            decision: "persisted_audit".to_owned(),
+            reason_code: "persistent_audit_record".to_owned(),
+            reason: "record restored from persistent audit sink".to_owned(),
+            dev_only: false,
+        })
 }
 
 pub fn negotiate_runtime_version(requested: Option<&str>) -> RuntimeResult<RuntimeVersion> {
@@ -709,6 +839,7 @@ where
         let records = self
             .audit_reader
             .runtime_audit_records()
+            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?
             .into_iter()
             .filter(|event| {
                 request

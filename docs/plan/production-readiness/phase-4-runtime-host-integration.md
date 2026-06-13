@@ -208,11 +208,21 @@ close_session(session)
 | quota / cleanup | `try_set_storage()` 先校验 aggregate quota 并写 backend snapshot，成功后才更新内存；支持 remove、clear 和 delete scope 持久化 | 生产 privacy deletion 仍需 Host/ops runbook 串联 token/audit/cache 清理。 |
 | redacted report | `StorageRestoreReport` 只输出 backend profile、production-ready flag、计数、scope summary、key/value bytes、reason 和 redaction metadata | 不输出 raw key、raw value、token、Authorization、private path 或隐私原文。 |
 
+当前 Step 04-07 已在 `consent-audit` 和 `dock-core` 冻结 persistent audit retention/export contract：
+
+| 能力 | 当前 contract | 边界 |
+|---|---|---|
+| persistence profile | `AuditPersistenceProfile` 区分 `inMemoryDev`、`localFileJsonl`、`hostPersistentSink`、`encryptedSqlite` | 只有 Host persistent sink / encrypted SQLite profile 标记 `productionReady = true`；`FileAuditSink` 的 `localFileJsonl` 未加密，只能作为 dev/test/local evidence。 |
+| record schema | `AuditRecord` 保存 user/agent/merchant/session/Skill/API、risk、outcome、redacted parameter summary、redacted `permissionDecision` 和 redacted consent proof | 不保存 raw token、Authorization、signature、private key material、手机号、地址或文件内容。 |
+| retention/export | `AuditExportReport` 和 `AuditRetentionReport` 输出 backend profile、production-ready flag、计数和 redaction metadata；`FileAuditSink` 支持 restart/query/export/retention | JSONL 文件后端仍缺少部署级加密、访问控制、迁移、锁策略、export approval 和 privacy deletion。 |
+| Runtime wiring | `RuntimePersistentAuditSink` 把 `consent-audit::AuditSink` 接入 `dock-core::AuditSink` 和 `RuntimeAuditReader`；`runtime.getAuditRecords` 读取失败返回稳定 `audit_unavailable` | 当前仅提供本地文件 reader wiring；真实 Host audit provider 需要 04-09/06-06 补 conformance 和运维配置。 |
+| unavailable policy | L3/L4 consent 通过后、executor 执行前调用 audit sink `ensure_available()`；不可用时返回 `audit_unavailable`，不执行高风险 API | preflight 只能证明当下可写；生产 backend 仍需事务性/append durability、告警和监控。 |
+
 拆分顺序：
 
 1. token cache 持久化与恢复；已由 04-05 完成本地 contract 和 dev-only backend gate；
 2. scoped storage 持久化与 quota；已由 04-06 完成本地 contract、quota/restore/delete-scope gate 和 dev-only local file backend gate；
-3. persistent audit sink retention/export；
+3. persistent audit sink retention/export；已由 04-07 完成本地 contract、retention/export report、Runtime wiring 和高风险 audit unavailable fail-closed gate；
 4. Skill cache cleanup 与版本清理。
 
 ### 3.6 Host Adapter Contract

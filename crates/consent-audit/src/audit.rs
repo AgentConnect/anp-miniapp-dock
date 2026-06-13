@@ -31,6 +31,16 @@ impl AuditOutcome {
             Self::Error => "error",
         }
     }
+
+    pub fn from_label(label: &str) -> Self {
+        match label {
+            "ok" => Self::Ok,
+            "blocked_consent_required" => Self::BlockedConsentRequired,
+            "blocked_permission_denied" => Self::BlockedPermissionDenied,
+            "validation_failed" => Self::ValidationFailed,
+            _ => Self::Error,
+        }
+    }
 }
 
 impl std::fmt::Display for AuditOutcome {
@@ -40,6 +50,14 @@ impl std::fmt::Display for AuditOutcome {
 }
 
 pub trait AuditSink {
+    fn profile(&self) -> AuditPersistenceProfile {
+        AuditPersistenceProfile::InMemoryDev
+    }
+
+    fn ensure_available(&self) -> Result<(), AuditError> {
+        Ok(())
+    }
+
     fn record(&self, record: AuditRecord) -> Result<(), AuditError>;
 }
 
@@ -58,6 +76,73 @@ pub enum AuditError {
     Retention(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AuditPersistenceProfile {
+    InMemoryDev,
+    LocalFileJsonl,
+    HostPersistentSink,
+    EncryptedSqlite,
+}
+
+impl AuditPersistenceProfile {
+    pub fn production_ready(self) -> bool {
+        matches!(
+            self,
+            AuditPersistenceProfile::HostPersistentSink | AuditPersistenceProfile::EncryptedSqlite
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AuditUnavailablePolicy {
+    FailClosedHighRisk,
+    DegradedReleaseBlocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditRedaction {
+    pub marker: String,
+    pub policy: String,
+    pub raw_parameter_visible: bool,
+    pub raw_consent_proof_visible: bool,
+}
+
+impl Default for AuditRedaction {
+    fn default() -> Self {
+        Self {
+            marker: REDACTED.to_owned(),
+            policy: "dock.audit.redaction.v1".to_owned(),
+            raw_parameter_visible: false,
+            raw_consent_proof_visible: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditExportReport {
+    pub backend_profile: AuditPersistenceProfile,
+    pub production_ready: bool,
+    pub exported_count: usize,
+    pub records: Vec<AuditRecord>,
+    pub redaction: AuditRedaction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditRetentionReport {
+    pub backend_profile: AuditPersistenceProfile,
+    pub production_ready: bool,
+    pub before_count: usize,
+    pub retained_count: usize,
+    pub removed_count: usize,
+    pub min_occurred_at_ms: u64,
+    pub redaction: AuditRedaction,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditRecord {
@@ -69,6 +154,8 @@ pub struct AuditRecord {
     pub api_name: String,
     pub risk_level: RiskLevel,
     pub parameter_summary: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_decision: Option<Value>,
     pub consent_proof: Option<ConsentProof>,
     pub outcome: AuditOutcome,
     pub occurred_at_ms: u64,
@@ -99,6 +186,7 @@ impl AuditRecord {
             api_name: input.api_name,
             risk_level: input.risk_level,
             parameter_summary: redact_value(input.arguments),
+            permission_decision: None,
             consent_proof: input.consent_proof.map(redact_consent_proof),
             outcome: input.outcome,
             occurred_at_ms: now_ms(),
@@ -107,6 +195,9 @@ impl AuditRecord {
 
     pub fn redacted(mut self) -> Self {
         self.parameter_summary = redact_value(&self.parameter_summary);
+        self.permission_decision = self
+            .permission_decision
+            .map(|permission_decision| redact_value(&permission_decision));
         self.consent_proof = self.consent_proof.map(redact_consent_proof);
         self
     }
@@ -127,6 +218,10 @@ impl InMemoryAuditSink {
 }
 
 impl AuditSink for InMemoryAuditSink {
+    fn profile(&self) -> AuditPersistenceProfile {
+        AuditPersistenceProfile::InMemoryDev
+    }
+
     fn record(&self, record: AuditRecord) -> Result<(), AuditError> {
         let mut records = self.records.lock().expect("audit sink mutex poisoned");
         records.push(record.redacted());
@@ -166,24 +261,56 @@ impl FileAuditSink {
     }
 
     pub fn export_redacted_json(&self, query: AuditQuery<'_>) -> Result<Value, AuditError> {
+        serde_json::to_value(self.export_redacted_report(query)?.records)
+            .map_err(|error| AuditError::Serialize(error.to_string()))
+    }
+
+    pub fn export_redacted_report(
+        &self,
+        query: AuditQuery<'_>,
+    ) -> Result<AuditExportReport, AuditError> {
         let records: Vec<_> = self
             .query(query)?
             .into_iter()
             .map(AuditRecord::redacted)
             .collect();
-        serde_json::to_value(records).map_err(|error| AuditError::Serialize(error.to_string()))
+        let profile = self.profile();
+        Ok(AuditExportReport {
+            backend_profile: profile,
+            production_ready: profile.production_ready(),
+            exported_count: records.len(),
+            records,
+            redaction: AuditRedaction::default(),
+        })
     }
 
     pub fn retain_since(&self, min_occurred_at_ms: u64) -> Result<usize, AuditError> {
+        Ok(self.retain_since_report(min_occurred_at_ms)?.retained_count)
+    }
+
+    pub fn retain_since_report(
+        &self,
+        min_occurred_at_ms: u64,
+    ) -> Result<AuditRetentionReport, AuditError> {
         let _guard = self.lock.lock().expect("audit sink mutex poisoned");
         let records = self.read_records_unlocked()?;
+        let before_count = records.len();
         let retained: Vec<_> = records
             .into_iter()
             .filter(|record| record.occurred_at_ms >= min_occurred_at_ms)
             .collect();
         let retained_count = retained.len();
         self.write_records_unlocked(&retained)?;
-        Ok(retained_count)
+        let profile = self.profile();
+        Ok(AuditRetentionReport {
+            backend_profile: profile,
+            production_ready: profile.production_ready(),
+            before_count,
+            retained_count,
+            removed_count: before_count.saturating_sub(retained_count),
+            min_occurred_at_ms,
+            redaction: AuditRedaction::default(),
+        })
     }
 
     fn read_records_unlocked(&self) -> Result<Vec<AuditRecord>, AuditError> {
@@ -229,6 +356,22 @@ impl FileAuditSink {
 }
 
 impl AuditSink for FileAuditSink {
+    fn profile(&self) -> AuditPersistenceProfile {
+        AuditPersistenceProfile::LocalFileJsonl
+    }
+
+    fn ensure_available(&self) -> Result<(), AuditError> {
+        if let Some(parent) = non_empty_parent(&self.path) {
+            fs::create_dir_all(parent).map_err(|error| AuditError::Sink(error.to_string()))?;
+        }
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|error| AuditError::Sink(error.to_string()))?;
+        Ok(())
+    }
+
     fn record(&self, record: AuditRecord) -> Result<(), AuditError> {
         let _guard = self.lock.lock().expect("audit sink mutex poisoned");
         if let Some(parent) = non_empty_parent(&self.path) {

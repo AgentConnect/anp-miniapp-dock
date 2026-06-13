@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-07
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 20:39:10 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 04-06 完成后，启动 persistent audit sink |
+| Review evidence | 2026-06-13 20:58:33 +0800 commit 前 Review 已记录：修复 persistent audit reader 读取损坏后端时静默返回空列表的问题，改为稳定 `audit_unavailable`；确认 audit record/export/retention report 默认脱敏，`localFileJsonl` 明确不是 production-ready，L3/L4 consent 通过后 executor 前 audit unavailable fail closed。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 74]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-07 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-06 closure evidence；`cargo fmt --check` 通过；`cargo test -p consent-audit audit` 2 unit + 5 integration passed；`cargo test -p dock-core audit` 7 api_call_flow + 3 runtime_facade passed；`cargo test -p consent-audit` 5 unit + 8 integration + doctests passed；`cargo test -p dock-core` 16 api_call_flow + 8 runtime_config + 6 runtime_facade + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/consent-audit crates/dock-core crates/dock-cli crates/anp-adapter docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、redaction 断言、安全文档、配置红线和既有代码标识，未发现真实 token、Authorization、signature、private key material、手机号、地址、文件内容或生产凭据。 |
+| Next action | 创建 focused implementation commit `phase4: add persistent audit sink` |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：04-07
 
 ## 7. 验收标准
 
-- [ ] audit sink 有 persistent backend boundary、in-memory dev profile 和 production profile gate。
-- [ ] audit record schema 不包含 raw token、Authorization、signature、private key material、手机号、地址、文件内容或精确位置。
-- [ ] retention policy 和 redacted export 有 tests。
-- [ ] audit sink unavailable 对 L3/L4 动作 fail closed 或明确记录 degraded policy/release blocker。
-- [ ] Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] audit sink 有 persistent backend boundary、in-memory dev profile 和 production profile gate。
+- [x] audit record schema 不包含 raw token、Authorization、signature、private key material、手机号、地址、文件内容或精确位置。
+- [x] retention policy 和 redacted export 有 tests。
+- [x] audit sink unavailable 对 L3/L4 动作 fail closed 或明确记录 degraded policy/release blocker。
+- [x] Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -91,11 +91,11 @@ Step index：04-07
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | `RuntimeAuditReader` 初版对 persistent backend 读取失败使用空列表 fallback，可能把 corrupt audit backend 误报为无记录。 |
+| 已修复问题 | 已修复 | `RuntimeAuditReader` 改为返回 `Result<Vec<AuditEvent>, DockCoreError>`；`RuntimePersistentAuditSink` 读取失败映射为 `audit_unavailable`；新增 corrupt JSONL backend 回归测试。 |
+| 剩余风险 | 已记录 | `FileAuditSink` / `localFileJsonl` 未加密，只能 dev/test/local evidence；生产仍需 Host persistent sink 或 encrypted SQLite、访问控制、export approval、retention config、durability/alerting 和 privacy deletion。audit availability preflight 只能证明执行前可打开 backend，不能替代生产事务性持久化。 |
+| 新增或缺失测试 | 已新增 | 新增/扩展 consent-audit export/retention/profile tests、dock-core L3/L4 audit unavailable fail-closed test、Runtime persistent audit read/redaction test 和 corrupt backend `audit_unavailable` test；未新增真实 Host/encrypted backend tests，因为本 Step 非目标是不实现生产 backend。 |
+| 已更新或缺失文档 | 已更新 | 已同步 Phase 4 文档、Threat Model、Release Gates 和 Local Demo Runbook；文档明确 `localFileJsonl` / `FileAuditSink` 不是 production-ready。 |
 
 ## 10. Commit 要求
 

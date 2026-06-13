@@ -1137,8 +1137,8 @@ impl AuditSink for CollectAudit {
 }
 
 impl RuntimeAuditReader for CollectAudit {
-    fn runtime_audit_records(&self) -> Vec<AuditEvent> {
-        self.events.borrow().clone()
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, DockCoreError> {
+        Ok(self.events.borrow().clone())
     }
 }
 

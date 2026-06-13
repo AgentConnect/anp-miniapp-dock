@@ -4,8 +4,9 @@ pub mod audit;
 pub mod consent;
 
 pub use audit::{
-    redact_value, AuditError, AuditOutcome, AuditQuery, AuditRecord, AuditRecordInput, AuditSink,
-    FileAuditSink, InMemoryAuditSink,
+    redact_value, AuditError, AuditExportReport, AuditOutcome, AuditPersistenceProfile, AuditQuery,
+    AuditRecord, AuditRecordInput, AuditRedaction, AuditRetentionReport, AuditSink,
+    AuditUnavailablePolicy, FileAuditSink, InMemoryAuditSink,
 };
 pub use consent::{
     build_consent_request, consent_prompt_digest, consent_proof, consent_proof_with_decision,

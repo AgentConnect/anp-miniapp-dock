@@ -34,7 +34,8 @@ pub use runtime::{
     RuntimeDispatchComponentActionResponse, RuntimeErrorDto, RuntimeErrorResponse,
     RuntimeExpireCardsRequest, RuntimeExpireCardsResponse, RuntimeIpcRedaction, RuntimeIpcRequest,
     RuntimeIpcResponse, RuntimeIpcTransport, RuntimeIpcVersionParams, RuntimeLoadSkillResponse,
-    RuntimeRenderComponentRequest, RuntimeRenderComponentResponse, RuntimeResponse, RuntimeResult,
-    RuntimeService, RuntimeSessionContext, RuntimeSkillSummary, RuntimeValidateSkillResponse,
-    RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING, RUNTIME_IPC_TRANSPORT,
+    RuntimePersistentAuditSink, RuntimeRenderComponentRequest, RuntimeRenderComponentResponse,
+    RuntimeResponse, RuntimeResult, RuntimeService, RuntimeSessionContext, RuntimeSkillSummary,
+    RuntimeValidateSkillResponse, RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING,
+    RUNTIME_IPC_TRANSPORT,
 };

@@ -196,6 +196,13 @@ where
                     return Err(DockCoreError::core(ErrorCode::ConsentRequired, reason));
                 }
             }
+
+            self.audit.ensure_available().map_err(|_| {
+                DockCoreError::core(
+                    ErrorCode::AuditUnavailable,
+                    "audit sink unavailable for high-risk action",
+                )
+            })?;
         }
 
         let component_path = registered.declaration.component_path();

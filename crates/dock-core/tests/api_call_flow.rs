@@ -438,6 +438,27 @@ fn high_risk_payment_with_consent_records_proof() {
 }
 
 #[test]
+fn high_risk_payment_fails_closed_before_executor_when_audit_sink_unavailable() {
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("should not execute")],
+        structured_content: None,
+        meta: None,
+        extra: Default::default(),
+    });
+    let executor_calls = executor.calls.clone();
+    let orchestrator =
+        orchestrator_with(executor, MockRenderer::ok(), ApproveConsent, FailingAudit);
+
+    let error = orchestrator
+        .call_api(context("payOrder", json!({"orderId": "order-1"})))
+        .expect_err("audit sink unavailable must block high-risk actions");
+
+    assert_eq!(error.code(), ErrorCode::AuditUnavailable);
+    assert_eq!(*executor_calls.borrow(), 0);
+}
+
+#[test]
 fn host_consent_adapter_can_drive_core_consent_gate() {
     let executor = MockExecutor::with_result(AtomicApiResult {
         is_error: false,
@@ -770,5 +791,24 @@ impl AuditSink for MockAudit {
     fn record(&self, event: AuditEvent) -> Result<(), DockCoreError> {
         self.events.borrow_mut().push(event);
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct FailingAudit;
+
+impl AuditSink for FailingAudit {
+    fn ensure_available(&self) -> Result<(), DockCoreError> {
+        Err(DockCoreError::core(
+            ErrorCode::AuditUnavailable,
+            "audit backend unavailable",
+        ))
+    }
+
+    fn record(&self, _event: AuditEvent) -> Result<(), DockCoreError> {
+        Err(DockCoreError::core(
+            ErrorCode::AuditUnavailable,
+            "audit backend unavailable",
+        ))
     }
 }

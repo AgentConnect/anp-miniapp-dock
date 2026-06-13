@@ -1,8 +1,9 @@
 use consent_audit::{
-    build_consent_request, consent_proof, parameter_digest, redact_value, AuditOutcome, AuditQuery,
-    AuditRecord, AuditRecordInput, ConsentError, ConsentRequestInput, ConsentStatus,
-    DecisionConsentProvider, FileAuditSink, RiskLevel, RiskPolicy, UnavailableConsentProvider,
-    CONSENT_POLICY_VERSION, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_DECISION_ACTOR,
+    build_consent_request, consent_proof, parameter_digest, redact_value, AuditOutcome,
+    AuditPersistenceProfile, AuditQuery, AuditRecord, AuditRecordInput, ConsentError,
+    ConsentRequestInput, ConsentStatus, DecisionConsentProvider, FileAuditSink, RiskLevel,
+    RiskPolicy, UnavailableConsentProvider, CONSENT_POLICY_VERSION, DEV_HEADLESS_CONSENT_PROVIDER,
+    DEV_HEADLESS_DECISION_ACTOR,
 };
 use consent_audit::{AuditSink, ConsentProvider, HostConsentAdapter};
 use mcp_schema::{ApiDeclaration, ManifestMeta};
@@ -202,7 +203,19 @@ fn file_audit_sink_persists_queries_retains_and_exports_redacted_records() {
     let export = restarted
         .export_redacted_json(AuditQuery::new().skill_id("coffee"))
         .expect("export serializes");
+    let report = restarted
+        .export_redacted_report(AuditQuery::new().skill_id("coffee"))
+        .expect("export report serializes");
+    assert_eq!(
+        report.backend_profile,
+        AuditPersistenceProfile::LocalFileJsonl
+    );
+    assert!(!report.production_ready);
+    assert_eq!(report.exported_count, 2);
+    assert!(!report.redaction.raw_parameter_visible);
+    assert!(!report.redaction.raw_consent_proof_visible);
     let exported = serde_json::to_string(&export).expect("export stringifies");
+    let exported_report = serde_json::to_string(&report).expect("report stringifies");
     for raw in [
         "real-token",
         "Bearer real-token",
@@ -216,6 +229,10 @@ fn file_audit_sink_persists_queries_retains_and_exports_redacted_records() {
         assert!(
             !exported.contains(raw),
             "export should not contain raw sensitive value {raw}"
+        );
+        assert!(
+            !exported_report.contains(raw),
+            "export report should not contain raw sensitive value {raw}"
         );
     }
     for redacted_key in [
@@ -240,12 +257,27 @@ fn file_audit_sink_persists_queries_retains_and_exports_redacted_records() {
         .map(|record| record.occurred_at_ms)
         .max()
         .expect("records exist");
-    let retained = restarted
-        .retain_since(max_seen + 1)
+    let retention = restarted
+        .retain_since_report(max_seen + 1)
         .expect("retention rewrites audit file");
-    assert_eq!(retained, 0);
+    assert_eq!(
+        retention.backend_profile,
+        AuditPersistenceProfile::LocalFileJsonl
+    );
+    assert!(!retention.production_ready);
+    assert_eq!(retention.before_count, 2);
+    assert_eq!(retention.retained_count, 0);
+    assert_eq!(retention.removed_count, 2);
     let retained_records = restarted.records().expect("retained records read");
     assert!(retained_records.is_empty());
+}
+
+#[test]
+fn audit_persistence_profiles_mark_only_host_or_encrypted_backends_production_ready() {
+    assert!(!AuditPersistenceProfile::InMemoryDev.production_ready());
+    assert!(!AuditPersistenceProfile::LocalFileJsonl.production_ready());
+    assert!(AuditPersistenceProfile::HostPersistentSink.production_ready());
+    assert!(AuditPersistenceProfile::EncryptedSqlite.production_ready());
 }
 
 #[test]

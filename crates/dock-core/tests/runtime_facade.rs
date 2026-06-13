@@ -5,13 +5,14 @@ use dock_core::{
     PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
     RuntimeAuditRecordsRequest, RuntimeCallRequest, RuntimeCloseSessionRequest,
     RuntimeComponentAction, RuntimeDispatchComponentActionRequest, RuntimeExpireCardsRequest,
-    RuntimeHost, RuntimeRenderComponentRequest, RuntimeService, RuntimeSessionContext,
-    RUNTIME_API_VERSION,
+    RuntimeHost, RuntimePersistentAuditSink, RuntimeRenderComponentRequest, RuntimeService,
+    RuntimeSessionContext, RUNTIME_API_VERSION,
 };
 use mcp_schema::{AtomicApiResult, TextContent, ValidationReport};
 use serde_json::{json, Map};
 use skill_loader::load_skill;
 use std::cell::RefCell;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -186,6 +187,100 @@ fn runtime_facade_call_render_action_expire_audit_and_close_are_versioned() {
 }
 
 #[test]
+fn runtime_persistent_audit_sink_records_and_reads_redacted_events() {
+    let fixture = TempDir::new("dock-core-runtime-audit");
+    let audit = RuntimePersistentAuditSink::new(consent_audit::FileAuditSink::new(
+        fixture.path().join("audit").join("records.jsonl"),
+    ));
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: Some(Map::from_iter([
+            ("orderId".to_owned(), json!("order_demo_001")),
+            ("status".to_owned(), json!("paid")),
+        ])),
+        meta: None,
+        extra: Default::default(),
+    });
+    let service = RuntimeService::load_skill(
+        skill,
+        AllowHost,
+        ApproveConsent,
+        executor,
+        MockRenderer,
+        audit.clone(),
+        audit,
+    );
+
+    service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({
+                "orderId": "order_demo_001",
+                "capabilityToken": "capability-secret-token",
+                "deliveryAddress": "1 Private Road"
+            }),
+            capability_token: Some("capability-secret-token".to_owned()),
+        })
+        .expect("payment call succeeds with persistent audit");
+
+    let audit = service
+        .get_audit_records(RuntimeAuditRecordsRequest {
+            session_id: Some("session-runtime".to_owned()),
+            skill_id: Some("coffee".to_owned()),
+        })
+        .expect("persistent audit reader returns records");
+    assert_eq!(audit.data.records.len(), 1);
+    let record = &audit.data.records[0];
+    assert_eq!(record.api_name, "payOrder");
+    assert_eq!(record.outcome, "ok");
+    assert_eq!(record.permission_decision.decision, "allow");
+    assert_eq!(record.parameter_summary["capabilityToken"], "[REDACTED]");
+    assert_eq!(record.parameter_summary["deliveryAddress"], "[REDACTED]");
+
+    let rendered = serde_json::to_string(&audit).expect("audit serializes");
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("1 Private Road"));
+}
+
+#[test]
+fn runtime_persistent_audit_reader_reports_unavailable_when_backend_is_corrupt() {
+    let fixture = TempDir::new("dock-core-runtime-audit-corrupt");
+    let audit_path = fixture.path().join("audit").join("records.jsonl");
+    fs::create_dir_all(audit_path.parent().expect("audit dir")).expect("create audit parent dir");
+    fs::write(&audit_path, "{not-json}\n").expect("write corrupt audit file");
+    let audit = RuntimePersistentAuditSink::new(consent_audit::FileAuditSink::new(audit_path));
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let service = RuntimeService::load_skill(
+        skill,
+        AllowHost,
+        ApproveConsent,
+        MockExecutor::with_result(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("ok")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        }),
+        MockRenderer,
+        MockAudit::default(),
+        audit,
+    );
+
+    let error = service
+        .get_audit_records(RuntimeAuditRecordsRequest {
+            session_id: None,
+            skill_id: None,
+        })
+        .expect_err("corrupt persistent audit backend should surface an error");
+
+    assert_eq!(error.error.code, "audit_unavailable");
+    assert!(!error.error.message.contains("{not-json}"));
+}
+
+#[test]
 fn runtime_facade_errors_are_json_serializable_and_redacted() {
     let service = runtime_service(MockExecutor::fail(
         ErrorCode::VmFailed,
@@ -352,6 +447,37 @@ struct MockAudit {
     events: std::rc::Rc<RefCell<Vec<AuditEvent>>>,
 }
 
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn new(prefix: &str) -> Self {
+        let path = std::env::temp_dir().join(format!("{prefix}-{}", unique_suffix()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir(&path).expect("create temp dir");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn unique_suffix() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time after epoch")
+        .as_nanos();
+    format!("{}-{nanos}", std::process::id())
+}
+
 impl AuditSink for MockAudit {
     fn record(&self, event: AuditEvent) -> Result<(), DockCoreError> {
         self.events.borrow_mut().push(event);
@@ -360,7 +486,7 @@ impl AuditSink for MockAudit {
 }
 
 impl RuntimeAuditReader for MockAudit {
-    fn runtime_audit_records(&self) -> Vec<AuditEvent> {
-        self.events.borrow().clone()
+    fn runtime_audit_records(&self) -> Result<Vec<AuditEvent>, dock_core::DockCoreError> {
+        Ok(self.events.borrow().clone())
     }
 }

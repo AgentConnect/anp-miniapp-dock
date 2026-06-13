@@ -70,6 +70,8 @@ Step 04-05 adds a token cache persistence contract and restart restore policy in
 
 Step 04-06 adds a scoped storage persistence contract in `wx-compat`: persisted storage scope includes user DID, merchant DID, Skill id, and namespace; restore rejects invalid or over-quota entries, cleanup supports remove/clear/delete scope, and reports/debug output redact raw keys and values. The included `LocalFileScopedStorageBackend` writes unencrypted JSON and reports `productionReady = false`; it is only for local/dev evidence. Production deployments still need a Host encrypted store or encrypted SQLite backend, migration/repair policy, access control, backup handling, and privacy deletion integration.
 
+Step 04-07 adds a persistent audit sink contract in `consent-audit` and `dock-core`: audit profiles distinguish `inMemoryDev`, `localFileJsonl`, `hostPersistentSink`, and `encryptedSqlite`; export and retention report only redacted records plus profile/count/redaction metadata; `runtime.getAuditRecords` reports `audit_unavailable` for a corrupt persistent backend; and L3/L4 actions fail closed before executor execution when the audit sink cannot be opened. The included `FileAuditSink` writes unencrypted local JSONL and reports `productionReady = false`; it is only for local/dev evidence. Production deployments still need a Host persistent sink or encrypted SQLite backend, access control, export approval, retention configuration, durability/alerting, and privacy deletion integration.
+
 ## Start The Rust Demo Server
 
 The Rust `demo-server` remains available as a test-compatible local merchant server. It exercises the newer ANP DID challenge proof and scoped capability token path, while still exposing the same localhost coffee business endpoints used by the Skill JavaScript.
@@ -181,7 +183,7 @@ CLI output is JSON. Capability tokens, `Authorization`, HTTP signature headers, 
 
 The local CLI harness uses the explicit dev/headless consent adapter (`dev-headless-consent`, actor `host.headless.dev`) so the coffee flow can run without a real Host UI. That adapter is not a production consent provider. Production Host integrations must provide their own `HostConsentAdapter` and must preserve fail-closed behavior for denied or unavailable consent providers.
 
-Step 03-05 also adds an append-only JSONL `FileAuditSink` in the `consent-audit` crate for production-candidate audit persistence tests. The local coffee demo still prints collected audit events in the run output for developer inspection; deployment-grade audit backend configuration, encryption, access control, migration, and privacy deletion are handled by the later production runtime phases.
+Step 04-07 keeps the append-only JSONL `FileAuditSink` as local evidence only, not a production audit backend. The local coffee demo still prints collected audit events in the run output for developer inspection; deployment-grade audit backend configuration, encryption, access control, migration, export approval, durability monitoring, and privacy deletion are handled by the later production runtime and operations phases.
 
 ## Run The Mac Chatbot Host
 

@@ -48,6 +48,10 @@ pub trait RenderRouter {
 }
 
 pub trait AuditSink {
+    fn ensure_available(&self) -> Result<(), DockCoreError> {
+        Ok(())
+    }
+
     fn record(&self, event: AuditEvent) -> Result<(), DockCoreError>;
 }
 
