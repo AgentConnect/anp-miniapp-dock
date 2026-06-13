@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-10
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 21:54:25 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 22:28:04 +0800 |
+| Commit | `932e2e5` |
 | Review evidence | 2026-06-13 22:22:30 +0800 commit 前 Review 进行中：已发现并修复公开 policy 与实现不一致的问题，将 `requiredForHighRisk` 改为 `false`，避免把兼容期未强制的 idempotency key 误声明为 required；已补 session close 清理本地 replay cache；已补不同 session 高风险并发与低风险同 session 并发测试。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 80]`，工作区无未提交变更；已读取主 Plan、Step 04-10 文档、Phase 4 并发/取消/重试与幂等章节、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-09 closure evidence；`cargo fmt --check` 通过；`cargo test -p dock-core concurrency` 初次在测试重命名前只命中 1 个 policy test，已重跑后覆盖 5 passed；`cargo test -p anp-adapter retry` 1 passed；`cargo test -p component-runtime cleanup` 1 passed；`cargo test -p dock-core` 43 passed；`cargo test -p dock-cli --test coffee_order_flow` 8 passed；`cargo clippy -p dock-core --all-targets -- -D warnings` 通过；`cargo clippy -p anp-adapter --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/dock-core crates/anp-adapter crates/component-runtime crates/consent-audit crates/dock-cli docs/security docs/runbook docs/plan docs/architecture` 无输出；敏感词抽样仅命中源码 redaction 逻辑、测试假值和安全/计划文档条目，未发现真实 token、Authorization、signature、private key material、本机私有路径或生产凭据泄露。 |
-| Next action | 创建 04-10 focused implementation commit，随后回填 commit hash 并关闭本 Step。 |
+| Next action | 进入 04-11 Phase 4 最终 Review 与整体验证。 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -73,7 +73,7 @@ Step index：04-10
 - [x] idempotency key 可传递到 order/payment/provider boundary，并进入脱敏 audit summary；显式 key 在同一 RuntimeService 内成功 replay，不重复执行 executor。
 - [x] session close / component expire 清理 dynamic request/timer；session close 清理本地 cancellation、in-flight 和 replay cache，component expire cleanup 由既有 Component VM focused test 证明。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -115,9 +115,9 @@ Step index：04-10
 
 - Commit 前状态：`git status --short` 仅包含 04-10 Runtime concurrency/cancellation/idempotency、RequestBroker retry test、直接调用点兼容更新和相关文档变更。
 - 纳入文件：`crates/dock-core/src/runtime.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-core/tests/runtime_facade.rs`、`crates/dock-core/tests/host_adapter_contract.rs`、`crates/anp-adapter/tests/capability_token_scope.rs`、`crates/dock-cli/src/commands.rs`、`docs/architecture/component-compatibility-matrix.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-10-concurrency-cancellation-idempotency.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
-- 实现 commit：待记录。
-- Commit 后状态：待记录。
-- 遗留未提交变更：待记录。
+- 实现 commit：`932e2e5 phase4: add runtime concurrency controls`。
+- Commit 后状态：`git status --short --branch` = `## main...origin/main [ahead 81]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 
 ## 11. Blocked 处理
 
