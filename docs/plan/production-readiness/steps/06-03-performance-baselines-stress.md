@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 04:45:24 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 05:09:10 +0800 |
+| Commit | `67a869e` |
 | Review evidence | 2026-06-14 05:06:44 +0800 commit 前 Review：修复 `iterations.max(2).min(16)` 的 clippy `manual_clamp` 问题；确认 `dock-cli perf` 覆盖 Skill load、API VM call、component render、Render IR size、token lookup、storage read/write、RSS sample、并发 session、多 Skill、多组件、dynamic timer/request 和 result-size fail-closed；确认 report 明确为本地硬件相关 baseline，不是 production SLO；确认 artifact 不输出 raw token、Authorization、Signature、capabilityToken、private key、本机绝对路径、手机号、真实地址、文件内容或精确位置。剩余风险：未引入 Criterion/cargo bench 稳定阈值；`--full` 仅增加本地迭代数；memory per VM 是 process RSS sample，不是精确 VM 内存。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 107]`，工作区无未提交变更；已读取主 Plan、Step 06-03 文档、Phase 6 计划、执行台账和 06-02 closure evidence；`cargo fmt --check` 通过；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test -p dock-cli perf` 通过，实际命中 2 个 unit perf tests 和 1 个 integration perf test；`cargo test -p dock-cli --test coffee_order_flow perf_smoke_reports_baselines_and_stress` 通过；`cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1 > testdata/perf/coffee-smoke-baseline.json` 成功生成 artifact；`python3 -m json.tool testdata/perf/coffee-smoke-baseline.json >/tmp/coffee-smoke-baseline.json` 通过；`git diff --check -- crates testdata docs/runbook docs/plan README.md` 无输出；artifact 敏感串扫描未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`cargo test -p dock-cli` 33 unit + 13 integration passed；`cargo test -p dock-cli --test coffee_order_flow` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace perf` 通过，实际命中 dock-cli 2 个 unit perf tests 和 1 个 integration perf test。 |
-| Next action | 创建 06-03 focused implementation commit，然后回填 commit hash 并关闭 Step |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 107]`，工作区无未提交变更；已读取主 Plan、Step 06-03 文档、Phase 6 计划、执行台账和 06-02 closure evidence；`cargo fmt --check` 通过；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test -p dock-cli perf` 通过，实际命中 2 个 unit perf tests 和 1 个 integration perf test；`cargo test -p dock-cli --test coffee_order_flow perf_smoke_reports_baselines_and_stress` 通过；`cargo run -p dock-cli -- perf examples/coffee-skill --iterations 1 > testdata/perf/coffee-smoke-baseline.json` 成功生成 artifact；`python3 -m json.tool testdata/perf/coffee-smoke-baseline.json >/tmp/coffee-smoke-baseline.json` 通过；`git diff --check -- crates testdata docs/runbook docs/plan README.md` 无输出；artifact 敏感串扫描未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`cargo test -p dock-cli` 33 unit + 13 integration passed；`cargo test -p dock-cli --test coffee_order_flow` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace perf` 通过，实际命中 dock-cli 2 个 unit perf tests 和 1 个 integration perf test；implementation commit 后 `git status --short --branch` = `## main...origin/main [ahead 108]`，工作区无未提交变更。 |
+| Next action | 进入 Step 06-04 CI/CD Release Gates 自动化 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -72,7 +72,7 @@ Step index：06-03
 - [x] 超过资源限制时 fail closed，不影响其他 session。
 - [x] Release Gates 和 Phase 6 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
