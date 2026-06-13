@@ -39,6 +39,23 @@ The command emits `dock.doctor-report.v1` JSON. It checks Rust toolchain, worksp
 
 Expected local defaults are not production-ready: unsigned/demo Skills, missing resolver/allowlist, in-memory storage/audit, missing production Host providers, skipped server health, and sandbox gates that doctor records but does not execute should be treated as warning/skip evidence. Real signing credential material, raw tokens, Authorization values, signatures, secrets, and absolute local paths must not appear in the report.
 
+## Run Compatibility Fixtures
+
+The repository includes four mock-only compatibility fixtures beyond coffee. Each fixture has its own `README.md`, `expected-test-skill.json`, and golden Render IR snapshot under `testdata/render-ir`.
+
+```bash
+cargo run -p dock-cli -- validate examples/fixtures/address-form
+cargo run -p dock-cli -- test-skill examples/fixtures/address-form
+cargo run -p dock-cli -- validate examples/fixtures/media-review
+cargo run -p dock-cli -- test-skill examples/fixtures/media-review
+cargo run -p dock-cli -- validate examples/fixtures/dynamic-status
+cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
+cargo run -p dock-cli -- validate examples/fixtures/location-map-preview
+cargo run -p dock-cli -- test-skill examples/fixtures/location-map-preview
+```
+
+These fixtures cover form/address Host boundary, media/file handles, dynamic component request/timer behavior, and static location map preview. They are regression evidence only: all handles and URLs are mock values, headless providers are dev-only, and none of the fixture reports certify a production Host provider.
+
 ## Start The FastAPI Coffee Service
 
 The current demo can use a Python/FastAPI localhost service to simulate the remote merchant HTTP server. The Skill package is still loaded from `examples/coffee-skill` on disk; only login and business calls go over HTTP.

@@ -576,6 +576,7 @@ fn did_from_document_path(path: &Path) -> Result<String, DidCredentialError> {
 
 fn validate(skill_path: &Path) -> Result<Value, CliError> {
     let skill = load_skill(skill_path)?;
+    let skill_id = skill_id_for_path(&skill, skill_path);
     let registration = validate_api_registration(&skill);
     let api_reports = validate_api_reports(&skill, registration.as_ref());
     let component_reports = validate_component_reports(&skill);
@@ -608,7 +609,7 @@ fn validate(skill_path: &Path) -> Result<Value, CliError> {
         "compatibilityLevel": compatibility_level,
         "skillRoot": skill_path_display,
         "skillRef": skill_ref,
-        "skillId": skill_id(&skill),
+        "skillId": skill_id.clone(),
         "apis": api_reports.clone(),
         "apiNames": skill.manifest.apis.iter().map(|api| api.name.as_str()).collect::<Vec<_>>(),
         "components": component_reports.clone(),
@@ -623,7 +624,7 @@ fn validate(skill_path: &Path) -> Result<Value, CliError> {
             "schemaVersion": VALIDATE_REPORT_SCHEMA_VERSION,
             "status": report_status,
             "compatibilityLevel": compatibility_level,
-            "skillId": skill_id(&skill),
+            "skillId": skill_id,
             "apis": api_reports,
             "components": component_reports,
             "permissions": permissions,
@@ -2450,6 +2451,7 @@ fn validate_release_readiness(skill: &LoadedSkill, release_blockers: &[Value]) -
 
 fn inspect(skill_path: &Path) -> Result<Value, CliError> {
     let skill = load_skill(skill_path)?;
+    let skill_id = skill_id_for_path(&skill, skill_path);
     let registration = validate_api_registration(&skill);
     let registered_apis = registration
         .clone()
@@ -2480,7 +2482,7 @@ fn inspect(skill_path: &Path) -> Result<Value, CliError> {
         "schemaVersion": "dock.inspect-report.v1",
         "status": if warnings.is_empty() { "ok" } else { "warning" },
         "commandStatus": "ok",
-        "skillId": skill_id(&skill),
+        "skillId": skill_id,
         "skillRef": skill_ref,
         "package": package,
         "files": file_tree,
@@ -4600,6 +4602,13 @@ fn skill_id_for_path(skill: &LoadedSkill, skill_path: &Path) -> String {
         .get("id")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
+        .or_else(|| {
+            if is_coffee_fixture_shape(skill) {
+                Some(DEFAULT_SKILL_ID.to_owned())
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             skill_path
                 .file_name()

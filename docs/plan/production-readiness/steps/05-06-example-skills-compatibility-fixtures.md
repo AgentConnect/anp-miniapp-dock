@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-06
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 02:59:58 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 05-05 完成后，启动示例 Skill 体系 |
+| Review evidence | 2026-06-14 03:14:20 +0800 commit 前 Review 已记录：确认 05-06 复用既有 `examples/fixtures/*`，避免重复创建 `examples/address-skill` 等包；修复本地 fixture 在 `validate` / `inspect` 中缺少 manifest `id` 时回退为默认 `coffee` 的报告问题，同时保留 coffee fixture 形状继续输出 `coffee`；确认 expected JSON 只记录稳定摘要，不包含易变 audit 时间戳、本机路径、token、Authorization、Signature、fixture-token、真实手机号、地址、文件内容或经纬度；确认 headless provider 仍标 `productionReady = false`，未将 Host provider 或动态网络能力写成 production-ready。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 96]`；已读取主 Plan、Step 05-06 文档、Phase 5 文档、现有 `examples/fixtures/*` 和 `testdata/render-ir/*`；确认 05-05 implementation commit `9d19744` 与 closure commit `56daf6f`；`cargo fmt --check` 通过；`cargo test -p dock-cli example` 1 unit + 1 integration passed；`cargo test -p dock-cli validate` 4 unit + 2 integration passed；`cargo test -p dock-cli inspect` 2 unit + 1 integration passed；手工 `validate` / `test-skill` 覆盖 address-form、media-review、dynamic-status、location-map-preview，全部 JSON parse 通过，`validate` 输出 `dock.validate-report.v1`、示例 skillId、`warning`、`commandStatus = ok`，`test-skill` 输出 `dock.test-skill-report.v1`、`status = ok`、`failed = 0`、snapshot `match`；`git diff --check -- examples testdata crates/dock-cli docs/architecture docs/runbook docs/plan README.md` 无输出；fixture JSON 样本敏感串扫描未命中 `/home/`、Authorization、Signature、capabilityToken、fixture-token、Bearer、private key material、PEM header、latitude 或 longitude；计划要求的 `rg -n "token|Authorization|signature|private key|phone|address|latitude|longitude" examples testdata docs/plan docs/architecture docs/runbook README.md` 仅命中 mock handle、示例命令、文档红线、测试假值和既有安全说明；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`cargo clippy -p dock-cli --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
+| Next action | 创建 05-06 focused implementation commit |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -37,8 +37,8 @@ Step index：05-06
 ## 4. 实现方法
 
 1. 阅读 Step 02-06 fixture 输出、Phase 5 示例计划和 developer docs 计划。
-2. 新增或整理 `examples/address-skill`、`examples/media-skill`、`examples/dynamic-status-skill`、`examples/location-skill`。
-3. 每个示例补 `SKILL.md`、`mcp.json`、API JS、components、README、expected JSON、Render IR snapshot。
+2. 整理 `examples/fixtures/address-form`、`examples/fixtures/media-review`、`examples/fixtures/dynamic-status`、`examples/fixtures/location-map-preview`，避免与 Step 02-06 已完成的 fixture 重复建包。
+3. 每个示例补 README、expected JSON，并确认既有 `SKILL.md`、`mcp.json`、API JS、components 和 Render IR snapshot 可作为开发者证据。
 4. 将示例接入 `dock-cli validate` 和 `test-skill` regression。
 5. 增加 tests：每个示例 validate/test-skill 通过或输出 expected planned gap。
 6. 更新 README、Phase 5 文档、Release Gates 和兼容矩阵证据。
@@ -48,10 +48,10 @@ Step index：05-06
 
 | 仓库 / 模块 / 文件 | 计划变更 | 备注 |
 |---|---|---|
-| `anp/anp-miniapp-dock/examples/address-skill` | 新增或整理 address/phone/form 示例 | 计划新增 |
-| `anp/anp-miniapp-dock/examples/media-skill` | 新增或整理 image/file/media 示例 | 计划新增 |
-| `anp/anp-miniapp-dock/examples/dynamic-status-skill` | 新增 dynamic component 示例 | 计划新增 |
-| `anp/anp-miniapp-dock/examples/location-skill` | 新增 location/map-preview 示例 | 计划新增 |
+| `anp/anp-miniapp-dock/examples/fixtures/address-form` | 整理 address/form 示例 README 和 expected JSON | 复用既有 fixture |
+| `anp/anp-miniapp-dock/examples/fixtures/media-review` | 整理 image/file/media 示例 README 和 expected JSON | 复用既有 fixture |
+| `anp/anp-miniapp-dock/examples/fixtures/dynamic-status` | 整理 dynamic component 示例 README 和 expected JSON | 复用既有 fixture |
+| `anp/anp-miniapp-dock/examples/fixtures/location-map-preview` | 整理 location/map-preview 示例 README 和 expected JSON | 复用既有 fixture |
 | `anp/anp-miniapp-dock/testdata/render-ir` | 示例 snapshots | 视 Step 02-06 结构修改 |
 | `anp/anp-miniapp-dock/crates/dock-cli/tests` | 示例 validate/test-skill regression | 必须 |
 | `anp/anp-miniapp-dock/docs/architecture` | 同步示例证据 | 视实现结果更新 |
@@ -83,7 +83,7 @@ Step index：05-06
 |---|---|---|
 | 格式 | `cd anp/anp-miniapp-dock && cargo fmt --check` | 通过 |
 | Example tests | `cd anp/anp-miniapp-dock && cargo test -p dock-cli example` | 示例 validate/test-skill tests 通过；若 filter 不匹配，记录实际命令 |
-| Manual validate | `cd anp/anp-miniapp-dock && cargo run -p dock-cli -- validate examples/address-skill` | 示例输出 expected report；其它示例同理或记录 |
+| Manual validate | `cd anp/anp-miniapp-dock && cargo run -p dock-cli -- validate examples/fixtures/address-form` | 示例输出 expected report；其它示例同理或记录 |
 | 文档/空白 | `cd anp/anp-miniapp-dock && git diff --check -- examples testdata crates/dock-cli docs/architecture docs/runbook docs/plan README.md` | 无空白错误 |
 | 敏感信息扫描 | `cd anp/anp-miniapp-dock && rg -n "token|Authorization|signature|private key|phone|address|latitude|longitude" examples testdata docs/plan docs/architecture docs/runbook README.md` | 只命中 mock/dev-only 示例、redaction 规则或安全说明 |
 
@@ -96,19 +96,19 @@ Step index：05-06
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 1. 原计划仍指向新增 `examples/address-skill` 等目录，实际 Step 02-06 已有 `examples/fixtures/*`；2. `validate` / `inspect` 对未声明 manifest `id` 的本地 fixture 会输出默认 `coffee`，导致开发者示例报告失真；3. 初次将 `inspect` 改为路径 fallback 时破坏 coffee 既有 `skillId = coffee` 契约，已收敛为 coffee 形状优先。 |
+| 已修复问题 | 已修复 | Step 文档、Phase 5 文档和 release gate 改为复用 `examples/fixtures/*`；`validate` / `inspect` 使用 `skill_id_for_path`，并对 coffee fixture 形状保留默认 `coffee`；新增 expected JSON 和集成测试固定四个 fixture 的 schema、skillId、fixtureSet、snapshot、audit boundary 和 redaction。 |
+| 剩余风险 | 已记录 | expected JSON 是稳定摘要，不是完整 CLI report snapshot；真实 Host provider、production renderer、dynamic production transport、audit persistence 和 release automation 仍由 Phase 4/6 gate 负责，示例不能作为 production-ready 证明。 |
+| 新增或缺失测试 | 已补充 | 新增 `example_compatibility_fixtures_validate_and_test_skill`，覆盖 4 个 fixture 的 README、expected JSON、validate/test-skill、snapshot existence、snapshot match 和敏感串禁用；缺真实 Host provider E2E，因本 Step 是 mock-only developer fixture。 |
+| 已更新或缺失文档 | 已同步 | 新增四个 fixture README / expected JSON；更新 README、local demo runbook、release gates、Phase 5 文档、component compatibility matrix、Step 文档和主 Plan 台账；无额外缺失文档。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含示例 Skill、fixtures/snapshots、direct tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
+- Commit 前状态：`git status --short` 显示 05-06 范围内的 README、`crates/dock-cli`、`examples/fixtures/*/README.md`、`expected-test-skill.json`、component matrix、runbook、Phase 5 文档和 Plan 台账变更。
+- 纳入文件：`README.md`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`examples/fixtures/*/README.md`、`examples/fixtures/*/expected-test-skill.json`、`docs/architecture/component-compatibility-matrix.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-06-example-skills-compatibility-fixtures.md`。
+- Commit 后证据：待 implementation commit 后回填。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`phase5: add compatibility example skills`
 
@@ -123,6 +123,7 @@ Step index：05-06
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 05-06 小 Plan | 将示例 Skill 与兼容测试集拆成可执行 Step | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-14 | 复用既有 compatibility fixtures 作为示例体系 | Step 02-06 已创建 address-form、media-review、dynamic-status、location-map-preview Skill packages 和 golden snapshots；本 Step 聚焦 README、expected JSON、回归测试和开发者入口，避免创建重复示例包 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

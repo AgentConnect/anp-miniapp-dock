@@ -230,14 +230,14 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ## 4. 示例 Skill 体系
 
-保留 coffee，并新增：
+保留 coffee，并复用 Step 02-06 已建立的 `examples/fixtures/*` 作为 coffee 之外的开发者示例：
 
 | 示例 | 目的 |
 |---|---|
-| `examples/address-skill` | 表单、地址、手机号、L4 consent |
-| `examples/media-skill` | image/file format、media handle、preview fallback |
-| `examples/dynamic-status-skill` | dynamic component、request/timer、expire cleanup |
-| `examples/location-skill` | location provider、map preview |
+| `examples/fixtures/address-form` | 表单、地址 Host boundary、L4 consent/audit |
+| `examples/fixtures/media-review` | image/file format、opaque media/file handle、preview fallback |
+| `examples/fixtures/dynamic-status` | dynamic component、request/timer、expire cleanup |
+| `examples/fixtures/location-map-preview` | location provider fail-closed、static map preview |
 
 每个示例必须有：README、run command、expected JSON、Render IR snapshot、风险说明。
 
@@ -255,7 +255,7 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 ## 6. 阶段完成检查
 
 - [ ] 开发者能用 CLI 完成 validate/inspect/test。
-- [ ] coffee 之外至少 3 个示例可跑。
+- [x] coffee 之外至少 3 个示例可跑。
 - [ ] 兼容报告能定位 unsupported API 和 fallback 风险。
 - [ ] 迁移指南说明 ANP DID 替代微信身份的方式。
 - [ ] 文档和 CLI 使用同一状态枚举。

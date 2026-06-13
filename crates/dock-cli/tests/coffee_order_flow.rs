@@ -3,6 +3,7 @@ use demo_server::auth::ServerAuthConfig;
 use demo_server::{app, DemoState};
 use dock_cli::{run_with_writer, Cli};
 use serde_json::{json, Value};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -19,6 +20,11 @@ fn skill_root() -> PathBuf {
 
 fn fixture_skill_root(name: &str) -> PathBuf {
     repo_root().join("examples/fixtures").join(name)
+}
+
+fn read_json_file(path: impl AsRef<Path>) -> Value {
+    let content = fs::read_to_string(path.as_ref()).expect("json file reads");
+    serde_json::from_str(&content).expect("json file parses")
 }
 
 async fn spawn_server(fixture: &DidFixture) -> String {
@@ -645,6 +651,119 @@ fn fixture_skills_validate_and_preview_component_snapshots() {
     assert!(!rendered.contains("Authorization"));
     assert!(!rendered.contains("Signature"));
     assert!(!rendered.contains("private key"));
+}
+
+#[test]
+fn example_compatibility_fixtures_validate_and_test_skill() {
+    for fixture in [
+        "address-form",
+        "media-review",
+        "dynamic-status",
+        "location-map-preview",
+    ] {
+        let root = fixture_skill_root(fixture);
+        let expected = read_json_file(root.join("expected-test-skill.json"));
+        let readme = fs::read_to_string(root.join("README.md")).expect("fixture README reads");
+        let skill = root.display().to_string();
+
+        assert!(
+            readme.contains("cargo run -p dock-cli -- validate"),
+            "{fixture} README should include validate command"
+        );
+        assert!(
+            readme.contains("cargo run -p dock-cli -- test-skill"),
+            "{fixture} README should include test-skill command"
+        );
+        assert!(
+            readme.contains("Risk Boundary") && readme.contains("mock-only"),
+            "{fixture} README should explain mock-only risk boundary"
+        );
+
+        let validate = cli_json(["dock-cli".to_owned(), "validate".to_owned(), skill.clone()]);
+        assert_eq!(validate["schemaVersion"], "dock.validate-report.v1");
+        assert_eq!(validate["commandStatus"], "ok");
+        assert_eq!(validate["skillId"], expected["skillId"]);
+        assert_eq!(
+            validate["compatibilityReport"]["skillId"],
+            expected["skillId"]
+        );
+        assert!(
+            validate["compatibilityReport"]["apis"]
+                .as_array()
+                .expect("api reports")
+                .iter()
+                .any(|api| api["name"] == expected["cases"][0]["apiName"]
+                    && api["registered"] == true)
+        );
+        assert!(validate["compatibilityReport"]["components"]
+            .as_array()
+            .expect("component reports")
+            .iter()
+            .any(
+                |component| component["path"] == expected["cases"][0]["componentPath"]
+                    && component["loaded"] == true
+            ));
+
+        let report = cli_json(["dock-cli".to_owned(), "test-skill".to_owned(), skill]);
+        assert_eq!(report["schemaVersion"], expected["schemaVersion"]);
+        assert_eq!(report["status"], expected["status"]);
+        assert_eq!(report["commandStatus"], expected["commandStatus"]);
+        assert_eq!(report["skillId"], expected["skillId"]);
+        assert_eq!(report["fixtureSet"], expected["fixtureSet"]);
+        assert_eq!(
+            report["mockProvider"]["productionReady"],
+            expected["mockProvider"]["productionReady"]
+        );
+        assert_eq!(report["summary"]["total"], expected["summary"]["total"]);
+        assert_eq!(report["summary"]["failed"], expected["summary"]["failed"]);
+        assert_eq!(report["cases"][0]["name"], expected["cases"][0]["name"]);
+        assert_eq!(report["cases"][0]["status"], expected["cases"][0]["status"]);
+        assert_eq!(
+            report["cases"][0]["api"]["apiName"],
+            expected["cases"][0]["apiName"]
+        );
+        assert_eq!(
+            report["cases"][0]["component"]["componentPath"],
+            expected["cases"][0]["componentPath"]
+        );
+        assert_eq!(
+            report["cases"][0]["snapshotCompare"]["status"],
+            expected["cases"][0]["snapshotStatus"]
+        );
+        assert_eq!(
+            report["cases"][0]["auditSummary"]["expected"]["boundary"],
+            expected["cases"][0]["auditBoundary"]
+        );
+        assert!(
+            repo_root()
+                .join(
+                    expected["cases"][0]["snapshot"]
+                        .as_str()
+                        .expect("snapshot path string")
+                )
+                .is_file(),
+            "{fixture} snapshot should exist"
+        );
+
+        let rendered = report.to_string();
+        for forbidden in [
+            "/home/",
+            "Authorization",
+            "Signature",
+            "capabilityToken",
+            "fixture-token",
+            "Bearer ",
+            "private key material",
+            "PEM",
+            "latitude",
+            "longitude",
+        ] {
+            assert!(
+                !rendered.contains(forbidden),
+                "{fixture} test-skill report leaked forbidden marker {forbidden}"
+            );
+        }
+    }
 }
 
 struct DidFixture {

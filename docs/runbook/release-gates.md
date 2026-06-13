@@ -135,7 +135,7 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 | Host provider conformance：phone/address/location/file/payment/scan/phone call/share/detail page | Phase 4 | Step 04-09 已冻结 Host adapter capability/action contract、`api/call` Orchestrator boundary、Host action unsupported fail-closed 和 detail-page canonicalization；真实 provider UI、least-privilege field shape、生产 renderer 和 provider E2E 仍是 production release blocker。 |
 | distributed concurrency / durable idempotency / provider cancellation | Phase 4/6 | Step 04-10 已冻结本地 RuntimeService 内的 session 关闭、pre-dispatch cancellation、deadline check、高风险 in-flight 串行、显式 idempotency key forward/replay 和非幂等业务 no-retry gate；跨进程/跨 Host lock、merchant/provider 侧耐久 idempotency store、同步 executor 抢占式取消、真实 Host background lifecycle 和 metrics/alerting 仍是 production release blocker。 |
 | secret store、token cache 持久化、scoped storage 持久化、audit retention/export 配置化、Skill cache cleanup | Phase 4 | Step 04-04 已冻结 runtime config schema、secret reference、provider/path handle、production profile release blockers 和 redacted diagnostics；Step 04-05 已冻结 token cache persistence trait、restore policy、redacted report 和 dev-only in-memory backend gate；Step 04-06 已冻结 scoped storage persistence trait、namespace scope、quota/restore/delete-scope/redaction gate 和未加密 local file dev/test backend；Step 04-07 已冻结 audit profile、redacted export/retention report、Runtime persistent reader 和 L3/L4 audit unavailable fail-closed gate；Step 04-08 已冻结 Skill cache cleanup sidecar metadata、dry-run report、scope cleanup、rollback protection 和 quarantine fail-closed gate。真实 secret resolve、生产 Host secure store/encrypted token/storage/audit backend、storage/audit migration/access control、export approval、privacy deletion、CLI/ops cache cleanup command 仍由后续 Host/ops gate 承接 |
-| CLI compatibility / inspect / test-skill / import / doctor 报告 schema、developer self-certification | Phase 5 | Step 05-01 已固定 `dock-cli validate` 报告 schema `dock.validate-report.v1`，输出顶层和嵌套 compatibility report、repair suggestions、release readiness 和 redacted local path；Step 05-02 已固定 `dock-cli inspect` 报告 schema `dock.inspect-report.v1`；Step 05-03 已固定 `dock-cli test-skill` 报告 schema `dock.test-skill-report.v1`，复用 RuntimeService / Component Runtime 执行 coffee 与 Render IR fixture gate，并明确 headless provider 为 dev-only；Step 05-04 已固定 `dock-cli import-wechat-mcp` 报告 schema `dock.import-wechat-mcp-report.v1`，默认 dry-run，safe copy 拒绝 symlink/unsafe overwrite/source-dest 包含关系，并只输出 ANP patch 建议；Step 05-05 已固定 `dock-cli doctor` 报告 schema `dock.doctor-report.v1`，覆盖 toolchain/workspace/runtime config/DID/signing credential permission/resolver/allowlist/storage/audit/Host provider/sandbox/server health，`skip` 不计 pass，`--ci` 仅在 fail 时返回非零 |
+| CLI compatibility / inspect / test-skill / import / doctor 报告 schema、developer self-certification | Phase 5 | Step 05-01 已固定 `dock-cli validate` 报告 schema `dock.validate-report.v1`，输出顶层和嵌套 compatibility report、repair suggestions、release readiness 和 redacted local path；Step 05-02 已固定 `dock-cli inspect` 报告 schema `dock.inspect-report.v1`；Step 05-03 已固定 `dock-cli test-skill` 报告 schema `dock.test-skill-report.v1`，复用 RuntimeService / Component Runtime 执行 coffee 与 Render IR fixture gate，并明确 headless provider 为 dev-only；Step 05-04 已固定 `dock-cli import-wechat-mcp` 报告 schema `dock.import-wechat-mcp-report.v1`，默认 dry-run，safe copy 拒绝 symlink/unsafe overwrite/source-dest 包含关系，并只输出 ANP patch 建议；Step 05-05 已固定 `dock-cli doctor` 报告 schema `dock.doctor-report.v1`，覆盖 toolchain/workspace/runtime config/DID/signing credential permission/resolver/allowlist/storage/audit/Host provider/sandbox/server health，`skip` 不计 pass，`--ci` 仅在 fail 时返回非零；Step 05-06 已将 `examples/fixtures/address-form`、`media-review`、`dynamic-status`、`location-map-preview` 整理为开发者可运行示例，补 README、expected JSON、snapshot 证据和 `cargo test -p dock-cli example` 回归 |
 | CI/CD 自动 gate runner、link checker、matrix schema checker、snapshot gate、privacy deletion runbook | Phase 6 | 当前手工和本地命令执行；自动化 release report 待 Phase 6 |
 
 ## 5. 兼容矩阵 Gate
@@ -164,9 +164,13 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 cargo test -p component-runtime
 cargo test -p component-runtime snapshot
 cargo test -p dock-cli fixture
+cargo test -p dock-cli example
 cargo test -p dock-cli --test coffee_order_flow
 cargo run -p dock-cli -- test-skill examples/coffee-skill
+cargo run -p dock-cli -- test-skill examples/fixtures/address-form
+cargo run -p dock-cli -- test-skill examples/fixtures/media-review
 cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
+cargo run -p dock-cli -- test-skill examples/fixtures/location-map-preview
 ```
 
 当前通过标准：
@@ -176,7 +180,7 @@ cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
 - component manifest `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` 进入 redacted runtime metadata / validate report，且不进入 JS state 或 model-visible result。
 - render failure 可以 fallback 到 CardSpec，并输出稳定 fallback reason enum string。
 - dynamic 组件只有声明 `scope.dynamic` 后才注入受限 request/timer；默认 deny、auth header deny、timer limit/clear/expire cleanup 已有 focused tests。
-- address-form、media-review、dynamic-status、location-map-preview fixture packages 可被 `dock-cli validate` / `preview-component` 读取。
+- address-form、media-review、dynamic-status、location-map-preview fixture packages 可被 `dock-cli validate` / `inspect` / `test-skill` 读取，且每个 fixture 有 README、expected JSON summary 和 Render IR snapshot。
 - `dock-cli test-skill` 对 coffee 输出 3 个 pass case，对 Render IR fixtures 输出 snapshot `match`，并在 report 中标记 headless/mock provider `productionReady = false`。
 - `testdata/render-ir/*.json` golden snapshots 包含 render、actions、warnings、metadata、state 和 audit summary，且不含真实 token、Authorization、signature、private key path、本机路径、手机号、真实地址、经纬度。
 

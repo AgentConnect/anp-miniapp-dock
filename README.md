@@ -35,7 +35,7 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - `crates/demo-server`: coffee merchant Agent demo server.
 - `crates/dock-cli`: developer CLI and coffee E2E harness.
 - `examples/coffee-skill`: mock MiniApp MCP coffee Skill fixture.
-- `examples/fixtures`: mock-only compatibility fixtures for address-form, media-review, dynamic-status, and location-map-preview Render IR snapshots.
+- `examples/fixtures`: mock-only compatibility fixtures for address-form, media-review, dynamic-status, and location-map-preview, each with README, expected `test-skill` JSON summary, and Render IR snapshot evidence.
 - `testdata/render-ir`: golden Render IR snapshots for fixture regression tests.
 - `examples/coffee-fastapi-server`: Python/FastAPI localhost coffee service used to simulate a remote HTTP merchant.
 - `mac-app/AnpMiniappDockMac`: SwiftUI/Xcode chatbot host that recognizes user intent, calls the local MiniApp container, and renders Skill components.
@@ -74,7 +74,11 @@ uses demo-only localhost compatibility metadata.
 cargo run -p dock-cli -- validate examples/coffee-skill
 cargo run -p dock-cli -- inspect examples/coffee-skill
 cargo run -p dock-cli -- test-skill examples/coffee-skill
+cargo run -p dock-cli -- validate examples/fixtures/address-form
+cargo run -p dock-cli -- test-skill examples/fixtures/address-form
+cargo run -p dock-cli -- test-skill examples/fixtures/media-review
 cargo run -p dock-cli -- test-skill examples/fixtures/dynamic-status
+cargo run -p dock-cli -- test-skill examples/fixtures/location-map-preview
 cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dry-run
 cargo run -p dock-cli -- doctor
 cargo run -p dock-cli -- call-api examples/coffee-skill searchDrinks '{}'
