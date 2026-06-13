@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-05
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 05:26:17 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 05:33:50 +0800 |
+| Commit | `3b26ba2` |
 | Review evidence | 2026-06-14 05:30:35 +0800 commit 前 Review：确认 `release-process.md` 覆盖版本化对象、release notes 模板、canary stage、rollback conditions/actions、cache purge dry-run 和 audit evidence retention；确认 `2026-06-14-local-canary.md` 明确只证明 Stage 0 headless/local dry-run，Stage 1 internal Host、Stage 2 allowlisted merchant、Stage 3 expansion 仍需真实 Host/deploy 平台证据；确认没有把 local/headless/mock/provider、local backend 或 perf 数字写成 production-ready / production SLO。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 111]`，工作区无未提交变更；已读取主 Plan、Step 06-05 文档、Phase 6 发布策略、Release Gates runbook、developer Host adapter 文档、相关 registry/cache/rollback 计划和 06-04 closure evidence；`git diff --check -- docs/runbook docs/plan README.md scripts` 无输出；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`；`python3 -m json.tool target/release-gates/release-notes-report.json >/tmp/release-notes-report.json` 通过；release gate 内 Markdown link checker 检查 753 个本地链接、compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf` 且无敏感命中；安全抽样 `rg -n "token|Authorization|private key|secret|rollback|audit|canary" docs/runbook docs/plan/production-readiness/phase-6-observability-release.md` 只命中安全规则、流程说明、mock/demo 指引和计划证据，未发现真实 secret、raw token、private key material、本机私有路径或隐私原文。 |
-| Next action | 创建 06-05 focused implementation commit，然后回填 commit hash 并关闭 Step |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 111]`，工作区无未提交变更；已读取主 Plan、Step 06-05 文档、Phase 6 发布策略、Release Gates runbook、developer Host adapter 文档、相关 registry/cache/rollback 计划和 06-04 closure evidence；`git diff --check -- docs/runbook docs/plan README.md scripts` 无输出；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`；`python3 -m json.tool target/release-gates/release-notes-report.json >/tmp/release-notes-report.json` 通过；release gate 内 Markdown link checker 检查 753 个本地链接、compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf` 且无敏感命中；安全抽样 `rg -n "token|Authorization|private key|secret|rollback|audit|canary" docs/runbook docs/plan/production-readiness/phase-6-observability-release.md` 只命中安全规则、流程说明、mock/demo 指引和计划证据，未发现真实 secret、raw token、private key material、本机私有路径或隐私原文；implementation commit `3b26ba2` 后 `git status --short --branch` = `## main...origin/main [ahead 112]`，工作区无未提交变更。 |
+| Next action | 进入 Step 06-06 运维 Runbook 与隐私删除流程 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：06-05
 - [x] Rollback actions 覆盖 runtime revert、Skill version disable/rollback、cache purge、token revoke、rollout stop。
 - [x] Runbook 明确 audit evidence 保留和 secret redaction。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
