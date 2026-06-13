@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-04
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 05:13:33 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 06-03 完成后，启动 CI/CD gates 自动化 |
+| Review evidence | 2026-06-14 05:22:29 +0800 commit 前 Review：修复脚本在 `--report` 目录不存在时解析不稳的问题、修复 full 模式 artifact 输出目录未 export 的问题、修复 quick/full 连续运行时会扫描陈旧 artifacts 的问题；确认 full 模式实际运行 required gates，`skip` 不计 pass，redaction / consent / sandbox / token leakage 均为 hard blocker，runbook 与脚本入口一致。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 109]`，工作区无未提交变更；已读取主 Plan、Step 06-04 文档、Phase 6 计划、Release Gates runbook、README、API/组件兼容矩阵和 06-03 closure evidence；确认仓库当前无 `scripts/` 或 `.github/`，本 Step 采用 vendor-neutral 本地 gate runner；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --quick --report target/release-gates/quick-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = warning` / `releaseDecision = needs-review`，6 pass / 0 fail / 4 skip，quick skip 不计 pass；`python3 -m json.tool target/release-gates/quick-report.json` 通过；`./scripts/release-gates.sh --report target/release-gates/full-report.json` 通过，report `status = warning` / `releaseDecision = needs-review`，21 pass / 0 fail / 1 skip，唯一 skip 是未提供 release notes path；`python3 -m json.tool target/release-gates/full-report.json` 通过；full report 中 `requiredFailed = 0`、`hardBlockerFailed = 0`；Markdown link checker 检查 751 个本地链接；compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf`，未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`git diff --check -- scripts docs/runbook docs/plan README.md` 无输出。 |
+| Next action | 创建 06-04 focused implementation commit，然后回填 commit hash 并关闭 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：06-04
 
 ## 7. 验收标准
 
-- [ ] Gate runner 或 CI workflow 覆盖基础 Rust gates、security gates、compat fixture、snapshot、redaction、docs link。
-- [ ] Gate report 记录 pass/fail/skip、命令、commit、原因和 residual risk。
-- [ ] redaction failure、consent bypass、sandbox escape、token leakage 是 hard blocker。
-- [ ] Release notes completeness 和 migration note 检查有可执行规则或明确人工 checklist。
-- [ ] Release Gates runbook 与自动化命令一致。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Gate runner 或 CI workflow 覆盖基础 Rust gates、security gates、compat fixture、snapshot、redaction、docs link。
+- [x] Gate report 记录 pass/fail/skip、命令、commit、原因和 residual risk。
+- [x] redaction failure、consent bypass、sandbox escape、token leakage 是 hard blocker。
+- [x] Release notes completeness 和 migration note 检查有可执行规则或明确人工 checklist。
+- [x] Release Gates runbook 与自动化命令一致。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -90,11 +90,11 @@ Step index：06-04
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | `--report` 初版在目录不存在时解析不稳；full 模式 artifact 输出目录未 export；quick/full 连续运行时可能扫描旧 artifacts；release notes completeness 在 06-05 前没有实际文件输入，只能记录为 skip。 |
+| 已修复问题 | 已修复 | 相对 `--report` 路径固定到仓库根；export `ARTIFACT_DIR`；每次运行先清空当前 report 的 logs/artifacts，避免陈旧证据；release notes gate 在未提供路径时以 required skip 进入 `needs-review`。 |
+| 剩余风险 | 已记录 | 本 Step 未绑定 GitHub Actions 或其他 CI vendor；release notes/canary 文件由 Step 06-05 提供后，必须用 `--release-notes` 或 `RELEASE_NOTES_PATH` 复跑 gate，才能从 `needs-review` 变为 release-ready pass。 |
+| 新增或缺失测试 | 已覆盖 | 新增 `scripts/release-gates.sh`，通过 `bash -n`、`--quick`、full mode、JSON parse、artifact redaction scan、Markdown link checker、compatibility matrix checker 和 docs diff check 验证；没有新增 Rust 单元测试，因为本 Step 交付物是 shell gate runner。 |
+| 已更新或缺失文档 | 已更新 | 已同步 `README.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-6-observability-release.md`、本 Step 文档和主 Plan 台账；未新增 `.github/workflows`，因为本 Step 非目标是不绑定特定 CI vendor。 |
 
 ## 10. Commit 要求
 

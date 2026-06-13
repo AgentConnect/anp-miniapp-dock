@@ -44,6 +44,7 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - `examples/fixtures`: mock-only compatibility fixtures for address-form, media-review, dynamic-status, and location-map-preview, each with README, expected `test-skill` JSON summary, and Render IR snapshot evidence.
 - `testdata/render-ir`: golden Render IR snapshots for fixture regression tests.
 - `testdata/perf`: local performance/stress smoke baseline JSON artifacts.
+- `scripts/release-gates.sh`: local vendor-neutral release gate runner and JSON report generator.
 - `examples/coffee-fastapi-server`: Python/FastAPI localhost coffee service used to simulate a remote HTTP merchant.
 - `mac-app/AnpMiniappDockMac`: SwiftUI/Xcode chatbot host that recognizes user intent, calls the local MiniApp container, and renders Skill components.
 
@@ -68,6 +69,14 @@ cargo test -p dock-cli perf
 cargo test -p demo-server
 cargo test -p component-runtime component_vm
 ```
+
+Release gate runner:
+
+```bash
+./scripts/release-gates.sh
+```
+
+The runner emits `dock.release-gates-report.v1` at `target/release-gates/release-gates-report.json` by default. It runs the release gates from `docs/runbook/release-gates.md`, records pass/fail/skip, treats skip as not-pass, and marks redaction failure, consent bypass, sandbox escape, and token/Authorization/Signature leakage as hard blockers. Use `--quick` only to validate the script/report plumbing during development; it is not release approval. Pass `--release-notes <path>` or `RELEASE_NOTES_PATH=<path>` when a release notes file exists.
 
 ## CLI
 

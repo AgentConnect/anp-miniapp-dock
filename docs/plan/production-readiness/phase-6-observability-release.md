@@ -146,6 +146,14 @@ cargo test --workspace
 - markdown link check；
 - release notes completeness。
 
+Step 06-04 当前实现的本地 release gate runner 契约：
+
+- `./scripts/release-gates.sh` 是 vendor-neutral 本地入口，默认输出 `target/release-gates/release-gates-report.json`。
+- report schema 为 `dock.release-gates-report.v1`，记录 `pass` / `fail` / `skip`、命令、日志路径、commit、dirty 状态、hard blockers 和 release decision。
+- full 模式执行基础 Rust gates、coffee E2E、validate/doctor JSON、observability、metrics/tracing、sandbox/security、permission/allowlist、DID/token、consent/audit/supply-chain、snapshot、fixture、performance、Markdown link、兼容矩阵状态、artifact redaction 和 docs diff gates。
+- `--quick` 只验证脚本/report/文档检查和 artifact redaction scan，结果必须是 `needs-review`，不能作为 release approval。
+- release notes completeness 需要 `--release-notes <path>` 或 `RELEASE_NOTES_PATH=<path>`；未提供时记为 `skip`，后续 Step 06-05 必须提供 canary/release notes 后复用该 gate。
+
 ## 5. 发布策略
 
 ### 5.1 版本化对象
@@ -196,6 +204,6 @@ cargo test --workspace
 - [x] 结构化日志和 metrics 默认脱敏。
 - [x] trace 能串起 Runtime API、QuickJS VM、`wx.login` / `wx.checkSession` / `wx.request`、render、action、nested `api/call` 和 audit 的本地测试链路；完整 Host message / model decision 侧 trace 仍需真实 Host adapter 注入。
 - [x] 性能基准有自动化脚本。
-- [ ] CI gates 覆盖安全、兼容、snapshot、文档。
+- [x] CI gates 覆盖安全、兼容、snapshot、文档。
 - [ ] canary/rollback runbook 可执行。
 - [ ] release notes 包含版本、兼容变化、风险和回滚方式。
