@@ -2,7 +2,9 @@ use anp_adapter::{DidAuthSession, DidAuthSessionKey, DidAuthSessionManager};
 use js_runtime_quickjs::{ApiCall, ApiVm, ApiVmConfig, ApiVmError, HostDidAuthConfig};
 use mcp_schema::{ApiDeclaration, ComponentDeclaration, SkillManifest, ValidationReport};
 use serde_json::json;
-use skill_loader::{LoadedComponent, LoadedSkill, SourceFile};
+use skill_loader::{
+    LoadedComponent, LoadedSkill, PackageDigest, PackageIntegrityReport, SourceFile,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
@@ -1789,6 +1791,24 @@ module.exports = skill
 }
 
 #[test]
+fn remote_require_is_rejected() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('escape', require('https://example.invalid/remote.js'))
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["escape"],
+    );
+
+    let error = ApiVm::load_skill(skill).expect_err("remote require must fail");
+    assert!(
+        matches!(error, ApiVmError::QuickJs(message) if message.contains("outside skill package"))
+    );
+}
+
+#[test]
 fn sandbox_globals_are_not_available_to_skill_code() {
     let skill = test_skill(
         r#"
@@ -2068,8 +2088,10 @@ fn test_skill_with_components(
                 })
                 .collect(),
             components,
+            meta: None,
             extra: BTreeMap::new(),
         },
+        integrity: PackageIntegrityReport::development_unsigned(PackageDigest::sha256("test")),
         entry_js: source_at(&root, "index.js", entry_js),
         api_modules: api_modules
             .into_iter()

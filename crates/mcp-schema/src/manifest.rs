@@ -9,8 +9,20 @@ pub struct SkillManifest {
     pub apis: Vec<ApiDeclaration>,
     #[serde(default)]
     pub components: Vec<ComponentDeclaration>,
+    #[serde(default, rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<ManifestMeta>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+impl SkillManifest {
+    pub fn anp_meta(&self) -> Option<&Value> {
+        self.meta.as_ref().and_then(|meta| meta.anp.as_ref())
+    }
+
+    pub fn supply_chain_meta(&self) -> Option<&Value> {
+        self.anp_meta().and_then(|anp| anp.get("supplyChain"))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -111,6 +111,8 @@ pub fn validate_manifest_with_component_paths<'a>(
 
     component_paths.extend(additional_component_paths.into_iter().map(str::to_owned));
 
+    validate_supply_chain_metadata(&mut report, manifest.supply_chain_meta());
+
     for (index, component) in manifest.components.iter().enumerate() {
         let component_path = format!("components[{index}]");
         if component.path.trim().is_empty() {
@@ -239,6 +241,110 @@ pub fn validate_manifest_with_component_paths<'a>(
     }
 
     report
+}
+
+fn validate_supply_chain_metadata(report: &mut ValidationReport, supply_chain: Option<&Value>) {
+    let Some(supply_chain) = supply_chain else {
+        report.push_production_warning(
+            "_meta.anp.supplyChain",
+            "Skill package is unsigned and lacks publisher DID supply-chain metadata",
+            Some(
+                "Declare publisherDid, sha256 digest, and package signature before production validation.",
+            ),
+        );
+        return;
+    };
+
+    let Some(object) = supply_chain.as_object() else {
+        report.push_production_warning(
+            "_meta.anp.supplyChain",
+            "supplyChain metadata should be an object",
+            Some("Use {\"publisherDid\":\"did:...\",\"digest\":{...},\"signature\":{...}}."),
+        );
+        return;
+    };
+
+    match object.get("publisherDid").and_then(Value::as_str) {
+        Some(publisher_did)
+            if !publisher_did.trim().is_empty() && publisher_did.starts_with("did:") => {}
+        _ => report.push_production_warning(
+            "_meta.anp.supplyChain.publisherDid",
+            "publisherDid is required and must be a DID",
+            Some(
+                "Use the publisher ANP DID that the Host can check against its trusted allowlist.",
+            ),
+        ),
+    }
+
+    validate_digest_metadata(report, object.get("digest"));
+    validate_signature_metadata(report, object.get("signature"));
+}
+
+fn validate_digest_metadata(report: &mut ValidationReport, digest: Option<&Value>) {
+    let Some(object) = digest.and_then(Value::as_object) else {
+        report.push_production_warning(
+            "_meta.anp.supplyChain.digest",
+            "package digest metadata is required",
+            Some("Use {\"algorithm\":\"sha256\",\"value\":\"<64 lowercase hex chars>\"}."),
+        );
+        return;
+    };
+
+    if object.get("algorithm").and_then(Value::as_str) != Some("sha256") {
+        report.push_production_warning(
+            "_meta.anp.supplyChain.digest.algorithm",
+            "package digest algorithm must be sha256",
+            Some("Recompute the package digest with the Step 03-06 loader contract."),
+        );
+    }
+
+    let valid_value = object
+        .get("value")
+        .and_then(Value::as_str)
+        .is_some_and(is_sha256_hex);
+    if !valid_value {
+        report.push_production_warning(
+            "_meta.anp.supplyChain.digest.value",
+            "package digest value must be a 64-character hex sha256",
+            Some("Use the digest reported by dock-cli validate before signing the package."),
+        );
+    }
+}
+
+fn validate_signature_metadata(report: &mut ValidationReport, signature: Option<&Value>) {
+    let Some(object) = signature.and_then(Value::as_object) else {
+        report.push_production_warning(
+            "_meta.anp.supplyChain.signature",
+            "package signature metadata is required",
+            Some("Attach a package signature over the normalized package digest."),
+        );
+        return;
+    };
+
+    for (field, message) in [
+        ("algorithm", "package signature algorithm is required"),
+        ("value", "package signature value is required"),
+        ("keyId", "package signature keyId is required"),
+    ] {
+        let valid = object
+            .get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty());
+        if !valid {
+            report.push_production_warning(
+                format!("_meta.anp.supplyChain.signature.{field}"),
+                message,
+                Some("Use a verifier-supported signature contract before production validation."),
+            );
+        }
+    }
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 fn validate_related_page(report: &mut ValidationReport, path: &str, related_page: &Value) {

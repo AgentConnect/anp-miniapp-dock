@@ -486,6 +486,7 @@ fn validate(skill_path: &Path) -> Result<Value, CliError> {
             "components": component_reports,
             "permissions": permissions,
             "risks": risks,
+            "supplyChain": supply_chain_report(&skill),
             "fallbacks": fallbacks,
             "releaseBlockers": release_blockers,
         },
@@ -649,7 +650,37 @@ fn validate_release_blockers(
         }
     }
 
+    if !skill.integrity.production_ready {
+        blockers.push(json!({
+            "code": "supply_chain",
+            "status": skill.integrity.status.as_str(),
+            "issueCodes": skill.integrity.issue_codes,
+            "message": "Skill package is not production-ready under the Step 03-06 supply-chain gate.",
+            "suggestion": "Attach publisher DID, sha256 digest, package signature, and trusted publisher policy before production release.",
+        }));
+    }
+
     blockers
+}
+
+fn supply_chain_report(skill: &LoadedSkill) -> Value {
+    json!({
+        "digest": {
+            "algorithm": skill.integrity.digest.algorithm,
+            "value": skill.integrity.digest.value,
+        },
+        "status": skill.integrity.status.as_str(),
+        "publisherDid": skill.integrity.publisher_did,
+        "signature": {
+            "algorithm": skill.integrity.signature_algorithm,
+            "keyId": skill.integrity.signature_key_id,
+        },
+        "trustedPublisher": skill.integrity.trusted_publisher,
+        "quarantine": skill.integrity.quarantine,
+        "productionReady": skill.integrity.production_ready,
+        "issueCodes": skill.integrity.issue_codes,
+        "warnings": skill.integrity.warnings,
+    })
 }
 
 fn compatibility_level(report: &ValidationReport, release_blockers: &[Value]) -> &'static str {
@@ -1771,6 +1802,22 @@ mod tests {
                         .as_str()
                         .is_some_and(|message| message.contains("declared but not registered"))
             }));
+        assert_eq!(
+            output["compatibilityReport"]["supplyChain"]["status"],
+            "demo-unsigned"
+        );
+        assert_eq!(
+            output["compatibilityReport"]["supplyChain"]["productionReady"],
+            false
+        );
+        assert!(output["compatibilityReport"]["releaseBlockers"]
+            .as_array()
+            .expect("release blockers")
+            .iter()
+            .any(
+                |blocker| blocker["code"] == "supply_chain" && blocker["status"] == "demo-unsigned"
+            ));
+        assert!(!output.to_string().contains("fixture-signature-secret"));
     }
 
     #[test]
@@ -1842,6 +1889,22 @@ mod tests {
             "[REDACTED]"
         );
         assert!(!component.to_string().contains("should-not-leak"));
+    }
+
+    #[test]
+    fn validate_redacts_package_signature_value() {
+        let fixture = SignedSkillFixture::new();
+        let output = validate(&fixture.root).expect("validate signed fixture");
+
+        assert_eq!(
+            output["compatibilityReport"]["supplyChain"]["signature"]["keyId"],
+            "did:wba:publisher.example#package-key-1"
+        );
+        assert_eq!(
+            output["compatibilityReport"]["supplyChain"]["status"],
+            "quarantined"
+        );
+        assert!(!output.to_string().contains("fixture-signature-secret"));
     }
 
     #[test]
@@ -2078,6 +2141,58 @@ mod tests {
                     {
                       "name": "missing",
                       "description": "declared but not registered API",
+                      "inputSchema": {}
+                    }
+                  ],
+                  "components": []
+                }"#,
+            )
+            .expect("write mcp.json");
+
+            Self { _dir: dir, root }
+        }
+    }
+
+    struct SignedSkillFixture {
+        _dir: TempDir,
+        root: PathBuf,
+    }
+
+    impl SignedSkillFixture {
+        fn new() -> Self {
+            let dir = TempDir::new("dock-cli-signed-skill-fixture").expect("temp dir");
+            let root = dir.path().to_path_buf();
+            fs::write(root.join("SKILL.md"), "# Signed Test Skill").expect("write SKILL.md");
+            fs::write(
+                root.join("index.js"),
+                "const skill = wx.modelContext.createSkill(__dirname)\n\
+                 skill.registerAPI('declared', async () => ({ content: [{ type: 'text', text: 'ok' }] }))\n\
+                 module.exports = skill\n",
+            )
+            .expect("write index.js");
+            fs::write(
+                root.join("mcp.json"),
+                r#"{
+                  "_meta": {
+                    "anp": {
+                      "supplyChain": {
+                        "publisherDid": "did:wba:publisher.example",
+                        "digest": {
+                          "algorithm": "sha256",
+                          "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                        },
+                        "signature": {
+                          "algorithm": "dock.package.dev-sha256.v1",
+                          "keyId": "did:wba:publisher.example#package-key-1",
+                          "value": "fixture-signature-secret"
+                        }
+                      }
+                    }
+                  },
+                  "apis": [
+                    {
+                      "name": "declared",
+                      "description": "registered API",
                       "inputSchema": {}
                     }
                   ],

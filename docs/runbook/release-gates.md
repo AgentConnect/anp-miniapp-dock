@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 3 security gates 基线；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence 已有本地 release gate 证据
+> 状态：Phase 3 security gates 基线；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -74,7 +74,8 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 
 | Gate | 证据 |
 |---|---|
-| Skill package path escape / absolute path deny | [`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs) |
+| Skill package path escape / absolute path / outside symlink / zip slip deny | [`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs) |
+| Skill package digest/signature contract、trusted publisher allowlist、quarantine、validate supply-chain report | [`integrity.rs`](../../crates/skill-loader/src/integrity.rs)、[`coffee_skill_load.rs`](../../crates/skill-loader/tests/coffee_skill_load.rs)、[`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs)、[`commands.rs`](../../crates/dock-cli/src/commands.rs) |
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout、WebSocket/timer globals deny、Promise job drain、console/result size limit | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs) |
@@ -112,7 +113,7 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 | DID/token lifecycle：token claims version、refresh、revoke/logout、cache eviction、jti replay、challenge nonce 一次性、resolver cache/trust anchor | 03-04 | 已补齐本地 required gate：`CapabilityTokenLifecycleStore` / `InMemoryTokenLifecycleStore` 支持 revoke、expired prune 和 high-risk `ConsumeOnce` jti gate；`DidAuthSessionManager` 支持 revoke/logout 和 expired eviction；`ChallengeNonceStore`、`TrustedDidDocumentResolver` 覆盖 nonce 一次性、cache TTL、trust anchor、unknown/mismatch fail closed；demo-server 登录尝试开始即消费 challenge，服务端 bearer 校验检查 revoked jti | `cargo test -p anp-adapter token`、`cargo test -p anp-adapter session`、`cargo test -p anp-adapter challenge`、`cargo test -p anp-adapter`、`cargo test -p demo-server token`、`cargo test -p demo-server`、`cargo test -p js-runtime-quickjs wx_login`、`cargo test -p dock-cli --test coffee_order_flow`；生产 token cache/revocation restore、跨进程 replay store、DID network/rotation、secret store 待 Phase 4/6 |
 | Host consent adapter、ConsentProof policy version/prompt digest/decision actor/timestamp/parameter digest | 03-05 | 已补齐本地 required gate：`consent-audit::HostConsentAdapter`、`dock-core::HostConsentGateAdapter`、`ConsentProof` policy/prompt/actor/digest 字段；provider unavailable fail closed 并记录 blocked consent audit | `cargo test -p consent-audit consent`、`cargo test -p dock-core consent`；真实 Host UI/conformance 待 Phase 4 |
 | persistent audit sink、retention、query/export redaction | 03-05 | 已补齐本地 required gate：`FileAuditSink` append-only JSONL 后端，restart/query/export/retention tests；record/export 默认脱敏 token/signature/private/phone/address/file content | `cargo test -p consent-audit audit`；部署级 audit encryption、backend config、migration 和 access control 待 Phase 4 |
-| Skill package digest/signature、publisher DID、trusted publisher allowlist、quarantine、remote require/path/symlink/zip slip deny | 03-06 | 当前已有 path/manifest validation；未签名本地包仍是 dev/demo-only | loader package tests、validate supply-chain report、coffee demo 未签名 dev/demo-only blocker |
+| Skill package digest/signature、publisher DID、trusted publisher allowlist、quarantine、remote require/path/symlink/zip slip deny | 03-06 | 已补齐本地 required gate：`skill-loader` 计算 normalized package `sha256` digest，`mcp-schema` 校验 `_meta.anp.supplyChain` contract，production integrity policy 对 unsigned、digest mismatch、signature mismatch、unknown publisher fail closed/quarantine，QuickJS CommonJS 拒绝 remote require，`dock-cli validate` 输出 redacted supply-chain report 和 release blocker；未签名本地包仍是 dev/demo-only | `cargo test -p skill-loader package`、`cargo test -p mcp-schema -p dock-cli validate`、`cargo test -p js-runtime-quickjs remote_require_is_rejected`、`cargo run -p dock-cli -- validate examples/coffee-skill`；真实 registry/cache、生产签名 verifier、publisher allowlist 配置来源和 CI 自动化仍待 Phase 4/6 |
 
 ### 4.3 Phase 4/5 后续 security gates
 

@@ -1930,7 +1930,9 @@ name = "skill-loader"
 version = "0.1.0"
 dependencies = [
  "mcp-schema",
+ "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
 ]
 

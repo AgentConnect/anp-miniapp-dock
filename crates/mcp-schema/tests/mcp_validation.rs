@@ -61,6 +61,22 @@ fn valid_manifest_json() -> Value {
                 "unknownComponentField": "kept"
             }
         ],
+        "_meta": {
+            "anp": {
+                "supplyChain": {
+                    "publisherDid": "did:wba:publisher.example",
+                    "digest": {
+                        "algorithm": "sha256",
+                        "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    },
+                    "signature": {
+                        "algorithm": "dock.package.dev-sha256.v1",
+                        "keyId": "did:wba:publisher.example#package-key-1",
+                        "value": "fixture-signature"
+                    }
+                }
+            }
+        },
         "unknownRootField": {
             "kept": true
         }
@@ -75,6 +91,7 @@ fn validates_legal_coffee_manifest_and_keeps_unknown_fields() {
 
     assert!(report.is_valid(), "{report:#?}");
     assert!(manifest.extra.contains_key("unknownRootField"));
+    assert!(manifest.supply_chain_meta().is_some());
     assert!(manifest.apis[0].extra.contains_key("x_anp"));
     assert!(manifest.components[0]
         .extra
@@ -85,6 +102,59 @@ fn validates_legal_coffee_manifest_and_keeps_unknown_fields() {
     );
     assert!(manifest.components[0].dynamic_permission().is_some());
     assert_eq!(manifest.components[0].expirable, Some(true));
+}
+
+#[test]
+fn unsigned_manifest_is_a_production_warning_not_a_spec_error() {
+    let mut value = valid_manifest_json();
+    value.as_object_mut().unwrap().remove("_meta");
+    let manifest: SkillManifest = serde_json::from_value(value).unwrap();
+
+    let report = validate_manifest(&manifest);
+
+    assert!(report.is_valid(), "{report:#?}");
+    assert!(report.warnings.iter().any(|issue| {
+        issue.category == ValidationIssueCategory::Production
+            && issue.path == "_meta.anp.supplyChain"
+            && issue.message.contains("unsigned")
+    }));
+}
+
+#[test]
+fn malformed_supply_chain_contract_reports_production_warnings() {
+    let mut value = valid_manifest_json();
+    value["_meta"]["anp"]["supplyChain"] = json!({
+        "publisherDid": "not-a-did",
+        "digest": {
+            "algorithm": "sha1",
+            "value": "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"
+        },
+        "signature": {
+            "algorithm": "",
+            "keyId": "",
+            "value": ""
+        }
+    });
+    let manifest: SkillManifest = serde_json::from_value(value).unwrap();
+
+    let report = validate_manifest(&manifest);
+
+    assert!(report.is_valid(), "{report:#?}");
+    for path in [
+        "_meta.anp.supplyChain.publisherDid",
+        "_meta.anp.supplyChain.digest.algorithm",
+        "_meta.anp.supplyChain.digest.value",
+        "_meta.anp.supplyChain.signature.algorithm",
+        "_meta.anp.supplyChain.signature.keyId",
+        "_meta.anp.supplyChain.signature.value",
+    ] {
+        assert!(
+            report.warnings.iter().any(|issue| {
+                issue.category == ValidationIssueCategory::Production && issue.path == path
+            }),
+            "missing warning for {path}: {report:#?}"
+        );
+    }
 }
 
 #[test]
