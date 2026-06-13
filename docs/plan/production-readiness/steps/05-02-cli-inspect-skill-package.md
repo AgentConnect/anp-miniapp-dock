@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-02
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 23:54:31 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 00:13:03 +0800 |
+| Commit | `ed5599f` |
 | Review evidence | 2026-06-14 00:10:41 +0800 commit 前 Review 已记录：确认 `inspect` 只调用 `load_skill`、API registration trace / 静态注册扫描、文件树和 `wx.*` 静态扫描，不调用 Skill API 或 Host provider；修复 `validation_summary` / inspect warning 可能透传敏感 issue 文本的问题，统一输出 `[REDACTED]` 且不回显 `Authorization` / `Signature` / token marker；确认 file tree 只输出相对路径、类型和大小，不输出源码；确认 dynamic property access 与静态扫描限制已在输出和 Phase 5 文档中标注。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 88]`；已读取主 Plan、Step 05-02 文档、Phase 5 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理和 Plan 变更记录；已确认 05-01 implementation commit `153027c` 与 closure commit `d8ae27f`；`cargo fmt --check` 通过；`cargo test -p dock-cli inspect` 2 unit + 1 integration passed；`cargo test -p skill-loader` 14 package/path tests + 11 registry/cache tests + doctests passed；`cargo run -p dock-cli -- inspect examples/coffee-skill` 输出 `dock.inspect-report.v1`、`status = warning`、`commandStatus = ok`、`registeredApisSource = api-vm-registration-trace`；`python3 -m json.tool /tmp/dock-inspect-0502.json` 可解析；inspect JSON 脱敏抽样未命中 `/home/`、Authorization、Signature、capabilityToken、private、secret 或 token；`git diff --check -- crates/dock-cli crates/skill-loader crates/mcp-schema docs/plan README.md` 无输出；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
-| Next action | 创建 05-02 focused implementation commit |
+| Next action | 进入 05-03 CLI test-skill 与 Fixture Runner |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -71,7 +71,7 @@ Step index：05-02
 - [x] 输出 redacted，不含 token、Authorization、signature、private key path 或隐私原文。
 - [x] Phase 5 文档和 README/CLI docs 与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -102,10 +102,10 @@ Step index：05-02
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 inspect command、直接 tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short` = `M README.md`、`M crates/dock-cli/src/commands.rs`、`M crates/dock-cli/tests/coffee_order_flow.rs`、`M docs/plan/production-readiness-roadmap.md`、`M docs/plan/production-readiness/phase-5-developer-experience.md`、`M docs/plan/production-readiness/steps/05-02-cli-inspect-skill-package.md`。
+- 纳入文件：`README.md`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness/steps/05-02-cli-inspect-skill-package.md`。
+- Commit 后证据：implementation commit `ed5599f phase5: add skill inspect command`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 89]`。
+- 遗留未提交变更：仅本 closure 文档更新，随后单独提交。
 - 建议消息：`phase5: add skill inspect command`
 
 ## 11. Blocked 处理
