@@ -12,7 +12,7 @@ Step index：02-07
 | Branch | `main` |
 | Started | 2026-06-12 23:00:42 +0800 |
 | Completed | 2026-06-12 23:06:53 +0800 |
-| Commit | `2f0d122` |
+| Commit | `2f0d122`；closure commit `8cd9b80` |
 | Review evidence | 2026-06-12 23:04:43 +0800 批次最终 Review 已记录：修复 Phase 2 子文档误把全部 P1 Component JS 能力标为完成的问题；确认 01-05 至 02-06 evidence、git history、dynamic sandbox gate、Render IR snapshots、release gates 和安全边界可审计 |
 | Verification evidence | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出 |
 | Next action | 本 Goal 到 Step 02-07 结束；停止在 Phase 2，不进入 Step 03-01 |
@@ -130,7 +130,9 @@ Commit 前状态：`git status --short --branch` 显示 `docs/plan/production-re
 
 Commit 后证据：final review commit `2f0d122 docs: record phase1 phase2 final review`；post-commit `git status --short --branch` = `## main...origin/main [ahead 43]`，工作区无未提交变更。
 
-遗留未提交变更：仅本 Step 文档和主 Plan 的 commit hash / done 状态回填，准备单独创建 docs closure commit。
+Closure 证据：后续创建 `8cd9b80 docs: close phase1 phase2 final review gate`，只回填本 Step 和主 Plan 的 commit hash / done 状态；closure 后 `git status --short --branch` = `## main...origin/main [ahead 44]`，工作区无未提交变更。
+
+遗留未提交变更：无。
 
 ## 11. Blocked 处理
 
@@ -143,6 +145,7 @@ Commit 后证据：final review commit `2f0d122 docs: record phase1 phase2 final
 | 日期 | 变更 | 原因 | 主 Plan 变更记录链接 |
 |---|---|---|---|
 | 2026-06-12 | 创建 Step 02-07 小 Plan | 将 01-05 至 02-06 批次最终 Review 与整体验证变成可追踪 gate，避免 Codex Goal 直接跳到 Phase 3 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
+| 2026-06-13 | 回填 closure evidence | 同步 `8cd9b80` closure commit、清除“遗留未提交变更”旧表述，保证 Step 文档与主 Plan 台账一致 | `anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md` |
 
 ## 13. 风险、回滚与后续文档
 

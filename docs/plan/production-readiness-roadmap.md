@@ -90,7 +90,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.1 Resume From Here
 
-当前恢复指针：从 Step 01-05 [`production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md`](production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md) 开始。
+当前恢复指针：整体 roadmap 的第一个非 `done` Step 是 Step 03-01 [`production-readiness/steps/03-01-threat-model-security-classification.md`](production-readiness/steps/03-01-threat-model-security-classification.md)。如果 Codex Goal 明确限定只执行 Step 01-05 至 02-07，则该批次已经完成，应在 02-07 停止，不进入 03-01。
 
 恢复规则：
 
@@ -102,7 +102,7 @@ Harness 入口：`awiki-harness/context/00-context-map.md`、`awiki-harness/cont
 
 #### 2.3.2 Step 拆分
 
-Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-07 覆盖剩余 Phase 1 `planned-p1` API 能力、Phase 2 组件运行时 P1 起步能力，以及进入 Phase 3 前必须完成的批次最终 Review gate；Step 03-01 至 06-06 覆盖 Phase 3 至 Phase 6 的安全、运行时/Host、开发者体验和发布运营里程碑。后续新增阶段或范围变化仍必须按同一模板拆分小 Step，并通过 Plan 变更记录补充到本表。
+Phase 0、Phase 1 首批 Step 00-01 至 01-04、以及 Step 01-05 至 02-07 均已完成。Step 01-05 至 02-07 覆盖剩余 Phase 1 `planned-p1` API 能力、Phase 2 组件运行时 P1 起步能力，以及进入 Phase 3 前必须完成的批次最终 Review gate；Step 03-01 至 06-06 覆盖 Phase 3 至 Phase 6 的安全、运行时/Host、开发者体验和发布运营里程碑。后续新增阶段或范围变化仍必须按同一模板拆分小 Step，并通过 Plan 变更记录补充到本表。
 
 | Step | 标题 | 依赖 | 主要产出 | 小 Plan 文档 | Commit gate | 状态 |
 |---|---|---|---|---|---|---|
@@ -114,15 +114,15 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-07
 | 01-02 | Skill package 与 manifest 对齐 | 00-02, 00-03, 01-01 | manifest 校验、兼容报告、测试 | [production-readiness/steps/01-02-skill-package-manifest-alignment.md](production-readiness/steps/01-02-skill-package-manifest-alignment.md) | 必须 | done |
 | 01-03 | `wx.modelContext` 原子接口桥接 | 01-01, 01-02 | `getSessionId`、`expireAllCards`、NotificationType、card event | [production-readiness/steps/01-03-model-context-bridge.md](production-readiness/steps/01-03-model-context-bridge.md) | 必须 | done |
 | 01-04 | DID 会话与 RequestBroker 收敛 | 01-01, 01-02 | `DidAuthSessionManager`、`wx.login`、`wx.checkSession`、`wx.request` 正式路径 | [production-readiness/steps/01-04-did-session-request-broker.md](production-readiness/steps/01-04-did-session-request-broker.md) | 必须 | done |
-| 01-05 | Unsupported API Registry 与统一 fail shape | 01-01, 01-04 | unsupported registry、统一 fail shape、矩阵同步 | [production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md](production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md) | 必须 | pending |
-| 01-06 | Storage JS Bridge | 01-01, 01-04, 01-05 | `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 及同步版本 | [production-readiness/steps/01-06-storage-js-bridge.md](production-readiness/steps/01-06-storage-js-bridge.md) | 必须 | pending |
-| 01-07 | Device/App Info Atomic API | 01-01；独立于 01-06，可在 01-06 blocked 时按 Blocked 规则串行跳转 | `wx.getDeviceInfo`、`wx.getAppBaseInfo` Atomic API 最小实现 | [production-readiness/steps/01-07-device-app-info-atomic-api.md](production-readiness/steps/01-07-device-app-info-atomic-api.md) | 必须 | pending |
-| 01-08 | 高风险 API Host Boundary 与 fail-closed | 01-01, 01-04, 01-05 | phone/address/location/media/payment/scan/phone call Host boundary、ConsentGate、fail closed | [production-readiness/steps/01-08-high-risk-api-host-boundary.md](production-readiness/steps/01-08-high-risk-api-host-boundary.md) | 必须 | pending |
-| 02-01 | Render IR schemaVersion 与 fallback reason enum | 00-03, 01-03 | `dock.render-ir.v1`、fallback reason enum | [production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md](production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md) | 必须 | pending |
-| 02-02 | Component manifest metadata runtime flow | 01-02, 01-03, 02-01 | `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` runtime metadata | [production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md](production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md) | 必须 | pending |
-| 02-03 | WXML/WXSS P1 语法增强 | 02-01 | `wx:elif` / `wx:else`、`catchtap`、disabled、简单表达式、P1 WXSS | [production-readiness/steps/02-03-wxml-wxss-p1-syntax.md](production-readiness/steps/02-03-wxml-wxss-p1-syntax.md) | 必须 | pending |
-| 02-04 | 表单与静态媒体节点 | 01-08, 02-01, 02-03 | `input`、`textarea`、`radio`、`checkbox`、`picker`、`map-preview`、`canvas-static` | [production-readiness/steps/02-04-form-static-media-nodes.md](production-readiness/steps/02-04-form-static-media-nodes.md) | 必须 | pending |
-| 02-05 | Dynamic component controls | 01-04, 02-02 | dynamic `wx.request`、timer、component sandbox escape/resource-limit tests、expire/detach cleanup | [production-readiness/steps/02-05-dynamic-component-controls.md](production-readiness/steps/02-05-dynamic-component-controls.md) | 必须 | done |
+| 01-05 | Unsupported API Registry 与统一 fail shape | 01-01, 01-04 | unsupported registry、统一 fail shape、矩阵同步 | [production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md](production-readiness/steps/01-05-unsupported-api-registry-fail-shape.md) | 必须 | done |
+| 01-06 | Storage JS Bridge | 01-01, 01-04, 01-05 | `wx.getStorage` / `setStorage` / `removeStorage` / `clearStorage` 及同步版本 | [production-readiness/steps/01-06-storage-js-bridge.md](production-readiness/steps/01-06-storage-js-bridge.md) | 必须 | done |
+| 01-07 | Device/App Info Atomic API | 01-01；独立于 01-06，可在 01-06 blocked 时按 Blocked 规则串行跳转 | `wx.getDeviceInfo`、`wx.getAppBaseInfo` Atomic API 最小实现 | [production-readiness/steps/01-07-device-app-info-atomic-api.md](production-readiness/steps/01-07-device-app-info-atomic-api.md) | 必须 | done |
+| 01-08 | 高风险 API Host Boundary 与 fail-closed | 01-01, 01-04, 01-05 | phone/address/location/media/payment/scan/phone call Host boundary、ConsentGate、fail closed | [production-readiness/steps/01-08-high-risk-api-host-boundary.md](production-readiness/steps/01-08-high-risk-api-host-boundary.md) | 必须 | done |
+| 02-01 | Render IR schemaVersion 与 fallback reason enum | 00-03, 01-03 | `dock.render-ir.v1`、fallback reason enum | [production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md](production-readiness/steps/02-01-render-ir-schema-fallback-reasons.md) | 必须 | done |
+| 02-02 | Component manifest metadata runtime flow | 01-02, 01-03, 02-01 | `relatedPage`、`scope.dynamic`、`expirable`、`expiredText` runtime metadata | [production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md](production-readiness/steps/02-02-component-manifest-metadata-runtime-flow.md) | 必须 | done |
+| 02-03 | WXML/WXSS P1 语法增强 | 02-01 | `wx:elif` / `wx:else`、`catchtap`、disabled、简单表达式、P1 WXSS | [production-readiness/steps/02-03-wxml-wxss-p1-syntax.md](production-readiness/steps/02-03-wxml-wxss-p1-syntax.md) | 必须 | done |
+| 02-04 | 表单与静态媒体节点 | 01-08, 02-01, 02-03 | `input`、`textarea`、`radio`、`checkbox`、`picker`、`map-preview`、`canvas-static` | [production-readiness/steps/02-04-form-static-media-nodes.md](production-readiness/steps/02-04-form-static-media-nodes.md) | 必须 | done |
+| 02-05 | Dynamic component controls | 01-04, 02-02；开放前必须通过本 Step sandbox/resource gate | component sandbox escape/resource-limit gate 前置验证、dynamic `wx.request`、timer、expire/detach cleanup | [production-readiness/steps/02-05-dynamic-component-controls.md](production-readiness/steps/02-05-dynamic-component-controls.md) | 必须 | done |
 | 02-06 | Fixture 与 Render IR snapshots | 02-01, 02-02, 02-03, 02-04, 02-05 | address-form、media-review、dynamic-status、location-map-preview、golden snapshots | [production-readiness/steps/02-06-fixtures-render-ir-snapshots.md](production-readiness/steps/02-06-fixtures-render-ir-snapshots.md) | 必须 | done |
 | 02-07 | 01-05 至 02-06 批次最终 Review 与整体验证 | 01-05, 01-06, 01-07, 01-08, 02-01, 02-02, 02-03, 02-04, 02-05, 02-06 | 批次全局 Review 记录、整体验证证据、Phase 3 启动 gate | [production-readiness/steps/02-07-batch-final-review-verification.md](production-readiness/steps/02-07-batch-final-review-verification.md) | 必须 | done |
 | 03-01 | Threat Model 与安全分级收敛 | 00-04, 01-08, 02-07 | 安全控制矩阵、L0-L4 风险分级、release gate 收敛 | [production-readiness/steps/03-01-threat-model-security-classification.md](production-readiness/steps/03-01-threat-model-security-classification.md) | 必须 | pending |
@@ -181,8 +181,8 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-07
 | 02-04 | done | `main` | 2026-06-12 21:54:59 +0800 | 2026-06-12 22:03:40 +0800 | `cc7b3b8` | Step 文档 Review 环节已记录：修复 `maxlength` 等数值 props 初版以字符串输出的问题；确认新增表单节点只是 Render IR 数据，disabled 会抑制 `input` / `change` / tap event，`map-preview` 不透传精确经纬度/markers，`canvas-static` 不开放 script/touch 交互，未绕过 Orchestrator input validation、ConsentGate 或 Host provider | `cargo fmt --check` 通过；`cargo test -p component-runtime node` 7 passed under filter；`cargo test -p component-runtime` 40 passed；`cargo test -p dock-cli --test coffee_order_flow` 3 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/dock-core docs/architecture docs/plan` 无输出；敏感词抽样仅命中本步骤精确经纬度/markers 拒绝测试、文档安全说明和既有台账文字；post-commit `git status --short --branch` = `## main...origin/main [ahead 37]` | 进入 02-05 |
 | 02-05 | done | `main` | 2026-06-12 22:05:11 +0800 | 2026-06-12 22:32:24 +0800 | `7baca29` | 2026-06-12 22:30:25 +0800 commit 前 Review 已记录：修复 native request bridge 全局暴露、component `wx.request` callback 语义与 Atomic API bridge 不一致、`setInterval` 退化为一次性 flush、resource-limit 缺少 focused timeout 测试；剩余 Host transport/background scheduler/persistent audit 按 Phase 4 边界记录 | `cargo fmt --check` 通过；`cargo test -p component-runtime dynamic` 5 passed；`cargo test -p component-runtime sandbox` 2 passed；`cargo test -p component-runtime` 46 passed；`cargo test -p wx-compat` 22 passed；`cargo test -p anp-adapter request` 2 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/component-runtime crates/wx-compat crates/js-runtime-quickjs crates/anp-adapter docs/architecture docs/runbook docs/security docs/plan` 无输出；敏感词抽样仅命中 redaction 规则、测试假值和安全文档；post-commit `git status --short --branch` = `## main...origin/main [ahead 39]` | 进入 02-06 |
 | 02-06 | done | `main` | 2026-06-12 22:33:56 +0800 | 2026-06-12 22:59:08 +0800 | `f778a14` | 2026-06-12 22:56:36 +0800 commit 前 Review 已记录：修复 dynamic snapshot `brokerCalls` 取值时机和 dynamic policy 过期文案；确认 snapshots 稳定、mock-only、无禁用敏感串 | `cargo fmt --check` 通过；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`cargo test -p mcp-schema` 13 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；严格 fixture/snapshot 敏感串扫描无命中；post-commit `git status --short --branch` = `## main...origin/main [ahead 41]` | 进入 02-07 |
-| 02-07 | done | `main` | 2026-06-12 23:00:42 +0800 | 2026-06-12 23:06:53 +0800 | `2f0d122` | 2026-06-12 23:04:43 +0800 批次最终 Review 已记录：修复 Phase 2 子文档误把全部 P1 Component JS 能力标为完成的问题；确认 01-05 至 02-06 evidence、git history、dynamic sandbox gate、Render IR snapshots、release gates 和安全边界可审计 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；post-commit `git status --short --branch` = `## main...origin/main [ahead 43]` | 本 Goal 停止在 02-07，不进入 03-01 |
-| 03-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 02-07 完成 |
+| 02-07 | done | `main` | 2026-06-12 23:00:42 +0800 | 2026-06-12 23:06:53 +0800 | `2f0d122`；closure `8cd9b80` | 2026-06-12 23:04:43 +0800 批次最终 Review 已记录：修复 Phase 2 子文档误把全部 P1 Component JS 能力标为完成的问题；确认 01-05 至 02-06 evidence、git history、dynamic sandbox gate、Render IR snapshots、release gates 和安全边界可审计；closure commit 已回填 02-07 done 和停止于 Phase 2 的台账状态 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出；post-closure `git status --short --branch` = `## main...origin/main [ahead 44]` | 本 Goal 停止在 02-07，不进入 03-01 |
+| 03-01 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待用户启动 Phase 3 / 后续 Goal |
 | 03-02 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-01 完成 |
 | 03-03 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-02 完成 |
 | 03-04 | pending | `main` | 待记录 | 待记录 | 待记录 | 待记录 | 待记录 | 等待 03-03 完成 |
@@ -265,6 +265,7 @@ Phase 0 和 Phase 1 首批 Step 00-01 至 01-04 已完成。Step 01-05 至 02-07
 | 2026-06-12 | 新增 Phase 1 剩余 `planned-p1` 与 Phase 2 P1 下一批 Step 文档 | 将首批完成后的残余 API 缺口和组件运行时起步能力拆成可由 Codex Goal 继续执行的小 Plan | 01-05 至 02-06 | 是 |
 | 2026-06-12 | 新增 Phase 3 至 Phase 6 全部后续里程碑 Step 文档 | 将安全增强、生产运行时/Host、开发者体验、观测发布运营阶段拆成可由 Codex Goal 顺序执行的小 Plan | 03-01 至 06-06 | 是 |
 | 2026-06-12 | 修复计划 Review 发现：新增 02-07 final Review gate、前置 dynamic sandbox gate、拆分 Phase 4 持久化、标注 01-07 blocked 跳转 | 让 Codex Goal 恢复执行时不会跳过批次最终 Review，避免动态组件先于安全 gate 扩权，保持每个 Step 一个 focused commit | 01-07、02-05、02-06、02-07、03-01、04-04 至 04-10、05-05、06-01、06-03、06-05、06-06 | 是 |
+| 2026-06-13 | 同步 Step 拆分表状态、恢复指针和 02-07 closure evidence | 修复 Step 拆分表与执行台账不一致、final Review 关闭提交表述滞后、以及后续 Goal 仍显示从 01-05 开始的问题 | 01-05 至 02-07、03-01 | 是 |
 
 变更规则：
 
@@ -323,19 +324,19 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 |---|---|
 | 执行时间 | 2026-06-12 23:04:43 +0800 |
 | 范围 | Roadmap 执行台账、Step 01-05 至 02-06 文档、Phase 1/2 子文档、wx API / component 兼容矩阵、release gates、threat model、README、fixtures、Render IR snapshots、相关源码/测试和 git history。 |
-| Step/ledger 审计 | 执行台账中 01-05 至 02-06 均为 `done`，且有 commit hash、Review 证据和验证证据；`02-07` 作为可追踪 final Review gate 已进入 `review`。台账记录的主产物 commit `8e475dd`、`1599294`、`50cc245`、`33591f0`、`0cfea24`、`79417d5`、`c8bb813`、`cc7b3b8`、`7baca29`、`f778a14` 均能在 git history 解析。 |
+| Step/ledger 审计 | 执行台账中 01-05 至 02-07 均为 `done`，且有 commit hash、Review 证据和验证证据；`02-07` 是 03-01 前可追踪 final Review gate。台账记录的主产物 commit `8e475dd`、`1599294`、`50cc245`、`33591f0`、`0cfea24`、`79417d5`、`c8bb813`、`cc7b3b8`、`7baca29`、`f778a14`、`2f0d122` 均能在 git history 解析；final ledger closure commit 为 `8cd9b80`。 |
 | Review 发现与修复 | 修复文档漂移：`phase-2-component-runtime-alignment.md` 不再把所有 P1 Component JS/WXML/WXSS 能力整体标为完成，改为明确当前批次只覆盖 WXML/WXSS P1 子集、表单/静态媒体、dynamic 和 fixture 能力；`this.triggerEvent()` 与 `preloadDetailPage()` 仍保留为 `planned-p1`，后续需单独拆 Step 或通过 Plan 变更处理。 |
 | 安全/敏感信息 Review | dynamic request/timer 已在 02-05 前置通过 sandbox escape/resource-limit gate，并在 02-06 dynamic-status snapshot 证明 broker boundary 与响应头脱敏；严格 fixture/snapshot 禁用串扫描无命中。广义敏感词扫描仅命中 redaction 规则、安全说明、mock/dev-only 示例、计划台账和测试假值，未发现真实 secret、真实 token、真实地址、手机号、精确经纬度或本机路径写入 fixture/snapshot。 |
 | 残余风险 | 真实 Host renderer/provider/conformance、production network transport/background scheduler、persistent audit/request store、权限策略引擎、token revoke/replay、Skill 包签名、`triggerEvent()`、`preloadDetailPage()` 仍待 Phase 3/4/5 或后续拆分 Step；本批次不能被解释为 production release 完成。 |
 | 整体验证 | `cargo metadata --format-version 1 --no-deps` 通过；`cargo fmt --check` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test -p component-runtime snapshot` 通过；`cargo test -p dock-cli fixture` 1 passed；`git diff --check -- docs/plan docs/architecture docs/runbook docs/security README.md AGENTS.md` 无输出。 |
-| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 42]`，无未提交完成工作；final review commit 为 `2f0d122 docs: record phase1 phase2 final review`；提交后 `git status --short --branch` = `## main...origin/main [ahead 43]`，工作区无未提交变更；最终台账关闭提交待本记录回填后创建。 |
+| 最终工作区状态 | 记录 Review 前 `git status --short --branch` = `## main...origin/main [ahead 42]`，无未提交完成工作；final review commit 为 `2f0d122 docs: record phase1 phase2 final review`；final ledger closure commit 为 `8cd9b80 docs: close phase1 phase2 final review gate`；closure 后 `git status --short --branch` = `## main...origin/main [ahead 44]`，工作区无未提交变更。 |
 
 #### 2.3.9 Codex Goal 提示词
 
-下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准，当前应从 Step 01-05 开始。
+下面提示词用于启动后续实现型 Codex Goal。执行时仍以本文和 Step 文档为准；截至 2026-06-13，Step 01-05 至 02-07 已完成，整体 roadmap 的下一个 Step 是 03-01。
 
 ```text
-请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从第一个非 done Step（现在是 01-05）开始。
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，按文档执行生产化计划。当前从第一个非 done Step 开始；如果当前主台账保持最新，应从 03-01 开始。
 
 开始前先读取：
 - anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md
@@ -350,10 +351,10 @@ git diff --check -- docs/plan docs/architecture docs/runbook docs/security READM
 所有步骤完成后，执行最终全局 Review 和整体验证，记录实际命令、通过/失败/跳过数量、失败或跳过原因、剩余风险和最终工作区状态。
 ```
 
-本次 Phase 1/2 执行型 Codex Goal 可使用更窄的提示词。它只执行当前未完成的 Phase 1 Step 和 Phase 2 全部 Step，完成 Step 02-07 后停止，不进入 Phase 3：
+若需要在尚未执行该批次的工作区补跑 Phase 1/2 执行型 Codex Goal，可使用更窄的提示词。它只执行 Phase 1 剩余 Step 和 Phase 2 全部 Step，完成 Step 02-07 后停止，不进入 Phase 3：
 
 ```text
-请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，只执行当前未完成的 Phase 1 Step 和 Phase 2 全部 Step：从 01-05 开始，做到 02-07 完成后停止，不进入 03-01。
+请以 anp/anp-miniapp-dock/docs/plan/production-readiness-roadmap.md 为唯一规划入口，只执行 Phase 1 剩余 Step 和 Phase 2 全部 Step：从 01-05 开始，做到 02-07 完成后停止，不进入 03-01。
 
 开始前先读取主 Plan、当前 Step 文档、执行台账、Codex Goal 执行协议、Review 与提交门禁、Blocked 处理、Plan 变更记录，以及当前 git status --short --branch。
 
@@ -944,16 +945,19 @@ Phase 4 的目标是把 CLI/demo-server 形态升级为可被真实宿主集成�
 
 实施方案：
 
-1. session/token cache：生产可用 secure store 或加密 SQLite。
-2. scoped storage：持久化 backend，按 DID/merchant/Skill 隔离，支持 quota。
-3. audit：append-only 或 SQLite backend，支持 retention policy。
-4. 配置项：identity、trusted DID、allowlist、token issuer、storage path、log level、mock providers。
-5. secrets：env/secret store 注入，不写入 config 文件或日志。
+本节不对应单个大 Step，必须按 Step 04-04 至 04-08 拆开执行，避免一个 commit 同时跨配置、secret、token、storage、audit 和 cache：
+
+1. Step 04-04 只冻结 runtime config schema、profile、secret reference、provider handle 和 redaction，不实现具体持久化 backend。
+2. Step 04-05 单独实现 token cache 持久化与恢复，生产路径必须使用 secure store 或加密 backend。
+3. Step 04-06 单独实现 scoped storage 持久化与 quota，按 DID/merchant/Skill scope 隔离。
+4. Step 04-07 单独实现 persistent audit sink、retention 和 redacted export。
+5. Step 04-08 单独实现 Skill cache cleanup、quarantine、eviction 和 rollback pin 保护。
 
 验收：
 
-- 重启后可恢复非过期 token 和 storage。
-- 删除用户/Skill 数据能按 scope 清理。
+- 每个子项都有独立 Step 文档、Review 记录、验证证据和 focused commit。
+- 重启后 token/storage/audit 的恢复行为只在对应 Step 完成后声明为支持。
+- 删除用户/Skill 数据能按 scope 清理，且不会泄露 secret、token、隐私原文或本机绝对路径。
 
 #### 4.4 Host renderer 与 action protocol
 
