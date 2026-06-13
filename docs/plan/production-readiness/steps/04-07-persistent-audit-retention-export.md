@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-07
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 20:39:10 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 21:00:20 +0800 |
+| Commit | `c8f4a96` |
 | Review evidence | 2026-06-13 20:58:33 +0800 commit 前 Review 已记录：修复 persistent audit reader 读取损坏后端时静默返回空列表的问题，改为稳定 `audit_unavailable`；确认 audit record/export/retention report 默认脱敏，`localFileJsonl` 明确不是 production-ready，L3/L4 consent 通过后 executor 前 audit unavailable fail closed。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 74]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-07 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-06 closure evidence；`cargo fmt --check` 通过；`cargo test -p consent-audit audit` 2 unit + 5 integration passed；`cargo test -p dock-core audit` 7 api_call_flow + 3 runtime_facade passed；`cargo test -p consent-audit` 5 unit + 8 integration + doctests passed；`cargo test -p dock-core` 16 api_call_flow + 8 runtime_config + 6 runtime_facade + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/consent-audit crates/dock-core crates/dock-cli crates/anp-adapter docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、redaction 断言、安全文档、配置红线和既有代码标识，未发现真实 token、Authorization、signature、private key material、手机号、地址、文件内容或生产凭据。 |
-| Next action | 创建 focused implementation commit `phase4: add persistent audit sink` |
+| Next action | 进入 Step 04-08 Skill Cache cleanup 与版本清理 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：04-07
 - [x] audit sink unavailable 对 L3/L4 动作 fail closed 或明确记录 degraded policy/release blocker。
 - [x] Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -101,10 +101,10 @@ Step index：04-07
 
 - Commit 时机：实现、验证、Review、文档同步完成后。
 - Commit 范围：只包含 persistent audit sink、retention/export、direct tests 和相关文档。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 74]`，仅包含 04-07 相关代码、测试、Phase 4 文档、Threat Model、Release Gates、Local Demo runbook、主 Plan 和本 Step 文档变更。
+- 纳入文件：`crates/consent-audit/src/audit.rs`、`crates/consent-audit/src/lib.rs`、`crates/consent-audit/tests/payment_requires_consent.rs`、`crates/dock-cli/src/commands.rs`、`crates/dock-core/src/error.rs`、`crates/dock-core/src/host.rs`、`crates/dock-core/src/lib.rs`、`crates/dock-core/src/orchestrator.rs`、`crates/dock-core/src/runtime.rs`、`crates/dock-core/tests/api_call_flow.rs`、`crates/dock-core/tests/runtime_facade.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-4-runtime-host-integration.md`、`docs/plan/production-readiness/steps/04-07-persistent-audit-retention-export.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/security/threat-model.md`。
+- Commit 后证据：implementation commit `c8f4a96`；post-commit `git status --short --branch` = `## main...origin/main [ahead 75]`。
+- 遗留未提交变更：仅本 closure 文档更新，准备单独提交。
 - 建议消息：`phase4: add persistent audit sink`
 
 ## 11. Blocked 处理
