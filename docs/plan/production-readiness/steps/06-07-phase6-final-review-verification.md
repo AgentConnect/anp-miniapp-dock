@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-07
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 05:48:24 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 05:56:25 +0800 |
+| Commit | `8257147` |
 | Review evidence | 2026-06-14 05:53:04 +0800 Phase 6 final Review 已记录：确认 06-01 至 06-06 台账和 Step 文档均为 `done`，commit hash、Review 证据和验证证据齐全；修复 `scripts/release-gates.sh` 的 artifact redaction gate report command 字段写入本机绝对路径的问题；修复 `docs/runbook/release-gates.md` 顶部状态仍写 Phase 6 observability gates 进行中的文档漂移；确认 structured events、metrics/tracing、perf baseline、release gates、canary/rollback、operations/privacy deletion 文档没有把 local/headless/mock/backend、Stage 0 local canary 或本地 perf 数字误写成 production-ready。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 115]`，工作区无未提交变更；已读取主 Plan、Step 06-07 文档、Phase 6 文档和执行台账；Step 06-01 至 06-06 在主台账与 Step 文档中均为 `done`；implementation / closure commit `3fb65f0`、`2e899b0`、`7fa8aee`、`b26d04c`、`67a869e`、`b8ccfed`、`afaa5ab`、`96f5572`、`3b26ba2`、`8866855`、`e6c05bd`、`4ea90a3` 均可解析；`cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow` 均通过，其中 coffee E2E 13 passed；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/06-07-release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`、`skipCountsAsPass = false`；`python3 -m json.tool target/release-gates/06-07-release-notes-report.json >/tmp/06-07-release-notes-report.json` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/developer docs/security README.md AGENTS.md` 与 `git diff --check -- scripts docs/runbook docs/plan README.md` 均无输出；`rg -n "\[ \]" docs/plan/production-readiness/steps/06-0{1,2,3,4,5,6}-*.md docs/plan/production-readiness/phase-6-observability-release.md` 无未完成验收项；严格 artifact/report scan 仅命中 release report 的 hard blocker 名称 `Authorization or Signature leakage`，未发现 raw token、Authorization/Signature value、capabilityToken、private key material、本机绝对路径、手机号、真实地址、文件内容或精确位置进入 artifacts、Render IR snapshots 或 perf baseline。 |
-| Next action | 创建 06-07 final review focused commit，然后单独 closure commit 关闭当前 Phase 5/6 Goal |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 115]`，工作区无未提交变更；已读取主 Plan、Step 06-07 文档、Phase 6 文档和执行台账；Step 06-01 至 06-06 在主台账与 Step 文档中均为 `done`；implementation / closure commit `3fb65f0`、`2e899b0`、`7fa8aee`、`b26d04c`、`67a869e`、`b8ccfed`、`afaa5ab`、`96f5572`、`3b26ba2`、`8866855`、`e6c05bd`、`4ea90a3` 均可解析；`cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow` 均通过，其中 coffee E2E 13 passed；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/06-07-release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`、`skipCountsAsPass = false`；`python3 -m json.tool target/release-gates/06-07-release-notes-report.json >/tmp/06-07-release-notes-report.json` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/developer docs/security README.md AGENTS.md` 与 `git diff --check -- scripts docs/runbook docs/plan README.md` 均无输出；`rg -n "\[ \]" docs/plan/production-readiness/steps/06-0{1,2,3,4,5,6}-*.md docs/plan/production-readiness/phase-6-observability-release.md` 无未完成验收项；严格 artifact/report scan 仅命中 release report 的 hard blocker 名称 `Authorization or Signature leakage`，未发现 raw token、Authorization/Signature value、capabilityToken、private key material、本机绝对路径、手机号、真实地址、文件内容或精确位置进入 artifacts、Render IR snapshots 或 perf baseline；final review commit `8257147` 后 `git status --short --branch` = `## main...origin/main [ahead 116]`，工作区无未提交变更。 |
+| Next action | 当前 Phase 5/6 Goal 已关闭；后续 production Host/deploy/provider 接入需通过新 Plan 或新增 Step 执行 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -69,7 +69,7 @@ Step index：06-07
 - [x] Review 覆盖 observability、metrics/tracing、performance/stress、CI/CD gates、canary/rollback、operations/privacy deletion、release blockers、redaction 和文档漂移。
 - [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
 - [x] 主 Plan `2.3.8` 已追加 Phase 6 最终 Review 记录。
-- [ ] 本步骤已经创建 focused commit、回填主 Plan 执行台账，并记录当前 Goal closure 状态。
+- [x] 本步骤已经创建 focused commit、回填主 Plan 执行台账，并记录当前 Goal closure 状态。
 
 ## 8. 验证方式
 
@@ -105,8 +105,8 @@ Step index：06-07
 - Commit 范围：只包含 Phase 6 final review 记录、必要文档修复和直接关联证据更新。
 - Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 115]`，未提交变更仅包含 06-07 final Review 记录、release gates runbook 状态修复和 release gate report path redaction 修复。
 - 纳入文件：`scripts/release-gates.sh`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/06-07-phase6-final-review-verification.md`。
-- Commit 后证据：final review commit 待回填；closure commit 待回填。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 后证据：final review commit `8257147 docs: record phase6 final review`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 116]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`docs: record phase6 final review`
 
 ## 11. Blocked 处理
