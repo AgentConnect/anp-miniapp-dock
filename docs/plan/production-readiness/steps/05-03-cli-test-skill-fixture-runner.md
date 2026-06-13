@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 00:16:15 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 02:18:21 +0800 |
+| Commit | `aab9653` |
 | Review evidence | 2026-06-14 02:15:15 +0800 commit 前 Review 已记录：修复 fixture report 参数过多的 clippy 风险、snapshot component 名称推导错误、golden snapshot 与实际 API 输出差异需要 normalization、dynamic `brokerCalls` 硬编码、fixture/audit `skillId` 使用默认 coffee、以及修复过程中 validate/inspect `skillId` 回归；确认 runner 复用 `RuntimeHarness` / `RuntimeService` 与 Component Runtime，headless provider 明确 `dev-only` / `productionReady = false`，report 不输出敏感 marker、本机路径或 fixture token。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 90]`；已读取主 Plan、Step 05-03 文档、Phase 5 文档、Release Gates fixture gate、现有 `dock-cli` command/runtime harness、coffee E2E、`examples/fixtures/*` 和 `testdata/render-ir/*.json`；已确认 05-02 implementation commit `ed5599f` 与 closure commit `31ac65c`；`cargo fmt --check` 通过；`cargo test -p dock-cli fixture` 通过，实际命中 `coffee_order_flow` 中 3 个 fixture/test-skill 集成用例；`cargo test -p dock-cli test_skill` 通过，1 unit + 2 integration under filter passed；`cargo test -p dock-cli --test coffee_order_flow` 11 passed；手工执行 `dock-cli test-skill` 覆盖 `examples/coffee-skill`、`examples/fixtures/address-form`、`media-review`、`dynamic-status`、`location-map-preview`，JSON parse 全部通过；生成报告敏感串抽样未命中本机路径、Authorization、Signature、capabilityToken、private、secret、fixture-token、Bearer、手机号、真实地址或经纬度；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。 |
-| Next action | 创建 05-03 focused implementation commit，随后回填 commit hash 并关闭本 Step |
+| Next action | 进入 05-04 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -73,7 +73,7 @@ Step index：05-03
 - [x] failure diff 可定位 API/result/render/action/audit 哪一层失败。
 - [x] Release Gates 和 Phase 5 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -107,8 +107,8 @@ Step index：05-03
 - Commit 范围：只包含 test-skill fixture runner、直接 tests/fixtures 和相关文档。
 - Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 90]`；未提交文件均属于 05-03：`Cargo.lock`、`README.md`、`crates/dock-cli/Cargo.toml`、`crates/dock-cli/src/commands.rs`、`crates/dock-cli/tests/coffee_order_flow.rs`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness/steps/05-03-cli-test-skill-fixture-runner.md`、`docs/runbook/release-gates.md`。
 - 纳入文件：上述 9 个文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 后证据：implementation commit `aab9653 phase5: add skill fixture runner`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 91]`，工作区无未提交变更。
+- 遗留未提交变更：无。
 - 建议消息：`phase5: add skill fixture runner`
 
 ## 11. Blocked 处理
