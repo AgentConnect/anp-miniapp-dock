@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-05
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 19:51:13 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 20:14:30 +0800 |
+| Commit | `f742304` |
 | Review evidence | 2026-06-13 20:12:35 +0800 commit 前 Review 已完成：修复 raw token entry 可被 JSON diagnostics 误序列化、fallible `try_put`/`try_clear` 先改内存后落盘导致失败后状态污染、entry metadata 未显式绑定 issuer/audience/jti、clippy bool assert warning；确认 restore policy fail closed，rejected entry 清出 backend snapshot，report 只含 scope summary/reason/redaction metadata，in-memory profile 明确 dev-only |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 70]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-05 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-04 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p anp-adapter token_cache` 9 unit + 1 integration under filter passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter token` 26 unit + 4 integration under filter passed；`cargo test -p anp-adapter` 53 unit + 11 integration + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/dock-core docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 代码和既有测试断言，未发现真实 token、Authorization、signature、private key material 或生产凭据 |
-| Next action | 创建 04-05 focused commit，并回填 commit hash 与主 Plan 台账 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 70]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-05 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-04 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p anp-adapter token_cache` 9 unit + 1 integration under filter passed；`cargo test -p anp-adapter session` 10 passed；`cargo test -p anp-adapter token` 26 unit + 4 integration under filter passed；`cargo test -p anp-adapter` 53 unit + 11 integration + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/anp-adapter crates/dock-core docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 代码和既有测试断言，未发现真实 token、Authorization、signature、private key material 或生产凭据；实现 commit 后 `git status --short --branch` = `## main...origin/main [ahead 71]` |
+| Next action | 进入 04-06 Scoped Storage 持久化与 quota |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：04-05
 - [x] raw token、Authorization、signature、private key path 不出现在 logs、CLI JSON、audit export 或 tests output。
 - [x] Release Gates 标出 in-memory token backend 不能 production-ready。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
