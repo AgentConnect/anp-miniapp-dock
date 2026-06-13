@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-03
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 14:12:53 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 14:48:46 +0800 |
+| Commit | `32ada09` |
 | Review evidence | 2026-06-13 14:38:45 +0800 commit 前 Review 已记录：修复 Host allow 可绕过未声明敏感权限、通用 boolean permission 可能误声明任意 capability 的问题；确认 Host deny override 优先、mock 仅 dev/headless、Prompt 进入 ConsentGate、decision audit 脱敏、allowlist mismatch 在 transport 前失败。 |
 | Verification evidence | `cargo fmt --check` 通过；`cargo test -p wx-compat permission` 7 passed；`cargo test -p dock-core permission` 2 passed；`cargo test -p anp-adapter allowlist` 5 passed；`cargo test -p wx-compat` 29 passed；`cargo test -p anp-adapter` 44 passed；`cargo test -p dock-core` 11 passed；`cargo test -p js-runtime-quickjs wx_request` 4 passed；`cargo test -p component-runtime dynamic` 7 passed；`cargo test -p dock-cli --test coffee_order_flow` 4 passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/dock-core crates/anp-adapter crates/consent-audit crates/js-runtime-quickjs crates/component-runtime crates/dock-cli docs/architecture docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中测试假值、文档安全说明和 `AuthMode::HttpSignatures` 常量。 |
-| Next action | 创建 Step 03-03 focused commit，回填 commit hash 后进入 Step 03-04 |
+| Next action | 进入 Step 03-04 DID / Token 生命周期与 Resolver 信任锚 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -74,7 +74,7 @@ Step index：03-03
 - [x] Permission decision 进入脱敏 audit summary。
 - [x] 相关矩阵、Threat Model、Release Gates 与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
