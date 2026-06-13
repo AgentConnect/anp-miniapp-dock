@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-01
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 03:41:41 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Phase 5 完成后，启动结构化观测事件 |
+| Review evidence | 2026-06-14 03:59:38 +0800 commit 前 Review 已记录：确认 `dock-core::observability` 事件 schema、redaction policy、hashed user DID、RuntimeService emit hooks 和 tests 已覆盖当前公共 Runtime 入口；修复前期 UTF-8 截断和构造函数参数过多风险；确认事件 fields 不记录 raw arguments、token、Authorization、Signature、private key path、手机号、地址、文件内容或精确位置。剩余风险：`wx_api_call_*` / `request_*` 当前为稳定 schema 类型，尚未从 QuickJS / RequestBroker 细粒度路径 emit；06-02 必须接入 metrics/tracing bridge 时补真实链路事件和 trace propagation。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 103]`，工作区无未提交变更；已读取主 Plan、Step 06-01 文档、Phase 6 计划、Release Gates、RuntimeService/Orchestrator/Host/Audit/Component Runtime 相关源码和 runtime tests；已确认 Phase 5 final review commit `18ca5b2`、closure commit `ebec9b7`、closure evidence commit `8feb301`。`cargo fmt --check` 通过；`cargo test -p dock-core observability` 通过，实际命中 1 个 observability unit test 和 2 个 runtime observability tests；`cargo test -p dock-core runtime_observability` 通过，实际命中 2 个 runtime observability tests；`cargo test -p dock-core` 46 passed；`cargo test -p dock-cli --test coffee_order_flow` 12 passed；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo test --workspace` 通过；`git diff --check -- crates/dock-core docs/runbook docs/plan Cargo.toml Cargo.lock` 无输出；敏感串扫描仅命中测试假值、redaction 断言和安全/计划文档红线，未发现真实凭据或隐私 payload 泄露。 |
+| Next action | 创建 06-01 focused implementation commit，然后以单独 docs commit 关闭本 Step 并进入 06-02 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -65,12 +65,12 @@ Step index：06-01
 
 ## 7. 验收标准
 
-- [ ] 结构化事件覆盖 Phase 6 列出的关键 runtime 操作。
-- [ ] 每个事件有 traceId/sessionId/skillId/outcome/latency 或明确不适用理由。
-- [ ] userDid 默认 hash，merchantDid 可按 policy 输出或 redacted。
-- [ ] 事件 payload 不含 token、Authorization、signature、private key path、手机号、地址、文件内容或精确位置。
-- [ ] Release Gates 增加 observability redaction 检查。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 结构化事件 schema 覆盖 Phase 6 列出的关键 runtime 操作；当前 RuntimeService emit 覆盖 Skill load、API call、ConsentGate、Render IR render、component event、Host action、fallback、audit written 和 timeout/limit，`wx_api_call_*` / `request_*` 真实 QuickJS / RequestBroker emit 留给 06-02。
+- [x] 每个 RuntimeService 事件有 traceId/sessionId/skillId/outcome/latency 或明确不适用理由；skill load 事件无 sessionId/latency，记录 api/component count 和 readiness metadata。
+- [x] userDid 默认 hash，merchantDid 可按 policy 输出或 redacted。
+- [x] 事件 payload 不含 token、Authorization、signature、private key path、手机号、地址、文件内容或精确位置。
+- [x] Release Gates 增加 observability redaction 检查。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -92,11 +92,11 @@ Step index：06-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 初版 Review 发现两个实现风险：redaction 长字符串不能按 byte slice 截断；RuntimeService observability 构造函数不应通过过长参数列表扩大 clippy 风险。另发现范围风险：`wx_api_call_*` / `request_*` 事件类型已存在但未从 QuickJS / RequestBroker 真实 emit。 |
+| 已修复问题 | 已修复 | redaction 截断改为 char-safe；新增 `RuntimeServiceParts` 承载 observability 构造参数；RuntimeService 默认 no-op sink 保持既有 call sites 兼容。 |
+| 剩余风险 | 已记录 | `wx_api_call_*` / `request_*` 当前只是 schema-supported planned bridge，未接入 `js-runtime-quickjs` / `component-runtime` / `anp-adapter` 的细粒度请求链路；06-02 metrics/tracing 必须补 trace propagation 和 request/token/VM hooks，release gates 不得宣称完整 QuickJS / RequestBroker 链路已覆盖。 |
+| 新增或缺失测试 | 已补充 | 新增 observability unit test 覆盖 serialization/redaction/hashed user DID；新增 runtime facade tests 覆盖核心 flow 事件、sensitive field redaction 和 timeout/sandbox limit event。缺失测试：QuickJS / RequestBroker 细粒度 `wx_api_call_*` / `request_*` emit，归入 06-02。 |
+| 已更新或缺失文档 | 已更新 | 已更新 Phase 6 计划、Release Gates、本 Step 与主 Plan 台账；文档明确 06-01 不接外部日志平台，06-02 接 metrics/tracing bridge。 |
 
 ## 10. Commit 要求
 

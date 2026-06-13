@@ -2,11 +2,12 @@ use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_
 use dock_core::{
     negotiate_runtime_version, ApiCallContext, ApiExecutor, AuditEvent, AuditSink,
     ComponentRenderInput, ConsentDecision, ConsentGate, DockCoreError, ErrorCode,
-    PermissionDecision, RenderOutcome, RenderRouter, RuntimeAuditReader,
-    RuntimeAuditRecordsRequest, RuntimeCallRequest, RuntimeCancelOperationRequest,
-    RuntimeCloseSessionRequest, RuntimeComponentAction, RuntimeDispatchComponentActionRequest,
-    RuntimeExpireCardsRequest, RuntimeHost, RuntimeOperationOptions, RuntimePersistentAuditSink,
-    RuntimeRenderComponentRequest, RuntimeService, RuntimeSessionContext, RUNTIME_API_VERSION,
+    InMemoryObservabilitySink, ObservabilityEventKind, PermissionDecision, RenderOutcome,
+    RenderRouter, RuntimeAuditReader, RuntimeAuditRecordsRequest, RuntimeCallRequest,
+    RuntimeCancelOperationRequest, RuntimeCloseSessionRequest, RuntimeComponentAction,
+    RuntimeDispatchComponentActionRequest, RuntimeExpireCardsRequest, RuntimeHost,
+    RuntimeOperationOptions, RuntimePersistentAuditSink, RuntimeRenderComponentRequest,
+    RuntimeService, RuntimeServiceParts, RuntimeSessionContext, RUNTIME_API_VERSION,
 };
 use mcp_schema::{AtomicApiResult, TextContent, ValidationReport};
 use serde_json::{json, Map};
@@ -103,6 +104,32 @@ fn first_call_blocking_runtime_service(
         audit.clone(),
         audit,
     ))
+}
+
+fn observability_runtime_service(
+    executor: MockExecutor,
+    observability: InMemoryObservabilitySink,
+) -> RuntimeService<
+    AllowHost,
+    ApproveConsent,
+    MockExecutor,
+    MockRenderer,
+    MockAudit,
+    MockAudit,
+    InMemoryObservabilitySink,
+> {
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let audit = MockAudit::default();
+    RuntimeService::load_skill_with_observability(RuntimeServiceParts {
+        skill,
+        host: AllowHost,
+        consent: ApproveConsent,
+        executor,
+        renderer: MockRenderer,
+        audit: audit.clone(),
+        audit_reader: audit,
+        observability,
+    })
 }
 
 #[test]
@@ -335,6 +362,166 @@ fn runtime_persistent_audit_reader_reports_unavailable_when_backend_is_corrupt()
 
     assert_eq!(error.error.code, "audit_unavailable");
     assert!(!error.error.message.contains("{not-json}"));
+}
+
+#[test]
+fn runtime_observability_events_cover_core_flow_and_redact_sensitive_fields() {
+    let observability = InMemoryObservabilitySink::default();
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: Some(Map::from_iter([(
+            "orderId".to_owned(),
+            json!("order_demo_001"),
+        )])),
+        meta: Some(Map::from_iter([(
+            "private".to_owned(),
+            json!("component-only"),
+        )])),
+        extra: Default::default(),
+    });
+    let service = observability_runtime_service(executor, observability.clone());
+
+    service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({
+                "orderId": "order_demo_001",
+                "capabilityToken": "capability-secret-token",
+                "deliveryAddress": "1 Private Road"
+            }),
+            capability_token: Some("capability-secret-token".to_owned()),
+            operation: None,
+        })
+        .expect("payment call succeeds");
+
+    service
+        .render_component(RuntimeRenderComponentRequest {
+            session: session(),
+            api_name: "confirmOrder".to_owned(),
+            arguments: json!({"drinkId": "latte"}),
+            content: vec![TextContent::text("confirmed")],
+            structured_content: Some(Map::from_iter([("ok".to_owned(), json!(true))])),
+            meta: None,
+            component_path: "components/order-confirm/index".to_owned(),
+        })
+        .expect("explicit render emits events");
+
+    service
+        .dispatch_component_action(RuntimeDispatchComponentActionRequest {
+            session: session(),
+            source_api_name: "searchDrinks".to_owned(),
+            source_arguments: json!({"query": "latte"}),
+            action: RuntimeComponentAction::OpenDetailPage {
+                url: "pages/order/detail".to_owned(),
+            },
+            capability_token: None,
+            operation: None,
+        })
+        .expect("component action emits events");
+
+    let events = observability.events();
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::SkillLoadStart));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::SkillLoadEnd));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ApiCallStart));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ApiCallEnd));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ConsentPrompt));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ConsentDecision));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::AuditRecordWritten));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ComponentRenderStart));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ComponentRenderEnd));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == ObservabilityEventKind::ComponentEvent));
+
+    let api_end = events
+        .iter()
+        .find(|event| event.kind == ObservabilityEventKind::ApiCallEnd)
+        .expect("api end event exists");
+    assert_eq!(api_end.session_id.as_deref(), Some("session-runtime"));
+    assert_eq!(api_end.skill_id.as_deref(), Some("coffee"));
+    assert_eq!(api_end.api_name.as_deref(), Some("payOrder"));
+    assert!(api_end
+        .trace_id
+        .as_deref()
+        .is_some_and(|id| id.starts_with("trace-")));
+    assert!(api_end
+        .user_did_hash
+        .as_deref()
+        .is_some_and(|id| id.starts_with("sha256:")));
+    assert_ne!(
+        api_end.user_did_hash.as_deref(),
+        Some("did:wba:user.example")
+    );
+    assert_eq!(
+        api_end.merchant_did.as_deref(),
+        Some("did:wba:merchant.example")
+    );
+    assert!(api_end.latency_ms.is_some());
+
+    let rendered = serde_json::to_string(&events).expect("events serialize");
+    assert!(rendered.contains("dock.observability.event.v1"));
+    assert!(!rendered.contains("did:wba:user.example"));
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("1 Private Road"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("private.pem"));
+}
+
+#[test]
+fn runtime_observability_records_sandbox_limit_event_on_timeout() {
+    let observability = InMemoryObservabilitySink::default();
+    let service = observability_runtime_service(
+        MockExecutor::with_result(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("unused")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        }),
+        observability.clone(),
+    );
+
+    let error = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: Some(RuntimeOperationOptions {
+                timeout_ms: Some(0),
+                ..Default::default()
+            }),
+        })
+        .expect_err("timeout fails before dispatch");
+
+    assert_eq!(error.error.code, "timeout");
+    let events = observability.events();
+    let limit_event = events
+        .iter()
+        .find(|event| event.kind == ObservabilityEventKind::SandboxLimitHit)
+        .expect("sandbox limit event exists");
+    assert_eq!(limit_event.outcome, "timeout");
+    assert_eq!(limit_event.api_name.as_deref(), Some("payOrder"));
 }
 
 #[test]

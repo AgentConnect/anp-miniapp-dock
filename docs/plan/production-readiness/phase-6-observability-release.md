@@ -21,6 +21,8 @@ Phase 6 让容器具备线上运行的可观测性、性能边界、发布门禁
 - `audit_record_written`
 - `sandbox_limit_hit`
 
+Step 06-01 已在 `dock-core` 固化事件 schema `dock.observability.event.v1`、脱敏策略 `dock.observability.redaction.v1`、`NoopObservabilitySink` 和 `InMemoryObservabilitySink`，并在 `RuntimeService` 的 Skill load、API call、ConsentGate、Render IR render、component event、Host action、fallback、audit written 和 timeout/limit 边界发出结构化事件。`wx_api_call_*` 与 `request_*` 已作为稳定事件类型保留，后续 Step 06-02 可在 QuickJS / RequestBroker / metrics bridge 中复用同一事件模型接入更细粒度链路。
+
 公共字段：
 
 ```text
@@ -36,6 +38,13 @@ renderIrVersion
 outcome
 latencyMs
 ```
+
+公共字段落地规则：
+
+- `userDid` 不直接记录，默认写入 `userDidHash = sha256:<hex>`。
+- `merchantDid` 可按 policy 作为定位字段输出；涉及 token、Authorization、Signature、private key、手机号、地址、文件内容、精确位置、本机绝对路径的字段必须在 emit 前替换为 `[REDACTED]`。
+- `fields` 只能放定位 metadata、计数、状态、risk level、release/readiness 信息，不放 raw arguments、HTTP body、文件内容或 Host provider 原始 payload。
+- Runtime 默认使用 no-op sink；Host、CLI 或测试可以注入 sink。06-01 不接入外部日志平台，06-02 再做 metrics/tracing bridge。
 
 ### 2.2 Metrics
 

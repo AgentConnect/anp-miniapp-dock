@@ -577,6 +577,7 @@ dependencies = [
  "mcp-schema",
  "serde",
  "serde_json",
+ "sha2",
  "skill-loader",
  "thiserror 1.0.69",
 ]

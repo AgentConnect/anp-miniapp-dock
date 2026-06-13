@@ -4,6 +4,7 @@ pub mod api_registry;
 pub mod config;
 pub mod error;
 pub mod host;
+pub mod observability;
 pub mod orchestrator;
 pub mod runtime;
 
@@ -27,6 +28,13 @@ pub use host::{
     PermissionDecisionSummary, RenderOutcome, RenderRouter, RuntimeHost,
     HOST_ACTION_REDACTION_POLICY, HOST_ADAPTER_CONTRACT_VERSION,
 };
+pub use observability::{
+    hash_user_did, next_observability_id, redact_observability_text, redact_observability_value,
+    InMemoryObservabilitySink, NoopObservabilitySink, ObservabilityEvent, ObservabilityEventKind,
+    ObservabilityRedaction, ObservabilitySeverity, ObservabilitySink, DEFAULT_RUNTIME_VERSION,
+    OBSERVABILITY_EVENT_SCHEMA_VERSION, OBSERVABILITY_REDACTION_MARKER,
+    OBSERVABILITY_REDACTION_POLICY,
+};
 pub use orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
 };
@@ -42,6 +50,7 @@ pub use runtime::{
     RuntimeIpcResponse, RuntimeIpcTransport, RuntimeIpcVersionParams, RuntimeLoadSkillResponse,
     RuntimeOperationOptions, RuntimePersistentAuditSink, RuntimeRenderComponentRequest,
     RuntimeRenderComponentResponse, RuntimeResponse, RuntimeResult, RuntimeRetryPolicy,
-    RuntimeService, RuntimeSessionContext, RuntimeSkillSummary, RuntimeValidateSkillResponse,
-    RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING, RUNTIME_IPC_TRANSPORT,
+    RuntimeService, RuntimeServiceParts, RuntimeSessionContext, RuntimeSkillSummary,
+    RuntimeValidateSkillResponse, RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING,
+    RUNTIME_IPC_TRANSPORT,
 };

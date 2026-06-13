@@ -4,6 +4,10 @@ use crate::host::{
     HostActionOutcome, HostActionRequest, HostActionStatus, HostAdapterContract, RenderOutcome,
     RenderRouter,
 };
+use crate::observability::{
+    next_observability_id, NoopObservabilitySink, ObservabilityEvent, ObservabilityEventKind,
+    ObservabilitySink,
+};
 use crate::orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
 };
@@ -14,7 +18,7 @@ use mcp_schema::{
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use skill_loader::{load_skill, LoadedSkill, SkillPackageError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -26,6 +30,7 @@ use std::time::{Duration, Instant};
 pub const RUNTIME_API_VERSION: &str = "dock.runtime.v1";
 pub const RUNTIME_IPC_TRANSPORT: &str = "headless-cli-json";
 pub const RUNTIME_IPC_BINDING: &str = "local-process-stdio";
+const RUNTIME_RENDER_IR_SCHEMA_VERSION: &str = "dock.render-ir.v1";
 
 pub type RuntimeError = Box<RuntimeErrorResponse>;
 pub type RuntimeResult<T> = Result<RuntimeResponse<T>, RuntimeError>;
@@ -1148,13 +1153,25 @@ pub fn load_skill_path(skill_ref: impl AsRef<Path>) -> RuntimeResult<RuntimeLoad
     }))
 }
 
-pub struct RuntimeService<H, C, E, R, A, Q = ()> {
+pub struct RuntimeService<H, C, E, R, A, Q = (), O = NoopObservabilitySink> {
     orchestrator: Orchestrator<H, C, E, R, A>,
     audit_reader: Q,
     concurrency: RuntimeConcurrencyControl,
+    observability: O,
 }
 
-impl<H, C, E, R, A, Q> RuntimeService<H, C, E, R, A, Q>
+pub struct RuntimeServiceParts<H, C, E, R, A, Q, O> {
+    pub skill: LoadedSkill,
+    pub host: H,
+    pub consent: C,
+    pub executor: E,
+    pub renderer: R,
+    pub audit: A,
+    pub audit_reader: Q,
+    pub observability: O,
+}
+
+impl<H, C, E, R, A, Q> RuntimeService<H, C, E, R, A, Q, NoopObservabilitySink>
 where
     H: RuntimeHost,
     C: ConsentGate,
@@ -1176,6 +1193,7 @@ where
             orchestrator: Orchestrator::load_skill(skill, host, consent, executor, renderer, audit),
             audit_reader,
             concurrency: RuntimeConcurrencyControl::default(),
+            observability: NoopObservabilitySink,
         }
     }
 
@@ -1184,11 +1202,66 @@ where
             orchestrator,
             audit_reader,
             concurrency: RuntimeConcurrencyControl::default(),
+            observability: NoopObservabilitySink,
         }
+    }
+}
+
+impl<H, C, E, R, A, Q, O> RuntimeService<H, C, E, R, A, Q, O>
+where
+    H: RuntimeHost,
+    C: ConsentGate,
+    E: ApiExecutor,
+    R: RenderRouter,
+    A: AuditSink,
+    Q: RuntimeAuditReader,
+    O: ObservabilitySink,
+{
+    pub fn load_skill_with_observability(parts: RuntimeServiceParts<H, C, E, R, A, Q, O>) -> Self {
+        let service = Self {
+            orchestrator: Orchestrator::load_skill(
+                parts.skill,
+                parts.host,
+                parts.consent,
+                parts.executor,
+                parts.renderer,
+                parts.audit,
+            ),
+            audit_reader: parts.audit_reader,
+            concurrency: RuntimeConcurrencyControl::default(),
+            observability: parts.observability,
+        };
+        let summary = RuntimeSkillSummary::from_loaded(service.skill());
+        let trace_id = next_observability_id("trace");
+        service.emit_observability(
+            ObservabilityEvent::new(ObservabilityEventKind::SkillLoadStart)
+                .with_trace_id(trace_id.clone())
+                .with_skill_id(summary.skill_id.clone())
+                .with_outcome("started")
+                .with_field("apiCount", json!(summary.api_names.len()))
+                .with_field("componentCount", json!(summary.component_paths.len())),
+        );
+        service.emit_observability(
+            ObservabilityEvent::new(ObservabilityEventKind::SkillLoadEnd)
+                .with_trace_id(trace_id)
+                .with_skill_id(summary.skill_id)
+                .with_outcome(if summary.production_ready {
+                    "ok"
+                } else {
+                    "warning"
+                })
+                .with_field("supplyChainStatus", json!(summary.supply_chain_status))
+                .with_field("productionReady", json!(summary.production_ready)),
+        );
+        service
     }
 
     pub fn skill(&self) -> &LoadedSkill {
         self.orchestrator.skill()
+    }
+
+    pub fn observability(&self) -> O {
+        self.observability.clone()
     }
 
     pub fn validate_skill(&self) -> RuntimeResponse<RuntimeValidateSkillResponse> {
@@ -1238,10 +1311,29 @@ where
         capability_token: Option<String>,
         operation: Option<RuntimeOperationOptions>,
     ) -> RuntimeResult<RuntimeCallResponse> {
+        let trace_id = trace_id_for(&session, &api_name);
+        let started = Instant::now();
+        self.emit_session_event(
+            ObservabilityEvent::new(ObservabilityEventKind::ApiCallStart)
+                .with_trace_id(trace_id.clone())
+                .with_api_name(api_name.clone())
+                .with_outcome("started"),
+            &session,
+        );
         let risk_level = self
             .orchestrator
             .api_risk_level(&api_name)
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+            .map_err(|error| {
+                self.emit_session_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(api_name.clone())
+                        .with_outcome(error.code().as_str())
+                        .with_latency_ms(elapsed_ms(started)),
+                    &session,
+                );
+                RuntimeErrorResponse::from_core(error).boxed()
+            })?;
         let mut guard = self
             .concurrency
             .begin(
@@ -1251,22 +1343,151 @@ where
                 operation.as_ref(),
                 risk_level,
             )
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+            .map_err(|error| {
+                self.emit_limit_if_needed(&session, &api_name, &trace_id, &error, started);
+                self.emit_session_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(api_name.clone())
+                        .with_outcome(error.code().as_str())
+                        .with_latency_ms(elapsed_ms(started)),
+                    &session,
+                );
+                RuntimeErrorResponse::from_core(error).boxed()
+            })?;
         if let Some(response) = guard.cached_response() {
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                    .with_trace_id(trace_id)
+                    .with_api_name(api_name)
+                    .with_outcome("idempotent_replay")
+                    .with_latency_ms(elapsed_ms(started)),
+                &session,
+            );
             return Ok(RuntimeResponse::ok(response));
         }
-        guard
-            .check_deadline()
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        if risk_level.requires_consent() {
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::ConsentPrompt)
+                    .with_trace_id(trace_id.clone())
+                    .with_api_name(api_name.clone())
+                    .with_outcome("prompted")
+                    .with_field("riskLevel", json!(risk_level.to_string())),
+                &session,
+            );
+        }
+        guard.check_deadline().map_err(|error| {
+            self.emit_limit_if_needed(&session, &api_name, &trace_id, &error, started);
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                    .with_trace_id(trace_id.clone())
+                    .with_api_name(api_name.clone())
+                    .with_outcome(error.code().as_str())
+                    .with_latency_ms(elapsed_ms(started)),
+                &session,
+            );
+            RuntimeErrorResponse::from_core(error).boxed()
+        })?;
         let outcome = self
             .orchestrator
             .call_api(session.to_api_context(api_name.clone(), arguments, capability_token))
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
-        guard
-            .check_deadline()
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+            .map_err(|error| {
+                if risk_level.requires_consent() {
+                    self.emit_session_event(
+                        ObservabilityEvent::new(ObservabilityEventKind::ConsentDecision)
+                            .with_trace_id(trace_id.clone())
+                            .with_api_name(api_name.clone())
+                            .with_outcome(error.code().as_str())
+                            .with_field("riskLevel", json!(risk_level.to_string())),
+                        &session,
+                    );
+                }
+                self.emit_session_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::AuditRecordWritten)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(api_name.clone())
+                        .with_outcome(error.code().as_str())
+                        .with_field("riskLevel", json!(risk_level.to_string())),
+                    &session,
+                );
+                self.emit_session_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(api_name.clone())
+                        .with_outcome(error.code().as_str())
+                        .with_latency_ms(elapsed_ms(started)),
+                    &session,
+                );
+                RuntimeErrorResponse::from_core(error).boxed()
+            })?;
+        let component_path = outcome
+            .render
+            .as_ref()
+            .and_then(|render| render.component_path.clone());
+        let fallback_reason = outcome
+            .render
+            .as_ref()
+            .and_then(|render| render.fallback_reason.clone());
+        guard.check_deadline().map_err(|error| {
+            self.emit_limit_if_needed(&session, &api_name, &trace_id, &error, started);
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                    .with_trace_id(trace_id.clone())
+                    .with_api_name(api_name.clone())
+                    .with_outcome(error.code().as_str())
+                    .with_latency_ms(elapsed_ms(started)),
+                &session,
+            );
+            RuntimeErrorResponse::from_core(error).boxed()
+        })?;
         let response = RuntimeCallResponse::from_outcome(api_name, outcome);
         guard.mark_completed(&response);
+        if risk_level.requires_consent() {
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::ConsentDecision)
+                    .with_trace_id(trace_id.clone())
+                    .with_api_name(response.api_name.clone())
+                    .with_outcome("ok")
+                    .with_field("riskLevel", json!(risk_level.to_string())),
+                &session,
+            );
+        }
+        self.emit_session_event(
+            ObservabilityEvent::new(ObservabilityEventKind::AuditRecordWritten)
+                .with_trace_id(trace_id.clone())
+                .with_api_name(response.api_name.clone())
+                .with_outcome(if response.result.is_error {
+                    "error"
+                } else {
+                    "ok"
+                })
+                .with_field("riskLevel", json!(risk_level.to_string())),
+            &session,
+        );
+        if let Some(reason) = fallback_reason {
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::FallbackUsed)
+                    .with_trace_id(trace_id.clone())
+                    .with_api_name(response.api_name.clone())
+                    .with_outcome("fallback")
+                    .with_latency_ms(elapsed_ms(started))
+                    .with_field("reason", json!(reason)),
+                &session,
+            );
+        }
+        self.emit_session_event(
+            ObservabilityEvent::new(ObservabilityEventKind::ApiCallEnd)
+                .with_trace_id(trace_id)
+                .with_api_name(response.api_name.clone())
+                .with_component_path(component_path.unwrap_or_default())
+                .with_outcome(if response.result.is_error {
+                    "error"
+                } else {
+                    "ok"
+                })
+                .with_latency_ms(elapsed_ms(started)),
+            &session,
+        );
         Ok(RuntimeResponse::ok(response))
     }
 
@@ -1274,10 +1495,21 @@ where
         &self,
         request: RuntimeRenderComponentRequest,
     ) -> RuntimeResult<RuntimeRenderComponentResponse> {
+        let trace_id = trace_id_for(&request.session, &request.api_name);
+        let started = Instant::now();
         let context = request.session.to_api_context(
             request.api_name.clone(),
             request.arguments.clone(),
             None,
+        );
+        self.emit_context_event(
+            ObservabilityEvent::new(ObservabilityEventKind::ComponentRenderStart)
+                .with_trace_id(trace_id.clone())
+                .with_api_name(request.api_name.clone())
+                .with_component_path(request.component_path.clone())
+                .with_render_ir_version(RUNTIME_RENDER_IR_SCHEMA_VERSION)
+                .with_outcome("started"),
+            &context,
         );
         let input = ComponentRenderInput {
             api_name: request.api_name,
@@ -1289,8 +1521,31 @@ where
         };
         self.orchestrator
             .render_component(&context, input)
-            .map(|render| RuntimeResponse::ok(RuntimeRenderComponentResponse { render }))
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())
+            .map(|render| {
+                self.emit_context_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ComponentRenderEnd)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(context.api_name.clone())
+                        .with_component_path(render.component_path.clone().unwrap_or_default())
+                        .with_render_ir_version(RUNTIME_RENDER_IR_SCHEMA_VERSION)
+                        .with_outcome("ok")
+                        .with_latency_ms(elapsed_ms(started)),
+                    &context,
+                );
+                RuntimeResponse::ok(RuntimeRenderComponentResponse { render })
+            })
+            .map_err(|error| {
+                self.emit_context_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ComponentRenderEnd)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(context.api_name.clone())
+                        .with_render_ir_version(RUNTIME_RENDER_IR_SCHEMA_VERSION)
+                        .with_outcome(error.code().as_str())
+                        .with_latency_ms(elapsed_ms(started)),
+                    &context,
+                );
+                RuntimeErrorResponse::from_core(error).boxed()
+            })
     }
 
     pub fn dispatch_component_action(
@@ -1304,6 +1559,14 @@ where
         );
         match request.action {
             RuntimeComponentAction::ApiCall { name, arguments } => {
+                self.emit_context_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ComponentEvent)
+                        .with_trace_id(trace_id_for(&request.session, &request.source_api_name))
+                        .with_api_name(request.source_api_name.clone())
+                        .with_outcome("api_call")
+                        .with_field("targetApiName", json!(name.clone())),
+                    &base_context,
+                );
                 let call = self.call_api_with_operation(
                     request.session,
                     name,
@@ -1324,6 +1587,7 @@ where
                 &base_context,
                 &request.session,
                 request.operation,
+                "sendFollowUpMessage",
                 HostActionRequest::send_follow_up_message(request.source_api_name, &content),
             ),
             RuntimeComponentAction::OpenDetailPage { url } => {
@@ -1333,6 +1597,7 @@ where
                     &base_context,
                     &request.session,
                     request.operation,
+                    "openDetailPage",
                     HostActionRequest::open_detail_page(request.source_api_name, canonical_url),
                 )
             }
@@ -1343,6 +1608,7 @@ where
                 &base_context,
                 &request.session,
                 request.operation,
+                "expirePreviousCards",
                 HostActionRequest::expire_previous_cards(
                     request.source_api_name,
                     component_paths,
@@ -1357,8 +1623,19 @@ where
         context: &ApiCallContext,
         session: &RuntimeSessionContext,
         operation: Option<RuntimeOperationOptions>,
+        component_event: &str,
         request: HostActionRequest,
     ) -> RuntimeResult<RuntimeDispatchComponentActionResponse> {
+        let trace_id = trace_id_for(session, &context.api_name);
+        let started = Instant::now();
+        self.emit_context_event(
+            ObservabilityEvent::new(ObservabilityEventKind::ComponentEvent)
+                .with_trace_id(trace_id.clone())
+                .with_api_name(context.api_name.clone())
+                .with_outcome(component_event)
+                .with_field("hostActionType", json!(request.action_type.clone())),
+            context,
+        );
         let mut arguments = context.arguments.clone();
         let guard = self
             .concurrency
@@ -1369,19 +1646,43 @@ where
                 operation.as_ref(),
                 RiskLevel::L2,
             )
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
-        guard
-            .check_deadline()
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+            .map_err(|error| {
+                self.emit_limit_if_needed(session, &context.api_name, &trace_id, &error, started);
+                RuntimeErrorResponse::from_core(error).boxed()
+            })?;
+        guard.check_deadline().map_err(|error| {
+            self.emit_limit_if_needed(session, &context.api_name, &trace_id, &error, started);
+            RuntimeErrorResponse::from_core(error).boxed()
+        })?;
         let outcome = self
             .orchestrator
             .handle_host_action(context, request)
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?
+            .map_err(|error| {
+                self.emit_context_event(
+                    ObservabilityEvent::new(ObservabilityEventKind::ComponentEvent)
+                        .with_trace_id(trace_id.clone())
+                        .with_api_name(context.api_name.clone())
+                        .with_outcome(error.code().as_str())
+                        .with_latency_ms(elapsed_ms(started)),
+                    context,
+                );
+                RuntimeErrorResponse::from_core(error).boxed()
+            })?
             .redacted();
-        guard
-            .check_deadline()
-            .map_err(|error| RuntimeErrorResponse::from_core(error).boxed())?;
+        guard.check_deadline().map_err(|error| {
+            self.emit_limit_if_needed(session, &context.api_name, &trace_id, &error, started);
+            RuntimeErrorResponse::from_core(error).boxed()
+        })?;
         let handled = outcome.status == HostActionStatus::Accepted;
+        self.emit_context_event(
+            ObservabilityEvent::new(ObservabilityEventKind::ComponentEvent)
+                .with_trace_id(trace_id)
+                .with_api_name(context.api_name.clone())
+                .with_outcome(if handled { "ok" } else { "unsupported" })
+                .with_latency_ms(elapsed_ms(started))
+                .with_field("hostActionStatus", json!(format!("{:?}", outcome.status))),
+            context,
+        );
         Ok(RuntimeResponse::ok(
             RuntimeDispatchComponentActionResponse {
                 handled,
@@ -1455,6 +1756,38 @@ where
             closed: true,
             boundary: "runtime-session-manager".to_owned(),
         }))
+    }
+
+    fn emit_observability(&self, event: ObservabilityEvent) {
+        self.observability.emit(event);
+    }
+
+    fn emit_session_event(&self, event: ObservabilityEvent, session: &RuntimeSessionContext) {
+        self.emit_observability(observability_event_for_session(event, session));
+    }
+
+    fn emit_context_event(&self, event: ObservabilityEvent, context: &ApiCallContext) {
+        self.emit_observability(observability_event_for_context(event, context));
+    }
+
+    fn emit_limit_if_needed(
+        &self,
+        session: &RuntimeSessionContext,
+        api_name: &str,
+        trace_id: &str,
+        error: &DockCoreError,
+        started: Instant,
+    ) {
+        if error.code() == ErrorCode::Timeout {
+            self.emit_session_event(
+                ObservabilityEvent::new(ObservabilityEventKind::SandboxLimitHit)
+                    .with_trace_id(trace_id.to_owned())
+                    .with_api_name(api_name.to_owned())
+                    .with_outcome("timeout")
+                    .with_latency_ms(elapsed_ms(started)),
+                session,
+            );
+        }
     }
 
     pub fn handle_ipc_request(&self, request: RuntimeIpcRequest) -> RuntimeIpcResponse {
@@ -1638,6 +1971,49 @@ fn parse_ipc_params<T: DeserializeOwned>(params: &Value) -> Result<T, RuntimeErr
 
 fn empty_object() -> Value {
     Value::Object(Map::new())
+}
+
+fn trace_id_for(_session: &RuntimeSessionContext, _api_name: &str) -> String {
+    next_observability_id("trace")
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    let millis = started.elapsed().as_millis();
+    millis.min(u128::from(u64::MAX)) as u64
+}
+
+fn observability_event_for_session(
+    event: ObservabilityEvent,
+    session: &RuntimeSessionContext,
+) -> ObservabilityEvent {
+    let event = event
+        .with_session_id(session.session_id.clone())
+        .with_skill_id(session.skill_id.clone())
+        .with_merchant_did(session.merchant_did.clone())
+        .with_user_did_hash(session.user_did.as_deref());
+    if event.trace_id.is_none() {
+        let api_name = event.api_name.clone();
+        event.with_trace_id(trace_id_for(session, api_name.as_deref().unwrap_or("")))
+    } else {
+        event
+    }
+}
+
+fn observability_event_for_context(
+    event: ObservabilityEvent,
+    context: &ApiCallContext,
+) -> ObservabilityEvent {
+    let event = event
+        .with_session_id(context.session_id.clone())
+        .with_skill_id(context.skill_id.clone())
+        .with_api_name(context.api_name.clone())
+        .with_merchant_did(context.merchant_did.clone())
+        .with_user_did_hash(context.user_did.as_deref());
+    if event.trace_id.is_none() {
+        event.with_trace_id(next_observability_id("trace"))
+    } else {
+        event
+    }
 }
 
 #[allow(dead_code)]
