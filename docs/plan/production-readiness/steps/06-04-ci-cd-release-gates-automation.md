@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-04
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 05:13:33 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 05:24:25 +0800 |
+| Commit | `afaa5ab` |
 | Review evidence | 2026-06-14 05:22:29 +0800 commit 前 Review：修复脚本在 `--report` 目录不存在时解析不稳的问题、修复 full 模式 artifact 输出目录未 export 的问题、修复 quick/full 连续运行时会扫描陈旧 artifacts 的问题；确认 full 模式实际运行 required gates，`skip` 不计 pass，redaction / consent / sandbox / token leakage 均为 hard blocker，runbook 与脚本入口一致。 |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 109]`，工作区无未提交变更；已读取主 Plan、Step 06-04 文档、Phase 6 计划、Release Gates runbook、README、API/组件兼容矩阵和 06-03 closure evidence；确认仓库当前无 `scripts/` 或 `.github/`，本 Step 采用 vendor-neutral 本地 gate runner；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --quick --report target/release-gates/quick-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = warning` / `releaseDecision = needs-review`，6 pass / 0 fail / 4 skip，quick skip 不计 pass；`python3 -m json.tool target/release-gates/quick-report.json` 通过；`./scripts/release-gates.sh --report target/release-gates/full-report.json` 通过，report `status = warning` / `releaseDecision = needs-review`，21 pass / 0 fail / 1 skip，唯一 skip 是未提供 release notes path；`python3 -m json.tool target/release-gates/full-report.json` 通过；full report 中 `requiredFailed = 0`、`hardBlockerFailed = 0`；Markdown link checker 检查 751 个本地链接；compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf`，未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`git diff --check -- scripts docs/runbook docs/plan README.md` 无输出。 |
-| Next action | 创建 06-04 focused implementation commit，然后回填 commit hash 并关闭 Step |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 109]`，工作区无未提交变更；已读取主 Plan、Step 06-04 文档、Phase 6 计划、Release Gates runbook、README、API/组件兼容矩阵和 06-03 closure evidence；确认仓库当前无 `scripts/` 或 `.github/`，本 Step 采用 vendor-neutral 本地 gate runner；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --quick --report target/release-gates/quick-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = warning` / `releaseDecision = needs-review`，6 pass / 0 fail / 4 skip，quick skip 不计 pass；`python3 -m json.tool target/release-gates/quick-report.json` 通过；`./scripts/release-gates.sh --report target/release-gates/full-report.json` 通过，report `status = warning` / `releaseDecision = needs-review`，21 pass / 0 fail / 1 skip，唯一 skip 是未提供 release notes path；`python3 -m json.tool target/release-gates/full-report.json` 通过；full report 中 `requiredFailed = 0`、`hardBlockerFailed = 0`；Markdown link checker 检查 751 个本地链接；compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf`，未命中 `/home/`、`/Users/`、Authorization、Signature、capabilityToken、Bearer、fixture-token、private key、token-secret、latitude 或 longitude；`git diff --check -- scripts docs/runbook docs/plan README.md` 无输出；implementation commit 后 `git status --short --branch` = `## main...origin/main [ahead 110]`，工作区无未提交变更。 |
+| Next action | 进入 Step 06-05 Canary 发布、版本化与回滚策略 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -70,7 +70,7 @@ Step index：06-04
 - [x] Release notes completeness 和 migration note 检查有可执行规则或明确人工 checklist。
 - [x] Release Gates runbook 与自动化命令一致。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
