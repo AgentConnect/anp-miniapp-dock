@@ -39,6 +39,15 @@ The command emits `dock.doctor-report.v1` JSON. It checks Rust toolchain, worksp
 
 Expected local defaults are not production-ready: unsigned/demo Skills, missing resolver/allowlist, in-memory storage/audit, missing production Host providers, skipped server health, and sandbox gates that doctor records but does not execute should be treated as warning/skip evidence. Real signing credential material, raw tokens, Authorization values, signatures, secrets, and absolute local paths must not appear in the report.
 
+For the full Skill developer workflow, see the developer docs:
+
+- [Developer docs index](../developer/README.md)
+- [Import WeChat MiniApp MCP Skill](../developer/import-wechat-mcp-skill.md)
+- [wx API compatibility guide](../developer/wx-api-compatibility.md)
+- [Component compatibility guide](../developer/component-compatibility.md)
+- [Security guidelines](../developer/security-guidelines.md)
+- [Host adapter guide](../developer/host-adapter-guide.md)
+
 ## Run Compatibility Fixtures
 
 The repository includes four mock-only compatibility fixtures beyond coffee. Each fixture has its own `README.md`, `expected-test-skill.json`, and golden Render IR snapshot under `testdata/render-ir`.
@@ -168,7 +177,7 @@ Call a Skill API through the same local envelope:
 
 ```bash
 cargo run -p dock-cli -- runtime-json examples/coffee-skill \
-  '{"apiVersion":"dock.runtime.v1","requestId":"req-call-1","method":"runtime.callApi","params":{"session":{"userDid":"did:wba:user.example","agentDid":"did:wba:agent.example","merchantDid":"did:wba:coffee-merchant.example","skillId":"coffee","sessionId":"session-ipc"},"apiName":"searchDrinks","arguments":{"query":"latte"},"capabilityToken":"capability-secret-token"}}'
+  '{"apiVersion":"dock.runtime.v1","requestId":"req-call-1","method":"runtime.callApi","params":{"session":{"userDid":"did:wba:user.example","agentDid":"did:wba:agent.example","merchantDid":"did:wba:coffee-merchant.example","skillId":"coffee","sessionId":"session-ipc"},"apiName":"searchDrinks","arguments":{"query":"latte"}}}'
 ```
 
 `runtime-json` is the first Phase 4 headless Host integration surface. It uses `headless-cli-json` over local process stdio and returns a stable envelope with `apiVersion`, `requestId`, `method`, `status`, `result` or `error`, `redaction`, and `transport`. It is not an HTTP/gRPC sidecar and does not provide production Host UI, persistent session storage, or production consent providers. Capability tokens and private key paths must not appear in responses; parse errors, invalid params, unsupported versions, and unsupported methods all return redacted JSON envelopes.

@@ -245,6 +245,7 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 新增或更新：
 
+- `docs/developer/README.md`
 - `docs/developer/import-wechat-mcp-skill.md`
 - `docs/developer/wx-api-compatibility.md`
 - `docs/developer/component-compatibility.md`
@@ -254,8 +255,9 @@ Phase 5 让外部 Skill 开发者可以自助导入、验证、调试和认证�
 
 ## 6. 阶段完成检查
 
-- [ ] 开发者能用 CLI 完成 validate/inspect/test。
+- [x] 开发者能用 CLI 完成 validate/inspect/test。
 - [x] coffee 之外至少 3 个示例可跑。
-- [ ] 兼容报告能定位 unsupported API 和 fallback 风险。
-- [ ] 迁移指南说明 ANP DID 替代微信身份的方式。
-- [ ] 文档和 CLI 使用同一状态枚举。
+- [x] 兼容报告能定位 unsupported API 和 fallback 风险。
+- [x] 迁移指南说明 ANP DID 替代微信身份的方式。
+- [x] 开发者文档覆盖 import、API compatibility、component compatibility、security guidelines 和 Host adapter guide。
+- [x] 文档和 CLI 使用同一状态枚举。

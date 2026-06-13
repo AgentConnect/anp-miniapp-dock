@@ -19,12 +19,12 @@ cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dry-run
 - `copyPlan`：列出 safe copy 计划，目标路径冲突时默认 blocked。
 - `nextCommands`：给出后续 `validate`、`test-skill` 或 safe-copy 命令。
 
-确认 dry-run 无 blocker 后，再显式写入目标目录：
+确认 dry-run 无 blocker 后，再显式写入受控测试目录：
 
 ```bash
-cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dest /tmp/dock-import-coffee --write
-cargo run -p dock-cli -- validate /tmp/dock-import-coffee
-cargo run -p dock-cli -- test-skill /tmp/dock-import-coffee
+cargo run -p dock-cli -- import-wechat-mcp examples/coffee-skill --dest target/dock-import-coffee --write
+cargo run -p dock-cli -- validate target/dock-import-coffee
+cargo run -p dock-cli -- test-skill target/dock-import-coffee
 ```
 
 目标目录已存在同名文件时，命令默认 fail closed。只有确认要替换时才使用 `--overwrite`。
@@ -49,3 +49,11 @@ WeChat 身份、登录态、网络和高风险能力需要映射到容器边界�
 - 供应链：本地未签名包仍是 dev/demo-only；生产发布需要 publisher DID、digest、signature 和 trusted publisher policy。
 
 导入成功只说明包可以进入本地兼容验证链路。上线前仍必须通过 `validate`、`inspect`、`test-skill`、`doctor`、release gates、Host provider conformance 和安全 review。
+
+## 后续阅读
+
+- [开发者文档入口](README.md)
+- [wx API 兼容说明](wx-api-compatibility.md)
+- [组件兼容说明](component-compatibility.md)
+- [安全开发指南](security-guidelines.md)
+- [Host adapter guide](host-adapter-guide.md)

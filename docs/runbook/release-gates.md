@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 5 developer tooling gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics 已有本地 release gate 证据
+> 状态：Phase 5 developer tooling gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -48,7 +48,7 @@ cargo run -p dock-cli -- doctor
 当前文档 gate：
 
 ```bash
-git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/security docs/plan
+git diff --check -- README.md AGENTS.md docs/architecture docs/developer docs/runbook docs/security docs/plan
 ```
 
 手工检查：
@@ -61,6 +61,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 | Validate 报告 | `dock-cli validate examples/coffee-skill` 的 `schemaVersion` 为 `dock.validate-report.v1`，`status` 为 `warning`，`commandStatus` 为 `ok`，顶层和 `compatibilityReport` 均包含 API 注册、组件加载、权限、风险、fallback、release blocker、repair suggestion 和 release readiness 字段 | Phase 6 将报告 schema 纳入自动 release gate |
 | Plan 变更 | 改范围、顺序、验收、安全边界或验证策略前先更新 Plan 变更记录 | Phase 6 可纳入 PR checklist |
 | README 索引 | 新增架构、安全、runbook 文档必须有入口链接 | 当前手工检查 |
+| Developer docs 索引 | `docs/developer/README.md` 必须链接 import、API compatibility、component compatibility、security guidelines 和 Host adapter guide | 当前手工检查 |
 
 ## 4. 安全 Gate
 

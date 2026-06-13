@@ -18,6 +18,12 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - [Security runbook](docs/runbook/security.md)
 - [Threat model](docs/security/threat-model.md)
 - [Release gates runbook](docs/runbook/release-gates.md)
+- [Developer docs](docs/developer/README.md)
+  - [Import WeChat MiniApp MCP Skill](docs/developer/import-wechat-mcp-skill.md)
+  - [wx API compatibility guide](docs/developer/wx-api-compatibility.md)
+  - [Component compatibility guide](docs/developer/component-compatibility.md)
+  - [Security guidelines](docs/developer/security-guidelines.md)
+  - [Host adapter guide](docs/developer/host-adapter-guide.md)
 - [Production readiness roadmap](docs/plan/production-readiness-roadmap.md)
   - [Detailed production readiness phase plans](docs/plan/production-readiness/README.md)
 
@@ -64,6 +70,7 @@ cargo test -p component-runtime component_vm
 ## CLI
 
 `dock-cli` prints JSON so outputs can be used as validation evidence or piped into other tools.
+For the end-to-end developer workflow, read the [developer docs](docs/developer/README.md).
 `validate` emits the stable `dock.validate-report.v1` schema. Its `status` / `reportStatus`
 describe release-readiness (`ok`, `warning`, or `error`), while `commandStatus: "ok"` means the
 CLI command itself completed. Local absolute paths and sensitive material are redacted from the
