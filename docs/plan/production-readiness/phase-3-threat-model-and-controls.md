@@ -1,5 +1,17 @@
 # Phase 3 子文档：Threat Model 与安全控制
 
+本文是 `docs/security/threat-model.md` 的 Phase 3 摘要。完整风险等级、L3/L4 控制矩阵、owner、required gate、残余风险和 release blocker 以 `docs/security/threat-model.md` 为准；本文不把 Step 03-02 至 03-06 的 planned gate 写成已完成。
+
+## 0. 风险等级
+
+| 等级 | 范围 | 默认发布策略 | 必需控制 |
+|---|---|---|---|
+| L0 | 公开读、常量、普通 Render IR 节点 | 可默认允许 | schema validation、redaction、unsupported fail shape |
+| L1 | session 标识、最小设备/应用信息、DID 绑定 | 最小字段，禁止真实指纹和 secret | DID/session binding、字段最小化、redaction |
+| L2 | 普通写、storage、card expiration、follow-up | scope + input validation + audit summary | permission decision、scoped storage、audit redaction |
+| L3 | 下单、支付、退款、外部交易、分享外发 | 默认 Prompt 或 Deny | ConsentGate、Host provider boundary、audit、idempotency/replay plan |
+| L4 | 手机号、地址、身份、位置、文件、媒体、扫码、电话、生物识别、crypto private operation | 默认 Deny 或 Prompt | least-privilege Host provider、opaque handle、no raw output、audit redaction、retention/export policy |
+
 ## 1. 资产清单
 
 | 资产 | 保护目标 |
@@ -78,16 +90,17 @@
 
 ## 3. 控制矩阵
 
-| 威胁 | 控制 | 测试证据 |
-|---|---|---|
-| JS escape | 禁用 eval/Function/prototype constructor | sandbox tests |
-| Path traversal | canonicalize + validate inside root | skill-loader tests |
-| Unauthorized network | allowlist + broker only | request broker tests |
-| Token leakage | host-only token + redaction | CLI/log/audit tests |
-| Consent bypass | Orchestrator enforcement order | dock-core tests |
-| Replay challenge | nonce one-time + TTL | demo-server/anp-adapter tests |
-| Scope mismatch | token verifier expected capability | demo API tests |
-| Package tamper | digest/signature | package integrity tests |
+| 威胁 | 控制 | 当前证据 | Phase 3 required gate |
+|---|---|---|---|
+| JS escape | 禁用 eval/Function/prototype constructor/process/fetch/WebSocket，限制 timer/result/console/resource | Step 02-05 最小 sandbox/dynamic tests | Step 03-02 full sandbox/resource regression |
+| Path traversal | canonicalize + validate inside root | skill-loader path tests | Step 03-06 symlink/zip slip/remote require/digest/signature gate |
+| Unauthorized network | allowlist + broker only | RequestBroker deny-by-default、auth header deny tests | Step 03-03 scheme/host/port/path/method/scope allowlist |
+| Token leakage | host-only token + redaction | CLI/log/audit redaction tests | Step 03-04 lifecycle redaction + Step 03-05 audit export redaction |
+| Consent bypass | Orchestrator enforcement order | dock-core / consent-audit tests | Step 03-05 Host consent adapter + persistent audit |
+| Replay challenge | nonce one-time + TTL | demo-server/anp-adapter challenge tests | Step 03-04 challenge replay + jti replay + resolver trust anchor |
+| Scope mismatch | token verifier expected capability | demo API tests | Step 03-04 token claims version + scope derivation source |
+| Permission drift | manifest、Host override、mock/dev-only、merchant trust policy 分散 | high-risk provider fail closed tests | Step 03-03 unified PermissionDecision audit |
+| Package tamper | digest/signature/publisher DID/trusted allowlist/quarantine | 当前只有 path/manifest validation | Step 03-06 package integrity tests |
 
 ## 4. 安全红线
 
@@ -98,6 +111,8 @@
 - L3/L4 API 可在无 consent proof 下执行；
 - package path 可逃逸 Skill root；
 - sandbox escape regression 失败；
+- permission decision 默认 allow 或 mock provider 被 production profile 静默启用；
+- dynamic request/timer 绕过 `scope.dynamic`、RequestBroker、allowlist、resource limit 或 expire cleanup；
 - unsupported API 静默成功。
 
 ## 5. 残余风险记录模板

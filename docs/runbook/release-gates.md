@@ -1,9 +1,9 @@
 # Release Gates Runbook
 
-> 状态：Phase 0 发布门槛初版
-> 日期：2026-06-12
+> 状态：Phase 3 security gates 基线
+> 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
-> 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 00-04。
+> 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
 
 ## 1. 使用规则
 
@@ -62,6 +62,12 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/runbook docs/secu
 
 ## 4. 安全 Gate
 
+本节把安全 gate 分成三类：
+
+- **当前必须执行**：当前代码库已有自动化或手工 gate，任何 Step / release 都必须执行或记录无法执行原因。
+- **Phase 3 required**：Phase 3 的 Step 03-02 至 03-06 必须实现或升级为 required 的 gate；在对应 Step 完成前不得写成“已通过”。
+- **Phase 4/5 后续 gate**：依赖 production Host、registry、持久化 backend、开发者工具或 CI 自动化的 gate；当前仍是 production release blocker，但不作为 03-01 的已实现证据。
+
 ### 4.1 当前必须执行
 
 当前已有自动化测试覆盖以下安全主线，随 `cargo test --workspace` 执行：
@@ -94,18 +100,31 @@ rg -n "token|Authorization|signature|private key|ConsentGate|audit|sandbox|allow
 
 预期：命中安全文档、runbook、测试说明和 redaction 规则；不得发现真实 secret、真实 DID private key、真实 bearer token 或生产凭据。
 
-### 4.2 Planned security gates
+### 4.2 Phase 3 required security gates
 
-以下 gate 是 release blocker 的目标状态，但当前尚未全部自动化：
+以下 gate 是 Phase 3 必须补齐的 release blocker。完成对应 Step 后，必须把实际命令、测试文件和残余风险回填到本 runbook、Threat Model、主 Plan 台账和 Step 文档。
+
+| Gate | Step | 当前处理 | 完成后必须记录 |
+|---|---|---|---|
+| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | 03-02 | Step 02-05 已覆盖 dynamic 前置最小 gate；仍缺完整 Atomic API VM + Component VM release blocker 专项回归集 | `cargo test -p js-runtime-quickjs sandbox`、`cargo test -p component-runtime sandbox`、limit error redaction 抽样、resource limit 残余风险 |
+| permission policy engine：`Allow` / `Deny` / `Prompt` / `MockAllowed(dev_only)`，Host deny override，manifest permission，dynamic scope，merchant trust policy | 03-03 | 高风险 provider boundary 已 fail closed；策略仍分散在 profile、broker、orchestrator 和 manifest validation | permission tests、core enforcement tests、decision audit summary、mock dev-only release blocker |
+| network allowlist：scheme、host、port、path prefix、method、scope，默认 deny | 03-03 | RequestBroker 已有 deny-by-default 和 authority allowlist；path/method/scope 仍需统一 gate | allowlist path/method/scope tests、denied audit、redacted stable reason |
+| DID/token lifecycle：token claims version、refresh、revoke/logout、cache eviction、jti replay、challenge nonce 一次性、resolver cache/trust anchor | 03-04 | 当前已有 challenge proof、JWT scope/audience/TTL 和 session cache；revoke/replay/resolver 仍未生产化 | `cargo test -p anp-adapter session`、`cargo test -p anp-adapter challenge`、`cargo test -p demo-server token`、token redaction 抽样 |
+| Host consent adapter、ConsentProof policy version/prompt digest/decision actor/timestamp/parameter digest | 03-05 | `DecisionConsentProvider` 与 Orchestrator gate 已覆盖 consent required/denied；真实 Host adapter contract 和 proof 字段仍需冻结 | consent adapter tests、core enforcement tests、proof field snapshot 或 assertion |
+| persistent audit sink、retention、query/export redaction | 03-05 | 当前 audit 以 in-memory/mock 和 redaction model 为主 | audit persistence/restart/query tests、redacted export tests、retention policy 文档 |
+| Skill package digest/signature、publisher DID、trusted publisher allowlist、quarantine、remote require/path/symlink/zip slip deny | 03-06 | 当前已有 path/manifest validation；未签名本地包仍是 dev/demo-only | loader package tests、validate supply-chain report、coffee demo 未签名 dev/demo-only blocker |
+
+### 4.3 Phase 4/5 后续 security gates
+
+以下 gate 依赖生产 Host、registry/cache、持久化配置、开发者工具或 CI 自动化。它们仍是 production release blocker，但不应在 Phase 3 前半段误标为已自动化。
 
 | Gate | 启用阶段 | 当前处理 |
 |---|---|---|
 | production Host RequestBroker transport、registry allowlist、request audit persistence | Phase 4 | Step 01-04 已把 Atomic API `wx.request` 收敛到 `wx-compat::RequestBroker` trait 的 loopback DID broker；Step 02-05 已给 dynamic component request 接入 injected broker boundary；demo-only/unsupported transport 仍不得 production release |
-| sandbox escape 专项回归集：constructor/prototype/process/fetch/WebSocket/timer/result size/console size | Phase 3 | Step 02-05 已覆盖 dynamic 前置最小 gate；Phase 3 仍需扩展为 release blocker 专项回归集 |
-| token refresh/revoke/logout、jti replay、DID resolver trust anchor | Phase 3/4 | 当前 only TTL/scope/challenge proof |
-| persistent audit sink、retention、redacted export | Phase 3/4 | 当前 in-memory/mock |
-| Skill package digest/signature、publisher DID、trusted publisher allowlist | Phase 3/5 | 当前 path/manifest validation |
-| Host provider conformance：phone/address/location/file/payment | Phase 3/4 | 当前 host-boundary/fail closed 策略 |
+| Host provider conformance：phone/address/location/file/payment/scan/phone call/share/detail page | Phase 4 | 当前只有 host-boundary/fail closed 策略和 mock/dev-only fixtures；真实 provider UI 与 least-privilege field shape 待 Host adapter contract |
+| secret store、token cache 持久化、scoped storage 持久化、audit retention/export 配置化 | Phase 4 | Phase 3 冻结 contract 或提供初版 backend；部署级 backend、migration、encryption、cleanup 由 Phase 4 拆分 Step 承接 |
+| CLI compatibility / inspect / import 报告 schema、developer self-certification | Phase 5 | 当前 `dock-cli validate` 已输出 demo-only compatibility report；完整 migration/import/report schema 待 Phase 5 |
+| CI/CD 自动 gate runner、link checker、matrix schema checker、snapshot gate、privacy deletion runbook | Phase 6 | 当前手工和本地命令执行；自动化 release report 待 Phase 6 |
 
 ## 5. 兼容矩阵 Gate
 
@@ -175,7 +194,7 @@ Planned gates：
 | consent bypass | 阻塞；修复 Orchestrator/permission/Host provider，补 L3/L4 测试。 |
 | allowlist / network deny 失败 | 阻塞；禁止发布任何网络相关变更。 |
 | matrix 与实现不一致 | 阻塞当前 Step；先修矩阵或实现，再 Review。 |
-| planned gate 未实现 | 不阻塞 Phase 0 文档 release，但必须记录为 planned gap；进入对应 Phase 前升级为 required。 |
+| 后续阶段 gate 未实现 | 不阻塞当前 Step 的文档基线，但必须记录为 planned gap 或后续阶段 release blocker；进入对应 Phase 前升级为 required。 |
 | demo-only 被误标 production-ready | 阻塞；修正文档、配置或代码路径。 |
 
 ## 9. Release Review Checklist

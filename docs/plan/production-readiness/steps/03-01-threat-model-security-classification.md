@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：03-01
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-13 13:42:54 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 02-07 批次最终 Review 与整体验证完成后，启动 Phase 3 安全分级收敛 |
+| Review evidence | 2026-06-13 13:49:52 +0800 commit 前 Review：修复 Threat Model 中 Render IR schemaVersion/snapshot 与 unsupported registry 的旧 planned 表述；确认 L0-L4 分级、L3/L4 高风险能力矩阵、Phase 3 required gates、Phase 4/5 后续 gate 和 demo-only/mock 禁止项未冲突，planned gate 未被误写成已自动化。 |
+| Verification evidence | `git diff --check -- docs/security docs/runbook docs/architecture docs/plan` 无输出；`rg -n "L3|L4|ConsentGate|audit|redaction|fail closed" docs/security docs/runbook docs/architecture docs/plan/production-readiness` 命中高风险能力与控制说明；`rg -n "token|Authorization|signature|private key|phone|address|file content" docs/security docs/runbook docs/architecture docs/plan` 仅命中文档红线、mock/dev-only 示例、测试说明和计划台账；旧状态残留搜索无命中；新增/修改 Markdown 相对链接目标手工检查存在。 |
+| Next action | 准备创建 03-01 focused commit；commit 后回填 hash 和 done 状态 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,11 +64,11 @@ Step index：03-01
 
 ## 7. 验收标准
 
-- [ ] 每个 L3/L4 API 和高风险 component action 在 threat model 中有控制措施、owner、测试 gate 和残余风险。
-- [ ] Release gates 明确区分当前已自动化、Phase 3 必须自动化和 Phase 4/5 后续 gate。
-- [ ] API/组件矩阵的 risk level 与 threat model 不冲突。
-- [ ] 文档没有把 demo-only/mock/headless provider 写成 production-ready。
-- [ ] Review 发现已经修复或明确记录。
+- [x] 每个 L3/L4 API 和高风险 component action 在 threat model 中有控制措施、owner、测试 gate 和残余风险。
+- [x] Release gates 明确区分当前已自动化、Phase 3 必须自动化和 Phase 4/5 后续 gate。
+- [x] API/组件矩阵的 risk level 与 threat model 不冲突。
+- [x] 文档没有把 demo-only/mock/headless provider 写成 production-ready。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -89,11 +89,11 @@ Step index：03-01
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | `docs/security/threat-model.md` 仍把 Render IR schemaVersion/snapshot 和 unsupported registry 作为旧 planned gate 描述，和 Step 01-05、02-01、02-06 的 done 证据不一致。 |
+| 已修复问题 | 已修复 | 将 Render IR 状态改为已有 schemaVersion、snapshot gate 和 stable fallback reason；将 unsupported API 静默成功 gate 改为当前 deterministic unsupported registry 证据；保留 Phase 4 Host renderer conformance 作为后续 release blocker。 |
+| 剩余风险 | 已记录 | Step 03-02 至 03-06 仍需实现 sandbox/resource、permission engine、DID/token lifecycle、persistent consent/audit 和 package integrity；真实 Host renderer/provider、production transport、registry/cache、secret store 和持久化 backend 仍在 Phase 4/5/6。 |
+| 新增或缺失测试 | 文档 Step，无新增 Rust 测试 | 本 Step 冻结分类与 gate 口径；验证使用文档 diff check、风险等级抽样、敏感词抽样和链接检查。后续 03-02 至 03-06 必须补实现测试。 |
+| 已更新或缺失文档 | 已更新 | 已更新 `docs/security/threat-model.md`、`docs/runbook/release-gates.md`、Phase 3 总文档、Phase 3 threat model 子文档、主 Plan 和本 Step 文档；API/组件矩阵经抽样无直接冲突，未修改。 |
 
 ## 10. Commit 要求
 
@@ -104,6 +104,12 @@ Step index：03-01
 - Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`docs: classify production security threats`
+
+执行记录：
+
+- Commit 前状态：`git status --short --branch` 显示仅 `docs/security/threat-model.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-3-security-hardening.md`、`docs/plan/production-readiness/phase-3-threat-model-and-controls.md`、`docs/plan/production-readiness-roadmap.md` 和本 Step 文档变更。
+- 纳入文件：上述文件均属于 Step 03-01 threat model、安全分级、release gate 收敛和执行台账。
+- 遗留未提交变更：无与本 Step 无关的已知变更；commit hash 和 done 状态将在主体 commit 后用 closure commit 回填。
 
 ## 11. Blocked 处理
 
