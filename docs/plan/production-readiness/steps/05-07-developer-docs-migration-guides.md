@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：05-07
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-14 03:20:36 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-14 03:29:22 +0800 |
+| Commit | `72f00df` |
 | Review evidence | 2026-06-14 03:27:50 +0800 commit 前 Review 已记录：修复导入指南使用 `/tmp` 目标路径的可移植性问题，改为 `target/dock-import-coffee`；修复 local demo `runtime-json` 示例包含可复用 capability token 占位的问题，改为不携带 token 的可复制请求；修复 Phase 5 阶段完成检查仍未勾选状态枚举一致性的问题。确认 developer docs 没有把完整微信 Runtime、headless/mock provider、local unencrypted backend 或 demo-only fixture 写成 production-ready。 |
 | Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 98]`；已读取主 Plan、Step 05-07 文档、Phase 5/6 阶段文档、05-08/06-01 至 06-07 Step 文档、现有 `docs/developer/import-wechat-mcp-skill.md`、README、local demo runbook、API/组件兼容矩阵、release gates 和 Host adapter / Runtime contract 相关文档；确认 05-06 implementation commit `f3d97cc` 与 closure commit `a8df50f`；`git diff --check -- docs/developer docs/runbook docs/plan README.md` 无输出；手工/脚本检查新增 developer docs、README、local demo、release gates 相对链接，未发现缺失目标；`cargo run -q -p dock-cli -- validate --help`、`inspect --help`、`test-skill --help`、`import-wechat-mcp --help`、`doctor --help` 与文档命令一致；`cargo run -q -p dock-cli -- runtime-json examples/coffee-skill ... runtime.callApi` 使用无 token 示例通过，返回 `dock.runtime.v1` / `status = ok`；`rg -n "supported|host-boundary|planned-p1|planned-p2|demo-only|unsupported-by-design" docs/developer docs/architecture` 命中状态枚举且未发现新增未知枚举；`rg -n "token|Authorization|private key|phone|address|file|location|ConsentGate|audit" docs/developer` 命中安全红线说明；敏感占位抽样未发现 `/tmp`、本机绝对路径、`capability-secret-token`、Bearer、PEM、经纬度或可复用 secret 写入新增 developer docs。 |
-| Next action | 创建 05-07 focused commit 后回填 commit hash，并进入 05-08 Phase 5 final Review gate |
+| Next action | 进入 05-08 Phase 5 final Review gate |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -74,7 +74,7 @@ Step index：05-07
 - [x] Host adapter guide 明确 action 必须回 Runtime，不得绕过 consent/audit。
 - [x] README 和 runbook 有开发者入口。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
@@ -107,8 +107,8 @@ Step index：05-07
 - Commit 范围：只包含 developer docs、README/runbook 入口和相关计划回填。
 - Commit 前状态：`git status --short` 显示 README、`docs/developer/*`、local demo runbook、release gates、Phase 5 文档、Step 05-07 文档和主 Plan 台账变更。
 - 纳入文件：`README.md`、`docs/developer/README.md`、`docs/developer/import-wechat-mcp-skill.md`、`docs/developer/wx-api-compatibility.md`、`docs/developer/component-compatibility.md`、`docs/developer/security-guidelines.md`、`docs/developer/host-adapter-guide.md`、`docs/runbook/local-demo.md`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness/phase-5-developer-experience.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/05-07-developer-docs-migration-guides.md`。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
-- 遗留未提交变更：必须记录原因以及为什么安全。
+- Commit 后证据：implementation commit `72f00df docs: add developer migration guides`；commit 后 `git status --short --branch` = `## main...origin/main [ahead 99]`。
+- 遗留未提交变更：无。
 - 建议消息：`docs: add developer migration guides`
 
 ## 11. Blocked 处理
