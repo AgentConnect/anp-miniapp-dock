@@ -18,6 +18,7 @@ The MVP is now implemented as a Cargo workspace. It can load a MiniApp MCP-style
 - [Security runbook](docs/runbook/security.md)
 - [Threat model](docs/security/threat-model.md)
 - [Release gates runbook](docs/runbook/release-gates.md)
+- [Release process, canary, and rollback runbook](docs/runbook/release-process.md)
 - [Developer docs](docs/developer/README.md)
   - [Import WeChat MiniApp MCP Skill](docs/developer/import-wechat-mcp-skill.md)
   - [wx API compatibility guide](docs/developer/wx-api-compatibility.md)
@@ -77,6 +78,12 @@ Release gate runner:
 ```
 
 The runner emits `dock.release-gates-report.v1` at `target/release-gates/release-gates-report.json` by default. It runs the release gates from `docs/runbook/release-gates.md`, records pass/fail/skip, treats skip as not-pass, and marks redaction failure, consent bypass, sandbox escape, and token/Authorization/Signature leakage as hard blockers. Use `--quick` only to validate the script/report plumbing during development; it is not release approval. Pass `--release-notes <path>` or `RELEASE_NOTES_PATH=<path>` when a release notes file exists.
+
+Local canary/release dry-run:
+
+```bash
+./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md
+```
 
 ## CLI
 

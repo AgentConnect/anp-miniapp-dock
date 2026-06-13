@@ -173,6 +173,13 @@ Step 06-04 当前实现的本地 release gate runner 契约：
 5. monitor fallback/error/consent/token metrics；
 6. rollback on gate breach。
 
+Step 06-05 当前实现的本地发布流程契约：
+
+- [`../../runbook/release-process.md`](../../runbook/release-process.md) 定义 release candidate、canary stage、rollback condition/action、cache purge procedure 和 dry-run checklist。
+- [`../../runbook/releases/2026-06-14-local-canary.md`](../../runbook/releases/2026-06-14-local-canary.md) 是当前本地 Stage 0 release notes dry-run，包含版本、兼容变化、安全变化、风险、migration、rollback、gate evidence 和 canary plan。
+- `./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md` 必须让 release notes completeness gate 通过；没有 release notes 路径时仍是 `needs-review`，不能生产发布。
+- Stage 0 只证明 headless/local gates；Stage 1 internal Host、Stage 2 allowlisted merchant、Stage 3 expansion 仍需真实 Host/deploy platform 证据。
+
 ### 5.3 回滚条件
 
 - token leakage regression；
@@ -205,5 +212,5 @@ Step 06-04 当前实现的本地 release gate runner 契约：
 - [x] trace 能串起 Runtime API、QuickJS VM、`wx.login` / `wx.checkSession` / `wx.request`、render、action、nested `api/call` 和 audit 的本地测试链路；完整 Host message / model decision 侧 trace 仍需真实 Host adapter 注入。
 - [x] 性能基准有自动化脚本。
 - [x] CI gates 覆盖安全、兼容、snapshot、文档。
-- [ ] canary/rollback runbook 可执行。
-- [ ] release notes 包含版本、兼容变化、风险和回滚方式。
+- [x] canary/rollback runbook 可执行。
+- [x] release notes 包含版本、兼容变化、风险和回滚方式。

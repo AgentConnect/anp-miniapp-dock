@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction、Step 06-02 metrics / tracing correlation、Step 06-03 performance baseline / stress smoke、Step 06-04 本地 release gate runner / JSON report 已有本地 release gate 证据
+> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction、Step 06-02 metrics / tracing correlation、Step 06-03 performance baseline / stress smoke、Step 06-04 本地 release gate runner / JSON report、Step 06-05 canary / rollback / release notes dry-run 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -50,12 +50,14 @@
 Release notes completeness gate：
 
 ```bash
-./scripts/release-gates.sh --release-notes docs/runbook/releases/<version>.md
+./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md
 # 或
-RELEASE_NOTES_PATH=docs/runbook/releases/<version>.md ./scripts/release-gates.sh
+RELEASE_NOTES_PATH=docs/runbook/releases/2026-06-14-local-canary.md ./scripts/release-gates.sh
 ```
 
 release notes 文件必须包含版本、兼容变化、风险、回滚和 migration/breaking-change 说明。没有提供 release notes 路径时，runner 会把该 gate 记为 `skip` / `needs-review`，不能当作生产发布通过。
+
+Canary / rollback 流程见 [`release-process.md`](release-process.md)。当前 `2026-06-14-local-canary.md` 只证明 Stage 0 headless/local dry-run；Stage 1 internal Host、Stage 2 allowlisted merchant 和 Stage 3 expansion 仍需要真实 Host/deploy 平台证据。
 
 ## 2. 基础命令 Gate
 
@@ -231,7 +233,23 @@ python3 -m json.tool testdata/perf/coffee-smoke-baseline.json >/tmp/coffee-smoke
 | distributed concurrency / durable idempotency / provider cancellation | Phase 4/6 | Step 04-10 已冻结本地 RuntimeService 内的 session 关闭、pre-dispatch cancellation、deadline check、高风险 in-flight 串行、显式 idempotency key forward/replay 和非幂等业务 no-retry gate；跨进程/跨 Host lock、merchant/provider 侧耐久 idempotency store、同步 executor 抢占式取消、真实 Host background lifecycle 和 metrics/alerting 仍是 production release blocker。 |
 | secret store、token cache 持久化、scoped storage 持久化、audit retention/export 配置化、Skill cache cleanup | Phase 4 | Step 04-04 已冻结 runtime config schema、secret reference、provider/path handle、production profile release blockers 和 redacted diagnostics；Step 04-05 已冻结 token cache persistence trait、restore policy、redacted report 和 dev-only in-memory backend gate；Step 04-06 已冻结 scoped storage persistence trait、namespace scope、quota/restore/delete-scope/redaction gate 和未加密 local file dev/test backend；Step 04-07 已冻结 audit profile、redacted export/retention report、Runtime persistent reader 和 L3/L4 audit unavailable fail-closed gate；Step 04-08 已冻结 Skill cache cleanup sidecar metadata、dry-run report、scope cleanup、rollback protection 和 quarantine fail-closed gate。真实 secret resolve、生产 Host secure store/encrypted token/storage/audit backend、storage/audit migration/access control、export approval、privacy deletion、CLI/ops cache cleanup command 仍由后续 Host/ops gate 承接 |
 | CLI compatibility / inspect / test-skill / import / doctor 报告 schema、developer self-certification | Phase 5 | Step 05-01 已固定 `dock-cli validate` 报告 schema `dock.validate-report.v1`，输出顶层和嵌套 compatibility report、repair suggestions、release readiness 和 redacted local path；Step 05-02 已固定 `dock-cli inspect` 报告 schema `dock.inspect-report.v1`；Step 05-03 已固定 `dock-cli test-skill` 报告 schema `dock.test-skill-report.v1`，复用 RuntimeService / Component Runtime 执行 coffee 与 Render IR fixture gate，并明确 headless provider 为 dev-only；Step 05-04 已固定 `dock-cli import-wechat-mcp` 报告 schema `dock.import-wechat-mcp-report.v1`，默认 dry-run，safe copy 拒绝 symlink/unsafe overwrite/source-dest 包含关系，并只输出 ANP patch 建议；Step 05-05 已固定 `dock-cli doctor` 报告 schema `dock.doctor-report.v1`，覆盖 toolchain/workspace/runtime config/DID/signing credential permission/resolver/allowlist/storage/audit/Host provider/sandbox/server health，`skip` 不计 pass，`--ci` 仅在 fail 时返回非零；Step 05-06 已将 `examples/fixtures/address-form`、`media-review`、`dynamic-status`、`location-map-preview` 整理为开发者可运行示例，补 README、expected JSON、snapshot 证据和 `cargo test -p dock-cli example` 回归 |
-| CI/CD 自动 gate runner、link checker、matrix schema checker、snapshot gate、privacy deletion runbook | Phase 6 | Step 06-04 已新增 `scripts/release-gates.sh` 本地 runner、Markdown link checker、矩阵状态 checker、snapshot / fixture / perf / redaction gates 和 `dock.release-gates-report.v1`；privacy deletion runbook 待 Step 06-06 |
+| CI/CD 自动 gate runner、link checker、matrix schema checker、snapshot gate、privacy deletion runbook | Phase 6 | Step 06-04 已新增 `scripts/release-gates.sh` 本地 runner、Markdown link checker、矩阵状态 checker、snapshot / fixture / perf / redaction gates 和 `dock.release-gates-report.v1`；Step 06-05 已新增 release/canary/rollback runbook 和本地 release notes dry-run；privacy deletion runbook 待 Step 06-06 |
+
+## 4.4 Canary / Rollback Gate
+
+每次 release candidate 必须先通过：
+
+```bash
+./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md
+```
+
+通过标准：
+
+- release notes completeness gate 为 `pass`，不能是 `skip`。
+- `releaseDecision = "pass"` 才能进入下一 canary stage。
+- `token leakage`、`consent bypass`、`sandbox escape`、`Authorization` / `Signature` leakage、audit failure、Host crash 或 package integrity mismatch 均为 hard stop。
+- rollback plan 必须记录 runtime revert、Skill version rollback/disable、cache purge、token revoke、rollout stop 和 audit evidence retention。
+- Stage 1-3 没有真实 Host/deploy 平台证据时，release notes 必须明确为 blocked，不得宣称 production rollout 完成。
 
 ## 5. 兼容矩阵 Gate
 

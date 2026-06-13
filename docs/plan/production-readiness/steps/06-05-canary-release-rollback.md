@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-05
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 05:26:17 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 06-04 完成后，启动 canary/release/rollback |
+| Review evidence | 2026-06-14 05:30:35 +0800 commit 前 Review：确认 `release-process.md` 覆盖版本化对象、release notes 模板、canary stage、rollback conditions/actions、cache purge dry-run 和 audit evidence retention；确认 `2026-06-14-local-canary.md` 明确只证明 Stage 0 headless/local dry-run，Stage 1 internal Host、Stage 2 allowlisted merchant、Stage 3 expansion 仍需真实 Host/deploy 平台证据；确认没有把 local/headless/mock/provider、local backend 或 perf 数字写成 production-ready / production SLO。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 111]`，工作区无未提交变更；已读取主 Plan、Step 06-05 文档、Phase 6 发布策略、Release Gates runbook、developer Host adapter 文档、相关 registry/cache/rollback 计划和 06-04 closure evidence；`git diff --check -- docs/runbook docs/plan README.md scripts` 无输出；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`；`python3 -m json.tool target/release-gates/release-notes-report.json >/tmp/release-notes-report.json` 通过；release gate 内 Markdown link checker 检查 753 个本地链接、compatibility matrix checker 检查 130 个 status cells；artifact redaction scan 覆盖 `target/release-gates/artifacts`、`testdata/render-ir`、`testdata/perf` 且无敏感命中；安全抽样 `rg -n "token|Authorization|private key|secret|rollback|audit|canary" docs/runbook docs/plan/production-readiness/phase-6-observability-release.md` 只命中安全规则、流程说明、mock/demo 指引和计划证据，未发现真实 secret、raw token、private key material、本机私有路径或隐私原文。 |
+| Next action | 创建 06-05 focused implementation commit，然后回填 commit hash 并关闭 Step |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -64,12 +64,12 @@ Step index：06-05
 
 ## 7. 验收标准
 
-- [ ] Release notes 模板包含版本、兼容变化、安全变化、风险、migration、rollback。
-- [ ] Canary stages 和准入条件明确，依赖 gate report 和 metrics。
-- [ ] Rollback conditions 覆盖 token leakage、consent bypass、sandbox escape、fallback spike、auth failure spike、Host crash、audit failure。
-- [ ] Rollback actions 覆盖 runtime revert、Skill version disable/rollback、cache purge、token revoke、rollout stop。
-- [ ] Runbook 明确 audit evidence 保留和 secret redaction。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Release notes 模板包含版本、兼容变化、安全变化、风险、migration、rollback。
+- [x] Canary stages 和准入条件明确，依赖 gate report 和 metrics。
+- [x] Rollback conditions 覆盖 token leakage、consent bypass、sandbox escape、fallback spike、auth failure spike、Host crash、audit failure。
+- [x] Rollback actions 覆盖 runtime revert、Skill version disable/rollback、cache purge、token revoke、rollout stop。
+- [x] Runbook 明确 audit evidence 保留和 secret redaction。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -90,11 +90,11 @@ Step index：06-05
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | 06-04 full gate 在没有 release notes path 时只能 `needs-review`；需要本 Step 提供真实 release notes 输入。Review 还确认 Stage 1-3 不能被本地 Stage 0 dry-run 误标为 production rollout。 |
+| 已修复问题 | 已修复 | 新增本地 release notes dry-run 文件并用 `--release-notes` 跑通 full release gate，release notes completeness 从 skip 变为 pass；runbook 明确 Stage 1-3 blocked、audit evidence retention、cache purge dry-run 和 rollback pin 保护。 |
+| 剩余风险 | 已记录 | 未接入真实 production release platform、traffic router、real Host conformance、allowlisted merchant rollout 或生产 cache purge CLI；这些仍是生产接入前置条件，不作为本 Step 完成范围。 |
+| 新增或缺失测试 | 已覆盖 | 通过 `scripts/release-gates.sh --release-notes ...` 完成本地 dry-run，22 gates 全部通过；未新增 Rust 测试，因为本 Step 是文档/runbook/release notes 交付。 |
+| 已更新或缺失文档 | 已更新 | 新增 `docs/runbook/release-process.md`、`docs/runbook/releases/2026-06-14-local-canary.md`，并同步 `README.md`、`docs/runbook/release-gates.md`、Phase 6 文档、本 Step 和主 Plan 台账；未单独新增 `docs/runbook/rollback.md`，因为 rollback 已集中在 release process runbook。 |
 
 ## 10. Commit 要求
 
