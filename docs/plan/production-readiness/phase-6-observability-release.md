@@ -44,7 +44,7 @@ latencyMs
 - `userDid` 不直接记录，默认写入 `userDidHash = sha256:<hex>`。
 - `merchantDid` 可按 policy 作为定位字段输出；涉及 token、Authorization、Signature、private key、手机号、地址、文件内容、精确位置、本机绝对路径的字段必须在 emit 前替换为 `[REDACTED]`。
 - `fields` 只能放定位 metadata、计数、状态、risk level、release/readiness 信息，不放 raw arguments、HTTP body、文件内容或 Host provider 原始 payload。
-- Runtime 默认使用 no-op sink；Host、CLI 或测试可以注入 sink。06-01 不接入外部日志平台，06-02 再做 metrics/tracing bridge。
+- Runtime 默认使用 no-op sink；Host、CLI 或测试可以注入 sink。Step 06-01 已完成 structured event sink；Step 06-02 已补 `dock.observability.metric.v1`、`dock.observability.trace.v1`、in-memory/test metrics recorder、RuntimeService metrics hooks 和 QuickJS executor / `wx.request` / token path metrics hooks。当前不接入外部日志、Prometheus 或 OpenTelemetry vendor exporter。
 
 ### 2.2 Metrics
 
@@ -59,6 +59,22 @@ latencyMs
 | unsupported API count | 迁移阻塞点 |
 | sandbox timeout/memory hit | 恶意或低质量 Skill |
 | token refresh/fail count | DID/auth 健康度 |
+
+Step 06-02 当前实现的本地指标契约：
+
+- `dock.skill_load.total`：Skill load outcome 与 supply-chain status。
+- `dock.api_call.total`、`dock.api_latency_ms`：Runtime API call start/end、outcome、risk level 和 bounded API name。
+- `dock.api_vm_execution_ms`：QuickJS Atomic API VM execution time，按 API name 和 outcome 记录。
+- `dock.render_latency_ms`：Render IR render latency，按 manifest bounded component path 和 outcome 记录。
+- `dock.request.total`、`dock.request_latency_ms`：QuickJS `wx.request` status，HTTP status 只记录 `2xx`/`3xx`/`4xx`/`5xx`/`other` 或低基数失败码，不记录 URL、query、headers 或 body。
+- `dock.fallback.total`：fallback reason enum。
+- `dock.consent.total`：prompt / decision outcome 和 risk level。
+- `dock.unsupported_api.total`：Runtime API registry miss count。
+- `dock.sandbox_limit.total`：timeout / sandbox limit 命中。
+- `dock.token_refresh.total`、`dock.token_refresh_latency_ms`：`wx.login` / `wx.checkSession` token/session path outcome，不记录 raw token。
+- `dock.audit_record.total`、`dock.audit_latency_ms`：audit record outcome、risk level 和 trace correlation。
+
+所有 label 必须低 cardinality；`ObservabilityMetric` 和 `TraceSpan` 会对 URL query、header/token marker、DID 原文、本机绝对路径和过长 label 执行 redaction。Runtime 和 QuickJS 默认 no-op；测试与 Host 集成可注入 `InMemoryMetricsSink` 或未来 exporter sink。
 
 ### 2.3 Tracing
 
@@ -75,6 +91,14 @@ Host message
   -> follow-up api/call
   -> audit
 ```
+
+Step 06-02 当前 trace propagation：
+
+- `RuntimeOperationOptions.trace` 可接收 Host/IPC 层传入的 `traceId` 和 parent span。
+- `ApiCallContext.trace` 把 Runtime API trace 传入 Orchestrator、API executor、component action 和 nested `api/call`。
+- RuntimeService 为 API call、render、component action、audit 和 IPC 记录 span。
+- QuickJS executor 为 API VM、`wx.request`、`wx.login` / `wx.checkSession` 记录 span，并继承 `ApiCallContext.trace`。
+- 显式 `runtime.renderComponent` 当前没有 operation trace 输入字段，因此独立生成 root trace；Host envelope 若需要把 render 与上一跳强绑定，应在后续 Host/IPC contract 扩展中为 render request 增加 operation trace 字段。
 
 ## 3. 性能基线
 
@@ -162,8 +186,8 @@ cargo test --workspace
 
 ## 7. 阶段完成检查
 
-- [ ] 结构化日志和 metrics 默认脱敏。
-- [ ] trace 能串起一次完整 coffee/order flow。
+- [x] 结构化日志和 metrics 默认脱敏。
+- [x] trace 能串起 Runtime API、QuickJS VM、`wx.login` / `wx.checkSession` / `wx.request`、render、action、nested `api/call` 和 audit 的本地测试链路；完整 Host message / model decision 侧 trace 仍需真实 Host adapter 注入。
 - [ ] 性能基准有自动化脚本。
 - [ ] CI gates 覆盖安全、兼容、snapshot、文档。
 - [ ] canary/rollback runbook 可执行。

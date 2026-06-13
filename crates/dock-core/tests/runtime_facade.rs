@@ -2,12 +2,14 @@ use consent_audit::{ConsentRequest, DEV_HEADLESS_CONSENT_PROVIDER, DEV_HEADLESS_
 use dock_core::{
     negotiate_runtime_version, ApiCallContext, ApiExecutor, AuditEvent, AuditSink,
     ComponentRenderInput, ConsentDecision, ConsentGate, DockCoreError, ErrorCode,
-    InMemoryObservabilitySink, ObservabilityEventKind, PermissionDecision, RenderOutcome,
-    RenderRouter, RuntimeAuditReader, RuntimeAuditRecordsRequest, RuntimeCallRequest,
-    RuntimeCancelOperationRequest, RuntimeCloseSessionRequest, RuntimeComponentAction,
-    RuntimeDispatchComponentActionRequest, RuntimeExpireCardsRequest, RuntimeHost,
-    RuntimeOperationOptions, RuntimePersistentAuditSink, RuntimeRenderComponentRequest,
-    RuntimeService, RuntimeServiceParts, RuntimeSessionContext, RUNTIME_API_VERSION,
+    InMemoryMetricsSink, InMemoryObservabilitySink, ObservabilityEventKind, PermissionDecision,
+    RenderOutcome, RenderRouter, RuntimeAuditReader, RuntimeAuditRecordsRequest,
+    RuntimeCallRequest, RuntimeCancelOperationRequest, RuntimeCloseSessionRequest,
+    RuntimeComponentAction, RuntimeDispatchComponentActionRequest, RuntimeExpireCardsRequest,
+    RuntimeHost, RuntimeOperationOptions, RuntimePersistentAuditSink,
+    RuntimeRenderComponentRequest, RuntimeService, RuntimeServiceObservabilityParts,
+    RuntimeServiceParts, RuntimeSessionContext, RuntimeTraceContext, TraceContext, TraceSpanKind,
+    RUNTIME_API_VERSION,
 };
 use mcp_schema::{AtomicApiResult, TextContent, ValidationReport};
 use serde_json::{json, Map};
@@ -129,6 +131,35 @@ fn observability_runtime_service(
         audit: audit.clone(),
         audit_reader: audit,
         observability,
+    })
+}
+
+fn metrics_runtime_service(
+    executor: MockExecutor,
+    observability: InMemoryObservabilitySink,
+    metrics: InMemoryMetricsSink,
+) -> RuntimeService<
+    AllowHost,
+    ApproveConsent,
+    MockExecutor,
+    MockRenderer,
+    MockAudit,
+    MockAudit,
+    InMemoryObservabilitySink,
+    InMemoryMetricsSink,
+> {
+    let skill = load_skill(coffee_skill_root()).expect("coffee skill loads");
+    let audit = MockAudit::default();
+    RuntimeService::load_skill_with_observability_and_metrics(RuntimeServiceObservabilityParts {
+        skill,
+        host: AllowHost,
+        consent: ApproveConsent,
+        executor,
+        renderer: MockRenderer,
+        audit: audit.clone(),
+        audit_reader: audit,
+        observability,
+        metrics,
     })
 }
 
@@ -525,6 +556,238 @@ fn runtime_observability_records_sandbox_limit_event_on_timeout() {
 }
 
 #[test]
+fn runtime_metrics_and_trace_context_cover_core_flow_and_redact_labels() {
+    let observability = InMemoryObservabilitySink::default();
+    let metrics = InMemoryMetricsSink::default();
+    let executor = MockExecutor::with_result(AtomicApiResult {
+        is_error: false,
+        content: vec![TextContent::text("paid")],
+        structured_content: Some(Map::from_iter([(
+            "orderId".to_owned(),
+            json!("order_demo_001"),
+        )])),
+        meta: Some(Map::from_iter([(
+            "private".to_owned(),
+            json!("component-only"),
+        )])),
+        extra: Default::default(),
+    });
+    let executor_traces = executor.traces.clone();
+    let service = metrics_runtime_service(executor, observability, metrics.clone());
+    let operation = Some(RuntimeOperationOptions {
+        trace: Some(RuntimeTraceContext {
+            trace_id: "trace-runtime-001".to_owned(),
+            parent_span_id: Some("host-span-001".to_owned()),
+        }),
+        ..Default::default()
+    });
+
+    service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({
+                "orderId": "order_demo_001",
+                "capabilityToken": "capability-secret-token",
+                "deliveryAddress": "1 Private Road",
+                "header": { "Authorization": "Bearer secret" }
+            }),
+            capability_token: Some("capability-secret-token".to_owned()),
+            operation: operation.clone(),
+        })
+        .expect("payment call succeeds");
+
+    service
+        .render_component(RuntimeRenderComponentRequest {
+            session: session(),
+            api_name: "confirmOrder".to_owned(),
+            arguments: json!({"drinkId": "latte"}),
+            content: vec![TextContent::text("confirmed")],
+            structured_content: Some(Map::from_iter([("ok".to_owned(), json!(true))])),
+            meta: None,
+            component_path: "components/order-confirm/index".to_owned(),
+        })
+        .expect("explicit render records metrics");
+
+    service
+        .dispatch_component_action(RuntimeDispatchComponentActionRequest {
+            session: session(),
+            source_api_name: "searchDrinks".to_owned(),
+            source_arguments: json!({"query": "latte"}),
+            action: RuntimeComponentAction::OpenDetailPage {
+                url: "pages/order/detail".to_owned(),
+            },
+            capability_token: None,
+            operation: operation.clone(),
+        })
+        .expect("host action records component event metrics");
+
+    service
+        .dispatch_component_action(RuntimeDispatchComponentActionRequest {
+            session: session(),
+            source_api_name: "searchDrinks".to_owned(),
+            source_arguments: json!({"query": "latte"}),
+            action: RuntimeComponentAction::ApiCall {
+                name: "confirmOrder".to_owned(),
+                arguments: json!({"drinkId": "latte"}),
+            },
+            capability_token: None,
+            operation,
+        })
+        .expect("component api/call propagates trace");
+
+    let recorded_metrics = metrics.metrics();
+    let recorded_spans = metrics.spans();
+    let metric_names = recorded_metrics
+        .iter()
+        .map(|metric| metric.name.as_str())
+        .collect::<Vec<_>>();
+    for expected in [
+        "dock.skill_load.total",
+        "dock.api_call.total",
+        "dock.api_latency_ms",
+        "dock.render_latency_ms",
+        "dock.component_event.total",
+        "dock.audit_record.total",
+        "dock.audit_latency_ms",
+        "dock.consent.total",
+    ] {
+        assert!(
+            metric_names.contains(&expected),
+            "{expected} metric must be recorded"
+        );
+    }
+    assert!(recorded_metrics
+        .iter()
+        .filter(|metric| metric.name == "dock.api_call.total")
+        .any(
+            |metric| metric.trace_id.as_deref() == Some("trace-runtime-001")
+                && metric.labels.get("api").map(String::as_str) == Some("payOrder")
+        ));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::ApiCall
+            && span.trace_id == "trace-runtime-001"
+            && span.parent_span_id.as_deref().is_some()));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::Render));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::ComponentAction
+            && span.trace_id == "trace-runtime-001"));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::Audit && span.trace_id == "trace-runtime-001"));
+
+    let traces = executor_traces.borrow();
+    assert!(traces
+        .iter()
+        .flatten()
+        .any(|trace| trace.trace_id == "trace-runtime-001"
+            && trace.parent_span_id.as_deref().is_some()));
+
+    let rendered =
+        serde_json::to_string(&(recorded_metrics, recorded_spans)).expect("metrics serialize");
+    assert!(!rendered.contains("did:wba:user.example"));
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("1 Private Road"));
+    assert!(!rendered.contains("Authorization"));
+    assert!(!rendered.contains("Bearer secret"));
+    assert!(!rendered.contains("/home/"));
+}
+
+#[test]
+fn runtime_metrics_record_sandbox_limit_on_timeout() {
+    let observability = InMemoryObservabilitySink::default();
+    let metrics = InMemoryMetricsSink::default();
+    let service = metrics_runtime_service(
+        MockExecutor::with_result(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("unused")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        }),
+        observability,
+        metrics.clone(),
+    );
+
+    let error = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "payOrder".to_owned(),
+            arguments: json!({"orderId": "order_demo_001"}),
+            capability_token: None,
+            operation: Some(RuntimeOperationOptions {
+                timeout_ms: Some(0),
+                trace: Some(RuntimeTraceContext {
+                    trace_id: "trace-timeout-001".to_owned(),
+                    parent_span_id: None,
+                }),
+                ..Default::default()
+            }),
+        })
+        .expect_err("timeout fails before dispatch");
+
+    assert_eq!(error.error.code, "timeout");
+    assert!(metrics.metrics().iter().any(|metric| {
+        metric.name == "dock.sandbox_limit.total"
+            && metric.trace_id.as_deref() == Some("trace-timeout-001")
+            && metric.labels.get("limit").map(String::as_str) == Some("timeout")
+    }));
+}
+
+#[test]
+fn runtime_metrics_count_unsupported_api_without_sensitive_labels() {
+    let observability = InMemoryObservabilitySink::default();
+    let metrics = InMemoryMetricsSink::default();
+    let service = metrics_runtime_service(
+        MockExecutor::with_result(AtomicApiResult {
+            is_error: false,
+            content: vec![TextContent::text("unused")],
+            structured_content: None,
+            meta: None,
+            extra: Default::default(),
+        }),
+        observability,
+        metrics.clone(),
+    );
+
+    let error = service
+        .call_api(RuntimeCallRequest {
+            session: session(),
+            api_name: "missingApi".to_owned(),
+            arguments: json!({
+                "url": "https://merchant.example/orders?Authorization=Bearer-secret"
+            }),
+            capability_token: Some("capability-secret-token".to_owned()),
+            operation: Some(RuntimeOperationOptions {
+                trace: Some(RuntimeTraceContext {
+                    trace_id: "trace-unsupported-001".to_owned(),
+                    parent_span_id: Some("host-span-001".to_owned()),
+                }),
+                ..Default::default()
+            }),
+        })
+        .expect_err("missing API fails");
+
+    assert_eq!(error.error.code, "api_not_found");
+    let recorded_metrics = metrics.metrics();
+    assert!(recorded_metrics.iter().any(|metric| {
+        metric.name == "dock.unsupported_api.total"
+            && metric.trace_id.as_deref() == Some("trace-unsupported-001")
+            && metric.labels.get("api").map(String::as_str) == Some("missingApi")
+            && metric.labels.get("outcome").map(String::as_str) == Some("api_not_found")
+    }));
+    let rendered = serde_json::to_string(&recorded_metrics).expect("metrics serialize");
+    assert!(!rendered.contains("merchant.example/orders"));
+    assert!(!rendered.contains("Bearer-secret"));
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("Authorization"));
+}
+
+#[test]
 fn runtime_concurrency_policy_is_versioned_and_exposed() {
     let service = runtime_service(MockExecutor::with_result(AtomicApiResult {
         is_error: false,
@@ -888,6 +1151,7 @@ struct MockExecutor {
     error: Option<(ErrorCode, String)>,
     calls: std::rc::Rc<RefCell<usize>>,
     arguments: std::rc::Rc<RefCell<Vec<serde_json::Value>>>,
+    traces: std::rc::Rc<RefCell<Vec<Option<TraceContext>>>>,
 }
 
 impl MockExecutor {
@@ -897,6 +1161,7 @@ impl MockExecutor {
             error: None,
             calls: Default::default(),
             arguments: Default::default(),
+            traces: Default::default(),
         }
     }
 
@@ -912,6 +1177,7 @@ impl MockExecutor {
             error: Some((code, message.to_owned())),
             calls: Default::default(),
             arguments: Default::default(),
+            traces: Default::default(),
         }
     }
 }
@@ -924,6 +1190,7 @@ impl ApiExecutor for MockExecutor {
     ) -> Result<AtomicApiResult, DockCoreError> {
         *self.calls.borrow_mut() += 1;
         self.arguments.borrow_mut().push(context.arguments.clone());
+        self.traces.borrow_mut().push(context.trace.clone());
         if let Some((code, message)) = &self.error {
             return Err(DockCoreError::core(*code, message.clone()));
         }

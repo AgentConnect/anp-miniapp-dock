@@ -1,4 +1,5 @@
 use anp_adapter::{DidAuthSession, DidAuthSessionKey, DidAuthSessionManager};
+use dock_core::{ApiCallContext, ApiExecutor, InMemoryMetricsSink, TraceContext, TraceSpanKind};
 use js_runtime_quickjs::{ApiCall, ApiVm, ApiVmConfig, ApiVmError, HostDidAuthConfig};
 use mcp_schema::{ApiDeclaration, ComponentDeclaration, SkillManifest, ValidationReport};
 use serde_json::json;
@@ -407,6 +408,100 @@ module.exports = skill
             .and_then(|code| code.as_str()),
         Some("network_denied")
     );
+}
+
+#[test]
+fn quickjs_executor_records_vm_request_and_token_metrics_with_trace() {
+    let skill = test_skill(
+        r#"
+const skill = wx.modelContext.createSkill(__dirname)
+skill.registerAPI('request', async () => {
+  await wx.login()
+  try {
+    await wx.checkSession()
+  } catch (_) {}
+  try {
+    await wx.request({
+      url: 'https://merchant.example/api/drinks?Authorization=Bearer-secret'
+    })
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: error.errMsg }],
+      structuredContent: { code: error.code }
+    }
+  }
+  return { content: [{ type: 'text', text: 'unexpected' }] }
+})
+module.exports = skill
+"#,
+        BTreeMap::new(),
+        vec!["request"],
+    );
+    let metrics = InMemoryMetricsSink::default();
+    let executor = ApiVm::load_skill(skill)
+        .expect("load VM")
+        .executor()
+        .with_metrics(metrics.clone());
+    let context = ApiCallContext {
+        user_did: Some("did:wba:user.example".to_owned()),
+        agent_did: Some("did:wba:agent.example".to_owned()),
+        merchant_did: Some("did:wba:coffee-merchant.example".to_owned()),
+        skill_id: "coffee".to_owned(),
+        session_id: "session-1".to_owned(),
+        api_name: "request".to_owned(),
+        arguments: json!({}),
+        capability_token: Some("capability-secret-token".to_owned()),
+        trace: Some(TraceContext::new("trace-quickjs-001", "host-span-001")),
+    };
+
+    let result = executor
+        .execute(&context, None)
+        .expect("executor returns AtomicApiResult");
+
+    assert_eq!(result.content[0].text, "request:fail network_denied");
+    let recorded_metrics = metrics.metrics();
+    let recorded_spans = metrics.spans();
+    let metric_names = recorded_metrics
+        .iter()
+        .map(|metric| metric.name.as_str())
+        .collect::<Vec<_>>();
+    for expected in [
+        "dock.api_vm_execution_ms",
+        "dock.request.total",
+        "dock.request_latency_ms",
+        "dock.token_refresh.total",
+        "dock.token_refresh_latency_ms",
+    ] {
+        assert!(
+            metric_names.contains(&expected),
+            "{expected} metric must be recorded"
+        );
+    }
+    assert!(recorded_metrics
+        .iter()
+        .filter(|metric| metric.name == "dock.request.total")
+        .any(|metric| {
+            metric.labels.get("api").map(String::as_str) == Some("wx.request")
+                && metric.labels.get("outcome").map(String::as_str) == Some("network_denied")
+                && metric.trace_id.as_deref() == Some("trace-quickjs-001")
+        }));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::WxApiCall && span.trace_id == "trace-quickjs-001"));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::Request && span.trace_id == "trace-quickjs-001"));
+    assert!(recorded_spans
+        .iter()
+        .any(|span| span.kind == TraceSpanKind::Token && span.trace_id == "trace-quickjs-001"));
+
+    let rendered =
+        serde_json::to_string(&(recorded_metrics, recorded_spans)).expect("metrics serialize");
+    assert!(!rendered.contains("merchant.example/api/drinks"));
+    assert!(!rendered.contains("Bearer-secret"));
+    assert!(!rendered.contains("capability-secret-token"));
+    assert!(!rendered.contains("did:wba:user.example"));
+    assert!(!rendered.contains("Authorization"));
 }
 
 #[test]

@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-02
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 04:05:17 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 06-01 完成后，启动 metrics/tracing |
+| Review evidence | 2026-06-14 04:35:38 +0800 commit 前 Review 已记录：修复初版缺失 QuickJS VM / `wx.request` / token path metrics hook、缺失 audit span、unsupported API 专项 count、`runtime.negotiateVersion` IPC 分支类型错误和 metrics label 临时借用测试问题；确认 labels 只记录 API/component/risk/outcome/status bucket 等低基数字段，不记录 URL query、headers、body、raw arguments、token、Authorization、Signature、DID 原文或本机绝对路径。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 105]`，工作区无未提交变更；已读取主 Plan、Step 06-02 文档、Phase 6 计划、06-01 closure 证据和 Release Gates；确认 06-01 implementation commit `3fb65f0` 与 closure commit `2e899b0`；`cargo check -p dock-core`、`cargo check -p js-runtime-quickjs`、`cargo fmt --check`、`cargo test -p dock-core metrics`、`cargo test -p dock-core trace`、`cargo test -p js-runtime-quickjs quickjs_executor_records_vm_request_and_token_metrics_with_trace`、`cargo test -p dock-core`、`cargo test -p js-runtime-quickjs`、`cargo test -p dock-cli --test coffee_order_flow`、`cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings` 均通过；`git diff --check -- crates/dock-core crates/js-runtime-quickjs crates/anp-adapter crates/component-runtime crates/consent-audit docs/runbook docs/plan` 无输出；敏感串扫描仅命中测试假值、redaction marker、文档红线和既有 mock 说明，未发现真实凭据、raw token、Authorization、Signature、DID 原文、本机绝对路径或隐私 payload 泄露。 |
+| Next action | 创建 implementation commit，并回填 commit hash；commit 后再做 closure 文档提交 |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -66,12 +66,12 @@ Step index：06-02
 
 ## 7. 验收标准
 
-- [ ] Metrics 覆盖 Phase 6 列出的核心指标。
-- [ ] Labels 低 cardinality，不包含敏感 payload、headers、URL query 或隐私原文。
-- [ ] Trace context 能串起 Runtime API、request broker、render、action、audit 的核心路径。
-- [ ] In-memory/test recorder 有 unit tests，未来 exporter 有明确 boundary。
-- [ ] Phase 6 文档和 runbook 与实现状态同步。
-- [ ] Review 发现已经修复或明确记录。
+- [x] Metrics 覆盖 Phase 6 列出的核心指标。
+- [x] Labels 低 cardinality，不包含敏感 payload、headers、URL query 或隐私原文。
+- [x] Trace context 能串起 Runtime API、QuickJS VM、`wx.request`、token/session、render、action、nested `api/call`、audit 的核心本地路径。
+- [x] In-memory/test recorder 有 unit tests，未来 exporter 有明确 boundary。
+- [x] Phase 6 文档和 runbook 与实现状态同步。
+- [x] Review 发现已经修复或明确记录。
 - [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
@@ -94,11 +94,11 @@ Step index：06-02
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已发现并修复 | 初版只在 RuntimeService 外层记录 metrics，未覆盖 QuickJS VM execution、`wx.request` status、token/session path；缺少 audit span 和 unsupported API 专项 count；IPC `runtime.negotiateVersion` error branch 类型不一致；测试中 metrics 临时 Vec 借用不稳定。 |
+| 已修复问题 | 已修复 | 新增 `MetricsSink` / `InMemoryMetricsSink` / `TraceContext` / `TraceSpan`，RuntimeService 支持 metrics sink；QuickJS executor 支持可注入 metrics sink；`wx.login` / `wx.checkSession` / `wx.request` 记录 token/request metrics 和 spans；audit 和 unsupported API 补 metrics/spans；IPC 分支和测试借用问题已修复。 |
+| 剩余风险 | 已记录 | 当前只提供 no-op 和 in-memory/test recorder，不接 Prometheus/OpenTelemetry/Host exporter；显式 `runtime.renderComponent` 尚无 operation trace 输入字段，因此生成独立 root trace，完整 Host render trace 需后续 Host/IPC contract 扩展。 |
+| 新增或缺失测试 | 已覆盖核心路径 | 新增 `dock-core` metrics/trace tests 覆盖 API、render、component action、nested `api/call`、audit、sandbox timeout、unsupported API 和 label redaction；新增 `js-runtime-quickjs` test 覆盖 VM/request/token metrics hook 与 trace propagation。 |
+| 已更新或缺失文档 | 已更新 | 更新 Phase 6 metrics/tracing contract、release gates metrics/tracing gate、本 Step 和主 Plan 台账；后续 06-03/06-05/06-06 将复用这些 metrics 作为性能、canary 和 runbook 信号。 |
 
 ## 10. Commit 要求
 

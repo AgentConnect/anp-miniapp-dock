@@ -35,6 +35,7 @@ fn context(api_name: &str, arguments: Value) -> ApiCallContext {
         api_name: api_name.to_owned(),
         arguments,
         capability_token: None,
+        trace: None,
     }
 }
 

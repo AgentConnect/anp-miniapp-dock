@@ -5,6 +5,7 @@ use crate::host::{
     HostActionRequest, HostAdapterContract, PermissionDecision, PermissionDecisionSummary,
     RenderOutcome, RenderRouter, RuntimeHost,
 };
+use crate::observability::TraceContext;
 use consent_audit::{
     build_consent_request, consent_proof_with_decision, parameter_digest, redact_value,
     AuditOutcome, ConsentProof, ConsentRequestInput, RiskLevel, RiskPolicy,
@@ -23,6 +24,7 @@ pub struct ApiCallContext {
     pub api_name: String,
     pub arguments: Value,
     pub capability_token: Option<String>,
+    pub trace: Option<TraceContext>,
 }
 
 impl ApiCallContext {

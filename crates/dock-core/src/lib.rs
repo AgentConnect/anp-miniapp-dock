@@ -29,11 +29,14 @@ pub use host::{
     HOST_ACTION_REDACTION_POLICY, HOST_ADAPTER_CONTRACT_VERSION,
 };
 pub use observability::{
-    hash_user_did, next_observability_id, redact_observability_text, redact_observability_value,
-    InMemoryObservabilitySink, NoopObservabilitySink, ObservabilityEvent, ObservabilityEventKind,
-    ObservabilityRedaction, ObservabilitySeverity, ObservabilitySink, DEFAULT_RUNTIME_VERSION,
-    OBSERVABILITY_EVENT_SCHEMA_VERSION, OBSERVABILITY_REDACTION_MARKER,
-    OBSERVABILITY_REDACTION_POLICY,
+    hash_user_did, low_cardinality_label, next_observability_id, redact_observability_text,
+    redact_observability_value, InMemoryMetricsSink, InMemoryObservabilitySink, MetricKind,
+    MetricsSink, NoopMetricsSink, NoopObservabilitySink, ObservabilityEvent,
+    ObservabilityEventKind, ObservabilityMetric, ObservabilityRedaction, ObservabilitySeverity,
+    ObservabilitySink, TraceContext, TraceSpan, TraceSpanKind, DEFAULT_RUNTIME_VERSION,
+    OBSERVABILITY_EVENT_SCHEMA_VERSION, OBSERVABILITY_METRIC_SCHEMA_VERSION,
+    OBSERVABILITY_REDACTION_MARKER, OBSERVABILITY_REDACTION_POLICY,
+    OBSERVABILITY_TRACE_SCHEMA_VERSION,
 };
 pub use orchestrator::{
     ApiCallContext, CallOutcome, ComponentAction, ComponentRenderInput, Orchestrator,
@@ -50,7 +53,7 @@ pub use runtime::{
     RuntimeIpcResponse, RuntimeIpcTransport, RuntimeIpcVersionParams, RuntimeLoadSkillResponse,
     RuntimeOperationOptions, RuntimePersistentAuditSink, RuntimeRenderComponentRequest,
     RuntimeRenderComponentResponse, RuntimeResponse, RuntimeResult, RuntimeRetryPolicy,
-    RuntimeService, RuntimeServiceParts, RuntimeSessionContext, RuntimeSkillSummary,
-    RuntimeValidateSkillResponse, RuntimeVersion, RUNTIME_API_VERSION, RUNTIME_IPC_BINDING,
-    RUNTIME_IPC_TRANSPORT,
+    RuntimeService, RuntimeServiceObservabilityParts, RuntimeServiceParts, RuntimeSessionContext,
+    RuntimeSkillSummary, RuntimeTraceContext, RuntimeValidateSkillResponse, RuntimeVersion,
+    RUNTIME_API_VERSION, RUNTIME_IPC_BINDING, RUNTIME_IPC_TRANSPORT,
 };

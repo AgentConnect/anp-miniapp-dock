@@ -10,6 +10,9 @@ use anp_adapter::{
 };
 use dock_core::error::{DockCoreError, ErrorCode};
 use dock_core::host::ApiExecutor;
+use dock_core::observability::{
+    MetricsSink, NoopMetricsSink, ObservabilityMetric, TraceContext, TraceSpan, TraceSpanKind,
+};
 use dock_core::orchestrator::ApiCallContext;
 use mcp_schema::AtomicApiResult;
 use rquickjs::function::Func;
@@ -138,6 +141,8 @@ pub struct ApiCall {
     pub agent_did: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merchant_did: Option<String>,
+    #[serde(skip)]
+    pub trace: Option<TraceContext>,
 }
 
 impl ApiCall {
@@ -155,6 +160,7 @@ impl ApiCall {
             user_did: None,
             agent_did: None,
             merchant_did: None,
+            trace: None,
         }
     }
 
@@ -190,6 +196,7 @@ impl From<&ApiCallContext> for ApiCall {
             user_did: context.user_did.clone(),
             agent_did: context.agent_did.clone(),
             merchant_did: context.merchant_did.clone(),
+            trace: context.trace.clone(),
         }
     }
 }
@@ -304,6 +311,18 @@ impl ApiVm {
         call: ApiCall,
         host_did_auth: Option<HostDidAuthConfig>,
     ) -> Result<AtomicApiResult, ApiVmError> {
+        self.call_with_host_did_auth_and_metrics(call, host_did_auth, NoopMetricsSink)
+    }
+
+    fn call_with_host_did_auth_and_metrics<M>(
+        &self,
+        call: ApiCall,
+        host_did_auth: Option<HostDidAuthConfig>,
+        metrics: M,
+    ) -> Result<AtomicApiResult, ApiVmError>
+    where
+        M: MetricsSink + 'static,
+    {
         if !self
             .registered_apis
             .iter()
@@ -319,6 +338,7 @@ impl ApiVm {
             call,
             host_did_auth,
             self.storage.clone(),
+            metrics,
         )
     }
 
@@ -335,6 +355,7 @@ impl ApiVm {
 pub struct QuickJsApiExecutor {
     vm: ApiVm,
     host_did_auth: Option<HostDidAuthConfig>,
+    metrics: NoopMetricsSink,
 }
 
 impl QuickJsApiExecutor {
@@ -342,9 +363,44 @@ impl QuickJsApiExecutor {
         Self {
             vm,
             host_did_auth: None,
+            metrics: NoopMetricsSink,
         }
     }
 
+    pub fn with_host_did_auth(mut self, host_did_auth: HostDidAuthConfig) -> Self {
+        self.host_did_auth = Some(host_did_auth);
+        self
+    }
+
+    pub fn vm(&self) -> &ApiVm {
+        &self.vm
+    }
+}
+
+impl QuickJsApiExecutor {
+    pub fn with_metrics<M>(self, metrics: M) -> QuickJsApiExecutorWithMetrics<M>
+    where
+        M: MetricsSink + 'static,
+    {
+        QuickJsApiExecutorWithMetrics {
+            vm: self.vm,
+            host_did_auth: self.host_did_auth,
+            metrics,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QuickJsApiExecutorWithMetrics<M = NoopMetricsSink> {
+    vm: ApiVm,
+    host_did_auth: Option<HostDidAuthConfig>,
+    metrics: M,
+}
+
+impl<M> QuickJsApiExecutorWithMetrics<M>
+where
+    M: MetricsSink + 'static,
+{
     pub fn with_host_did_auth(mut self, host_did_auth: HostDidAuthConfig) -> Self {
         self.host_did_auth = Some(host_did_auth);
         self
@@ -361,10 +417,66 @@ impl ApiExecutor for QuickJsApiExecutor {
         context: &ApiCallContext,
         _component_path: Option<&str>,
     ) -> Result<AtomicApiResult, DockCoreError> {
-        self.vm
-            .call_with_host_did_auth(ApiCall::from(context), self.host_did_auth.clone())
-            .map_err(Into::into)
+        execute_with_metrics(
+            &self.vm,
+            context,
+            self.host_did_auth.clone(),
+            self.metrics.clone(),
+        )
     }
+}
+
+impl<M> ApiExecutor for QuickJsApiExecutorWithMetrics<M>
+where
+    M: MetricsSink + 'static,
+{
+    fn execute(
+        &self,
+        context: &ApiCallContext,
+        _component_path: Option<&str>,
+    ) -> Result<AtomicApiResult, DockCoreError> {
+        execute_with_metrics(
+            &self.vm,
+            context,
+            self.host_did_auth.clone(),
+            self.metrics.clone(),
+        )
+    }
+}
+
+fn execute_with_metrics<M>(
+    vm: &ApiVm,
+    context: &ApiCallContext,
+    host_did_auth: Option<HostDidAuthConfig>,
+    metrics: M,
+) -> Result<AtomicApiResult, DockCoreError>
+where
+    M: MetricsSink + 'static,
+{
+    let started = Instant::now();
+    let trace = context.trace.clone().unwrap_or_else(TraceContext::root);
+    let span = trace.child();
+    let mut call = ApiCall::from(context);
+    call.trace = Some(span.clone());
+    let result = vm.call_with_host_did_auth_and_metrics(call, host_did_auth, metrics.clone());
+    let latency = elapsed_ms(started);
+    let outcome = result
+        .as_ref()
+        .map(|result| if result.is_error { "error" } else { "ok" })
+        .unwrap_or("vm_failed");
+    metrics.record_metric(
+        ObservabilityMetric::histogram_ms("dock.api_vm_execution_ms", latency)
+            .with_label("api", context.api_name.clone())
+            .with_label("outcome", outcome)
+            .with_trace_id(span.trace_id.clone()),
+    );
+    metrics.record_span(
+        TraceSpan::new(span, TraceSpanKind::WxApiCall, "quickjs.apiVm.execute")
+            .with_attribute("api", context.api_name.clone())
+            .with_outcome(outcome)
+            .with_latency_ms(latency),
+    );
+    result.map_err(Into::into)
 }
 
 fn evaluate_registration(
@@ -416,16 +528,21 @@ fn evaluate_registration(
     })
 }
 
-fn execute_api_call(
+fn execute_api_call<M>(
     skill: &LoadedSkill,
     modules: &CommonJsModules,
     config: &ApiVmConfig,
     call: ApiCall,
     host_did_auth: Option<HostDidAuthConfig>,
     storage: InMemoryScopedStorage,
-) -> Result<AtomicApiResult, ApiVmError> {
+    metrics: M,
+) -> Result<AtomicApiResult, ApiVmError>
+where
+    M: MetricsSink + 'static,
+{
     let api_name = call.api_name.clone();
-    let bridge = HostBridgeRuntime::for_call(skill.clone(), call.clone(), host_did_auth, storage);
+    let bridge =
+        HostBridgeRuntime::for_call(skill.clone(), call.clone(), host_did_auth, storage, metrics);
     let runtime_bridge = bridge.clone();
     let (result, _trace) = with_runtime(modules, config, runtime_bridge, |ctx| {
         let load_entry: Function = ctx
@@ -468,12 +585,15 @@ fn execute_api_call(
     Ok(result)
 }
 
-fn with_runtime<R>(
+fn with_runtime<R, M>(
     modules: &CommonJsModules,
     config: &ApiVmConfig,
-    bridge: HostBridgeRuntime,
+    bridge: HostBridgeRuntime<M>,
     callback: impl for<'js> FnOnce(Ctx<'js>) -> Result<R, ApiVmError>,
-) -> Result<(R, ExecutionTrace), ApiVmError> {
+) -> Result<(R, ExecutionTrace), ApiVmError>
+where
+    M: MetricsSink + 'static,
+{
     let runtime = Runtime::new().map_err(to_quickjs_error)?;
     runtime.set_memory_limit(config.memory_limit_bytes);
     runtime.set_max_stack_size(config.max_stack_size_bytes);
@@ -511,13 +631,16 @@ fn with_runtime<R>(
     result.map(|value| (value, trace))
 }
 
-fn install_host_bridge<'js>(
+fn install_host_bridge<'js, M>(
     ctx: Ctx<'js>,
     modules_json: String,
     console: Rc<RefCell<Vec<ConsoleEntry>>>,
-    bridge: HostBridgeRuntime,
+    bridge: HostBridgeRuntime<M>,
     config: &ApiVmConfig,
-) -> Result<(), ApiVmError> {
+) -> Result<(), ApiVmError>
+where
+    M: MetricsSink + 'static + 'js,
+{
     let dock = Object::new(ctx.clone()).map_err(to_quickjs_error)?;
     let modules_json_fn = {
         let modules_json = modules_json.clone();
@@ -667,15 +790,16 @@ struct ModelContextCardEvent {
 }
 
 #[derive(Debug, Clone)]
-struct HostBridgeRuntime {
+struct HostBridgeRuntime<M = NoopMetricsSink> {
     skill: Option<LoadedSkill>,
     call: Option<ApiCall>,
     host_did_auth: Option<HostDidAuthConfig>,
     storage: InMemoryScopedStorage,
     card_events: Rc<RefCell<Vec<ModelContextCardEvent>>>,
+    metrics: M,
 }
 
-impl HostBridgeRuntime {
+impl HostBridgeRuntime<NoopMetricsSink> {
     fn registration() -> Self {
         Self {
             skill: None,
@@ -683,14 +807,21 @@ impl HostBridgeRuntime {
             host_did_auth: None,
             storage: InMemoryScopedStorage::new(),
             card_events: Rc::new(RefCell::new(Vec::new())),
+            metrics: NoopMetricsSink,
         }
     }
+}
 
+impl<M> HostBridgeRuntime<M>
+where
+    M: MetricsSink + 'static,
+{
     fn for_call(
         skill: LoadedSkill,
         call: ApiCall,
         host_did_auth: Option<HostDidAuthConfig>,
         storage: InMemoryScopedStorage,
+        metrics: M,
     ) -> Self {
         Self {
             skill: Some(skill),
@@ -698,6 +829,7 @@ impl HostBridgeRuntime {
             host_did_auth,
             storage,
             card_events: Rc::new(RefCell::new(Vec::new())),
+            metrics,
         }
     }
 
@@ -980,9 +1112,11 @@ impl HostBridgeRuntime {
     }
 
     fn login_json(&self) -> String {
+        let started = Instant::now();
         match self.ensure_login(None) {
             Ok(Some((key, session))) => {
                 let receipt = DidAuthReceipt::from_session(&key, &session);
+                self.record_token_metric("wx.login", "ok", started);
                 json!({
                     "code": receipt.code,
                     "errMsg": "login:ok",
@@ -998,49 +1132,131 @@ impl HostBridgeRuntime {
                 })
                 .to_string()
             }
-            Ok(None) => json!({
-                "code": "dock-login-code-localhost",
-                "errMsg": "login:ok",
-                "didAuth": {
-                    "status": "mock",
-                    "tokenReceived": false,
-                    "tokenVisibleToSkill": false
-                }
-            })
-            .to_string(),
-            Err(message) => json!({
-                "errMsg": format!("login:fail {message}")
-            })
-            .to_string(),
+            Ok(None) => {
+                self.record_token_metric("wx.login", "mock", started);
+                json!({
+                    "code": "dock-login-code-localhost",
+                    "errMsg": "login:ok",
+                    "didAuth": {
+                        "status": "mock",
+                        "tokenReceived": false,
+                        "tokenVisibleToSkill": false
+                    }
+                })
+                .to_string()
+            }
+            Err(message) => {
+                self.record_token_metric("wx.login", "auth_failed", started);
+                json!({
+                    "errMsg": format!("login:fail {message}")
+                })
+                .to_string()
+            }
         }
     }
 
     fn check_session_json(&self) -> String {
+        let started = Instant::now();
         match self.check_session() {
-            Ok(true) => json!({
-                "errMsg": "checkSession:ok"
-            })
-            .to_string(),
-            Ok(false) => json!({
-                "errMsg": "checkSession:fail auth_failed",
-                "code": "auth_failed",
-                "reason": "DID auth session is not configured for this call"
-            })
-            .to_string(),
-            Err(message) => json!({
-                "errMsg": "checkSession:fail auth_failed",
-                "code": "auth_failed",
-                "reason": message
-            })
-            .to_string(),
+            Ok(true) => {
+                self.record_token_metric("wx.checkSession", "ok", started);
+                json!({
+                    "errMsg": "checkSession:ok"
+                })
+                .to_string()
+            }
+            Ok(false) => {
+                self.record_token_metric("wx.checkSession", "auth_failed", started);
+                json!({
+                    "errMsg": "checkSession:fail auth_failed",
+                    "code": "auth_failed",
+                    "reason": "DID auth session is not configured for this call"
+                })
+                .to_string()
+            }
+            Err(message) => {
+                self.record_token_metric("wx.checkSession", "auth_failed", started);
+                json!({
+                    "errMsg": "checkSession:fail auth_failed",
+                    "code": "auth_failed",
+                    "reason": message
+                })
+                .to_string()
+            }
         }
     }
 
     fn request_json(&self, options_json: String) -> String {
+        let started = Instant::now();
         match self.host_request(&options_json) {
-            Ok(value) => value.to_string(),
-            Err(error) => error.to_json().to_string(),
+            Ok(value) => {
+                let status = value
+                    .get("statusCode")
+                    .and_then(Value::as_u64)
+                    .map(request_status_label)
+                    .unwrap_or("unknown");
+                self.record_request_metric(status, started);
+                value.to_string()
+            }
+            Err(error) => {
+                self.record_request_metric(error.code, started);
+                error.to_json().to_string()
+            }
         }
+    }
+
+    fn record_token_metric(&self, api_name: &str, outcome: &str, started: Instant) {
+        let latency = elapsed_ms(started);
+        let trace = self.trace_child();
+        self.metrics.record_metric(
+            ObservabilityMetric::counter("dock.token_refresh.total", 1)
+                .with_label("api", api_name)
+                .with_label("outcome", outcome)
+                .with_trace_id(trace.trace_id.clone()),
+        );
+        self.metrics.record_metric(
+            ObservabilityMetric::histogram_ms("dock.token_refresh_latency_ms", latency)
+                .with_label("api", api_name)
+                .with_label("outcome", outcome)
+                .with_trace_id(trace.trace_id.clone()),
+        );
+        self.metrics.record_span(
+            TraceSpan::new(trace, TraceSpanKind::Token, "quickjs.wxToken")
+                .with_attribute("api", api_name)
+                .with_outcome(outcome)
+                .with_latency_ms(latency),
+        );
+    }
+
+    fn record_request_metric(&self, outcome: &str, started: Instant) {
+        let latency = elapsed_ms(started);
+        let trace = self.trace_child();
+        self.metrics.record_metric(
+            ObservabilityMetric::counter("dock.request.total", 1)
+                .with_label("api", "wx.request")
+                .with_label("outcome", outcome)
+                .with_trace_id(trace.trace_id.clone()),
+        );
+        self.metrics.record_metric(
+            ObservabilityMetric::histogram_ms("dock.request_latency_ms", latency)
+                .with_label("api", "wx.request")
+                .with_label("outcome", outcome)
+                .with_trace_id(trace.trace_id.clone()),
+        );
+        self.metrics.record_span(
+            TraceSpan::new(trace, TraceSpanKind::Request, "quickjs.wx.request")
+                .with_attribute("api", "wx.request")
+                .with_outcome(outcome)
+                .with_latency_ms(latency),
+        );
+    }
+
+    fn trace_child(&self) -> TraceContext {
+        self.call
+            .as_ref()
+            .and_then(|call| call.trace.as_ref())
+            .map(TraceContext::child)
+            .unwrap_or_else(TraceContext::root)
     }
 
     fn host_request(&self, options_json: &str) -> Result<Value, HostRequestFailure> {
@@ -1610,6 +1826,21 @@ fn redact_response_headers(headers: BTreeMap<String, String>) -> BTreeMap<String
                 && !name.to_ascii_lowercase().contains("token")
         })
         .collect()
+}
+
+fn request_status_label(status: u64) -> &'static str {
+    match status {
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "other",
+    }
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    let millis = started.elapsed().as_millis();
+    millis.min(u128::from(u64::MAX)) as u64
 }
 
 fn http_request_url(

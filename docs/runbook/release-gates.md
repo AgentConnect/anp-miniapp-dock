@@ -1,6 +1,6 @@
 # Release Gates Runbook
 
-> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction 已有本地 release gate 证据
+> 状态：Phase 6 observability gates 进行中；Step 03-02 sandbox/resource、Step 03-03 permission/allowlist、Step 03-04 DID/token lifecycle、Step 03-05 consent/audit persistence、Step 03-06 Skill package integrity/supply-chain、Step 04-03 本地 registry/cache/version/rollback contract、Step 04-04 runtime config / secret boundary、Step 04-05 token cache persistence contract / restore policy、Step 04-06 scoped storage persistence contract / quota / restore / delete-scope、Step 04-07 audit persistence profile / retention-export report / unavailable fail-closed、Step 04-08 Skill cache cleanup / quarantine lifecycle、Step 04-09 Host adapter action contract、Step 04-10 Runtime concurrency / cancellation / retry / idempotency contract、Step 05-05 CLI doctor diagnostics、Step 05-07 developer docs / migration guides、Step 06-01 structured observability events / redaction、Step 06-02 metrics / tracing correlation 已有本地 release gate 证据
 > 日期：2026-06-13
 > 范围：定义 `anp-miniapp-dock` 每次进入 production-readiness milestone、release branch 或 production deployment 前需要执行或明确记录的验证、Review、红线和回滚条件。
 > 上游计划：[`../plan/production-readiness-roadmap.md`](../plan/production-readiness-roadmap.md) Step 03-01。
@@ -87,6 +87,7 @@ git diff --check -- README.md AGENTS.md docs/architecture docs/developer docs/ru
 | Host adapter action contract：`dock.host-adapter.v1` capability declaration、headless mock dev-only、`api/call` 固定回 Orchestrator、Host action unsupported fail closed、`openDetailPage` safe relative target canonicalization、Host action redaction | [`host.rs`](../../crates/dock-core/src/host.rs)、[`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`host_adapter_contract.rs`](../../crates/dock-core/tests/host_adapter_contract.rs) |
 | Runtime concurrency / cancellation / idempotency contract：`dock.runtime.concurrency.v1`、`RuntimeOperationOptions`、`runtime.cancelOperation`、session close fail-closed、高风险 in-flight 串行、低风险并发、显式 idempotency key forward/replay、RequestBroker 非幂等业务失败不自动重试 | [`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs)、[`capability_token_scope.rs`](../../crates/anp-adapter/tests/capability_token_scope.rs) |
 | Structured observability events / redaction：`dock.observability.event.v1`、`skill_load_*`、`api_call_*`、`consent_*`、`component_render_*`、`component_event`、`fallback_used`、`audit_record_written`、`sandbox_limit_hit`，`userDidHash` 默认 hash，事件 fields 不含 raw payload | [`observability.rs`](../../crates/dock-core/src/observability.rs)、[`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs) |
+| Metrics / tracing correlation：`dock.observability.metric.v1`、`dock.observability.trace.v1`、Runtime API latency、QuickJS VM execution time、render latency、`wx.request` status、fallback、consent、unsupported API、sandbox limit、token refresh/fail、audit metrics 和 trace spans，labels 低基数且默认脱敏 | [`observability.rs`](../../crates/dock-core/src/observability.rs)、[`runtime.rs`](../../crates/dock-core/src/runtime.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs)、[`runtime_facade.rs`](../../crates/dock-core/tests/runtime_facade.rs)、[`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs) |
 | Manifest component metadata、input `format:image/file`、production warning 分层 | [`mcp_validation.rs`](../../crates/mcp-schema/tests/mcp_validation.rs) |
 | `dock-cli validate` 兼容报告、API 注册 mismatch blocker、demo-only release blocker | [`commands.rs`](../../crates/dock-cli/src/commands.rs)、[`coffee_order_flow.rs`](../../crates/dock-cli/tests/coffee_order_flow.rs) |
 | Atomic API sandbox、unsafe require、timeout、WebSocket/timer globals deny、Promise job drain、console/result size limit | [`middleware_chain.rs`](../../crates/js-runtime-quickjs/tests/middleware_chain.rs)、[`bridge.rs`](../../crates/js-runtime-quickjs/src/bridge.rs)、[`api_vm.rs`](../../crates/js-runtime-quickjs/src/api_vm.rs) |
@@ -126,6 +127,23 @@ cargo test -p dock-core runtime_observability
 - `userDid` 不得明文出现在事件 JSON 中；只能出现 `userDidHash`。
 - 事件 JSON 不得包含 raw token、`Authorization`、HTTP signature、private key path/material、手机号、真实地址、文件内容、精确位置或本机绝对路径。
 - `wx_api_call_*` 和 `request_*` 若当前 Step 没有真实 emit hook，必须保持为 schema 支持的 planned bridge，不得在 release notes 中宣称已经覆盖完整 QuickJS / RequestBroker 链路。
+
+Metrics / Tracing Gate：
+
+```bash
+cargo test -p dock-core metrics
+cargo test -p dock-core trace
+cargo test -p js-runtime-quickjs quickjs_executor_records_vm_request_and_token_metrics_with_trace
+```
+
+通过标准：
+
+- `ObservabilityMetric` 序列化包含 `schemaVersion: "dock.observability.metric.v1"`、metric name、kind、value、labels、traceId 和 redaction policy。
+- `TraceSpan` 序列化包含 `schemaVersion: "dock.observability.trace.v1"`、traceId、spanId、parentSpanId、kind、outcome、latencyMs、attributes 和 redaction policy。
+- RuntimeService metrics 覆盖 API latency、render latency、component event、fallback、consent、unsupported API、sandbox timeout、audit record 和 skill load。
+- QuickJS metrics 覆盖 Atomic API VM execution、`wx.request` status、`wx.login` / `wx.checkSession` token/session outcome。
+- labels 只能包含低基数 API name、component path、risk level、outcome、reason、status bucket 等定位字段；不得包含 URL query、headers、HTTP body、raw arguments、DID 原文、capability token、Authorization、Signature、private key path/material、手机号、真实地址、文件内容、精确位置或本机绝对路径。
+- Runtime / QuickJS 默认 no-op sink；`InMemoryMetricsSink` 只作为 test/local recorder。Prometheus/OpenTelemetry 或 Host exporter 接入必须另行 Review，不得在当前 gate 中误标为已完成。
 
 ### 4.2 Phase 3 required security gates
 
