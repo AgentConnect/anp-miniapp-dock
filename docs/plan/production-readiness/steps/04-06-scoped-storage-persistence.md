@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：04-06
-状态：review
+状态：done
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | review |
+| Status | done |
 | Branch | `main` |
 | Started | 2026-06-13 20:17:07 +0800 |
-| Completed | 待记录 |
-| Commit | 待记录 |
+| Completed | 2026-06-13 20:35:46 +0800 |
+| Commit | `67237ba` |
 | Review evidence | 2026-06-13 20:33:19 +0800 commit 前 Review 已完成：修复 local file backend 对单条非法 persisted record 直接让整个 restore 失败、无法按脱敏 rejection 清理 snapshot 的问题；补充 `StoragePersistenceSnapshot` public re-export；确认 scope 覆盖 user DID、merchant DID、Skill id、namespace，persistent set/remove/clear/delete scope 先写 backend snapshot 再更新内存，quota fail closed，restore report/Debug 只输出 scope summary、key/value bytes、reason 和 redaction metadata，`localFileUnencrypted` 明确 dev/test/local evidence 且非 production-ready |
-| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 72]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-06 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-05 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p wx-compat storage` 14 passed；`cargo test -p js-runtime-quickjs storage` 6 passed；`cargo test -p wx-compat` 16 component permission + 5 high-risk + 14 storage + doctests passed；`cargo test -p js-runtime-quickjs` 5 unit + 40 middleware + 3 register + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 断言和 dev/local backend 状态，未发现真实 storage 隐私 value、token、Authorization、signature、private key material 或生产凭据 |
-| Next action | 创建 04-06 focused commit，并回填 commit hash 与主 Plan 台账 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 72]`，工作区无未提交变更；已读取主 Plan、Phase 4 章节、Step 04-06 文档、执行台账、Codex Goal 执行协议、Review/提交门禁、Blocked 处理、Plan 变更记录和 04-05 closure evidence。实现后验证：`cargo fmt --check` 通过；`cargo test -p wx-compat storage` 14 passed；`cargo test -p js-runtime-quickjs storage` 6 passed；`cargo test -p wx-compat` 16 component permission + 5 high-risk + 14 storage + doctests passed；`cargo test -p js-runtime-quickjs` 5 unit + 40 middleware + 3 register + doctests passed；`cargo test --workspace` 通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过；`git diff --check -- crates/wx-compat crates/js-runtime-quickjs crates/dock-core docs/architecture docs/security docs/runbook docs/plan` 无输出；敏感词抽样仅命中文档红线、测试假值、redaction 断言和 dev/local backend 状态，未发现真实 storage 隐私 value、token、Authorization、signature、private key material 或生产凭据；实现 commit 后 `git status --short --branch` = `## main...origin/main [ahead 73]` |
+| Next action | 进入 04-07 Persistent Audit Sink retention/export |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -71,7 +71,7 @@ Step index：04-06
 - [x] restart restore、remove、clear、delete scope 行为有 tests。
 - [x] API 矩阵、Threat Model、Release Gates 和 Phase 4 文档与实现状态同步。
 - [x] Review 发现已经修复或明确记录。
-- [ ] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
+- [x] 本步骤在进入下一步之前已经创建 focused commit，并回填主 Plan 执行台账。
 
 ## 8. 验证方式
 
