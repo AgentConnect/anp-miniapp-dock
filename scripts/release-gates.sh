@@ -149,6 +149,16 @@ check_no_match() {
   local pattern="$2"
   shift 2
   local log="$LOG_DIR/$name.log"
+  local display_targets=()
+  local target
+  for target in "$@"; do
+    if [[ "$target" == "$ROOT/"* ]]; then
+      display_targets+=("${target#$ROOT/}")
+    else
+      display_targets+=("$target")
+    fi
+  done
+  local display_command="rg -n <sensitive-pattern> ${display_targets[*]}"
   local start_ms
   start_ms="$(now_ms)"
 
@@ -156,11 +166,11 @@ check_no_match() {
   rg -n "$pattern" "$@" > "$log" 2>&1
   local code=$?
   if [[ $code -eq 1 ]]; then
-    append_result "$name" "pass" "true" "true" "rg -n <sensitive-pattern> $*" "" "" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
+    append_result "$name" "pass" "true" "true" "$display_command" "" "" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
   elif [[ $code -eq 0 ]]; then
-    append_result "$name" "fail" "true" "true" "rg -n <sensitive-pattern> $*" "forbidden sensitive marker found" "release must not proceed with token, Authorization, signature, local path, location, or credential leakage" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
+    append_result "$name" "fail" "true" "true" "$display_command" "forbidden sensitive marker found" "release must not proceed with token, Authorization, signature, local path, location, or credential leakage" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
   else
-    append_result "$name" "fail" "true" "true" "rg -n <sensitive-pattern> $*" "sensitive scan command failed" "scanner failure leaves redaction gate unevaluated" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
+    append_result "$name" "fail" "true" "true" "$display_command" "sensitive scan command failed" "scanner failure leaves redaction gate unevaluated" "${log#$ROOT/}" "$(duration_ms_since "$start_ms")"
   fi
 }
 

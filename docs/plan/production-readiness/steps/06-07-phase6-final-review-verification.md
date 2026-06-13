@@ -2,20 +2,20 @@
 
 主 Plan：[../../production-readiness-roadmap.md](../../production-readiness-roadmap.md)
 Step index：06-07
-状态：pending
+状态：review
 
 ## 1. 执行状态
 
 | 字段 | 值 |
 |---|---|
-| Status | pending |
+| Status | review |
 | Branch | `main` |
-| Started | 待记录 |
+| Started | 2026-06-14 05:48:24 +0800 |
 | Completed | 待记录 |
 | Commit | 待记录 |
-| Review evidence | 待记录 |
-| Verification evidence | 待记录 |
-| Next action | 等待 Step 06-01 至 06-06 完成后启动 Phase 6 最终 Review；完成后结束当前 Phase 5/6 Goal |
+| Review evidence | 2026-06-14 05:53:04 +0800 Phase 6 final Review 已记录：确认 06-01 至 06-06 台账和 Step 文档均为 `done`，commit hash、Review 证据和验证证据齐全；修复 `scripts/release-gates.sh` 的 artifact redaction gate report command 字段写入本机绝对路径的问题；修复 `docs/runbook/release-gates.md` 顶部状态仍写 Phase 6 observability gates 进行中的文档漂移；确认 structured events、metrics/tracing、perf baseline、release gates、canary/rollback、operations/privacy deletion 文档没有把 local/headless/mock/backend、Stage 0 local canary 或本地 perf 数字误写成 production-ready。 |
+| Verification evidence | 启动前 `git status --short --branch` = `## main...origin/main [ahead 115]`，工作区无未提交变更；已读取主 Plan、Step 06-07 文档、Phase 6 文档和执行台账；Step 06-01 至 06-06 在主台账与 Step 文档中均为 `done`；implementation / closure commit `3fb65f0`、`2e899b0`、`7fa8aee`、`b26d04c`、`67a869e`、`b8ccfed`、`afaa5ab`、`96f5572`、`3b26ba2`、`8866855`、`e6c05bd`、`4ea90a3` 均可解析；`cargo metadata --format-version 1 --no-deps`、`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo test -p dock-cli --test coffee_order_flow` 均通过，其中 coffee E2E 13 passed；`bash -n scripts/release-gates.sh` 通过；`./scripts/release-gates.sh --release-notes docs/runbook/releases/2026-06-14-local-canary.md --report target/release-gates/06-07-release-notes-report.json` 通过，report `dock.release-gates-report.v1` 为 `status = ok`、`releaseDecision = pass`、22 pass / 0 fail / 0 skip、`requiredFailed = 0`、`hardBlockerFailed = 0`、`skipCountsAsPass = false`；`python3 -m json.tool target/release-gates/06-07-release-notes-report.json >/tmp/06-07-release-notes-report.json` 通过；`git diff --check -- docs/plan docs/architecture docs/runbook docs/developer docs/security README.md AGENTS.md` 与 `git diff --check -- scripts docs/runbook docs/plan README.md` 均无输出；`rg -n "\[ \]" docs/plan/production-readiness/steps/06-0{1,2,3,4,5,6}-*.md docs/plan/production-readiness/phase-6-observability-release.md` 无未完成验收项；严格 artifact/report scan 仅命中 release report 的 hard blocker 名称 `Authorization or Signature leakage`，未发现 raw token、Authorization/Signature value、capabilityToken、private key material、本机绝对路径、手机号、真实地址、文件内容或精确位置进入 artifacts、Render IR snapshots 或 perf baseline。 |
+| Next action | 创建 06-07 final review focused commit，然后单独 closure commit 关闭当前 Phase 5/6 Goal |
 
 状态取值：`pending`、`in_progress`、`review`、`blocked`、`committed`、`done`。
 
@@ -63,12 +63,12 @@ Step index：06-07
 
 ## 7. 验收标准
 
-- [ ] 主 Plan 执行台账中 Step 06-01 至 06-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
-- [ ] git history 能解析 Step 06-01 至 06-06 的 commit hash。
-- [ ] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
-- [ ] Review 覆盖 observability、metrics/tracing、performance/stress、CI/CD gates、canary/rollback、operations/privacy deletion、release blockers、redaction 和文档漂移。
-- [ ] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
-- [ ] 主 Plan `2.3.8` 已追加 Phase 6 最终 Review 记录。
+- [x] 主 Plan 执行台账中 Step 06-01 至 06-06 全部为 `done`，且 commit hash、Review 证据、验证证据完整。
+- [x] git history 能解析 Step 06-01 至 06-06 的 commit hash。
+- [x] 执行或明确记录主 Plan 整体验证基线：metadata、fmt、clippy、workspace tests、coffee E2E、docs diff check。
+- [x] Review 覆盖 observability、metrics/tracing、performance/stress、CI/CD gates、canary/rollback、operations/privacy deletion、release blockers、redaction 和文档漂移。
+- [x] 必要 Review 发现已修复；无法修复的问题已记录为 blocker 或剩余风险。
+- [x] 主 Plan `2.3.8` 已追加 Phase 6 最终 Review 记录。
 - [ ] 本步骤已经创建 focused commit、回填主 Plan 执行台账，并记录当前 Goal closure 状态。
 
 ## 8. 验证方式
@@ -93,19 +93,19 @@ Step index：06-07
 
 | Review 项 | 结果 | 备注 |
 |---|---|---|
-| 发现问题 | 待记录 | 待记录 |
-| 已修复问题 | 待记录 | 待记录 |
-| 剩余风险 | 待记录 | 待记录 |
-| 新增或缺失测试 | 待记录 | 待记录 |
-| 已更新或缺失文档 | 待记录 | 待记录 |
+| 发现问题 | 已记录 | `release-gates.sh` 的 artifact redaction gate 在 report `command` 字段中写入 `$ARTIFACT_DIR` 本机绝对路径；`release-gates.md` 顶部状态仍写 Phase 6 observability gates 进行中。 |
+| 已修复问题 | 已修复 | `check_no_match` 的 report command 改为仓库相对 target 列表，保留实际扫描路径不变；release gates runbook 顶部状态改为 Phase 6 本地 release gates 已完成并通过 final Review，同时保留真实 production Host blocker。 |
+| 剩余风险 | 已记录 | Phase 6 完成本地 observability、metrics/tracing、performance smoke、release gate runner、Stage 0 local canary、operations/troubleshooting/privacy deletion runbooks；真实 production Host secure store、encrypted storage/audit backend、deploy platform、traffic router、provider conformance、production privacy deletion job/approval workflow、vendor exporter 和生产 SLO 仍是后续生产接入 blocker。 |
+| 新增或缺失测试 | 已覆盖 | 未新增 Rust 测试；已重跑 metadata、fmt、clippy、workspace tests、coffee E2E、full release gate、release gate JSON parse、script syntax、docs diff check 和 artifact/report redaction scan。 |
+| 已更新或缺失文档 | 已更新 | 主 Plan `2.3.8` 追加 Phase 6 final Review 记录；同步 Step 06-07 执行状态、Review/验证证据；修复 release gates runbook 状态漂移。 |
 
 ## 10. Commit 要求
 
 - Commit 时机：最终 Review、整体验证、必要修复和主 Plan 记录完成后。
 - Commit 范围：只包含 Phase 6 final review 记录、必要文档修复和直接关联证据更新。
-- Commit 前状态：记录 `git status --short`。
-- 纳入文件：记录本步骤 commit 包含的文件。
-- Commit 后证据：记录 commit hash 和 commit 后 `git status --short --branch`。
+- Commit 前状态：`git status --short --branch` = `## main...origin/main [ahead 115]`，未提交变更仅包含 06-07 final Review 记录、release gates runbook 状态修复和 release gate report path redaction 修复。
+- 纳入文件：`scripts/release-gates.sh`、`docs/runbook/release-gates.md`、`docs/plan/production-readiness-roadmap.md`、`docs/plan/production-readiness/steps/06-07-phase6-final-review-verification.md`。
+- Commit 后证据：final review commit 待回填；closure commit 待回填。
 - 遗留未提交变更：必须记录原因以及为什么安全。
 - 建议消息：`docs: record phase6 final review`
 
@@ -113,7 +113,7 @@ Step index：06-07
 
 | Blocker | 证据 | 已尝试方案 | 影响范围 | 下一步决策 |
 |---|---|---|---|---|
-| 待记录 | 待记录 | 待记录 | 当前步骤 / 整体计划 | 待记录 |
+| 无 | 无 | 无 | 当前步骤 / 整体计划 | 无 blocker，06-07 可创建 final review commit，然后创建 closure commit 结束当前 Phase 5/6 Goal |
 
 ## 12. Plan 变更记录
 
